@@ -14,10 +14,11 @@ export async function POST(request: NextRequest) {
   const { data: profile } = await admin.from('profiles').select('role').eq('id', current.user.id).single();
   if (profile?.role !== 'Administrador') return NextResponse.json({ error: 'Apenas administradores podem criar usuários.' }, { status: 403 });
   const body = await request.json();
-  const { email, nome, role, permissions } = body;
-  if (!email || !nome || !role) return NextResponse.json({ error: 'Preencha e-mail, nome e cargo.' }, { status: 400 });
-  const { data, error } = await admin.auth.admin.inviteUserByEmail(email);
-  if (error || !data.user) return NextResponse.json({ error: error?.message || 'Não foi possível enviar o convite.' }, { status: 400 });
+  const { email, password, nome, role, permissions } = body;
+  if (!email || !password || !nome || !role) return NextResponse.json({ error: 'Preencha nome, e-mail, senha e cargo.' }, { status: 400 });
+  if (password.length < 8) return NextResponse.json({ error: 'A senha deve ter pelo menos 8 caracteres.' }, { status: 400 });
+  const { data, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
+  if (error || !data.user) return NextResponse.json({ error: error?.message || 'Não foi possível criar o login.' }, { status: 400 });
   const { error: profileError } = await admin.from('profiles').upsert({ id: data.user.id, email, nome, role, permissions });
   if (profileError) return NextResponse.json({ error: profileError.message }, { status: 400 });
   return NextResponse.json({ ok: true });
