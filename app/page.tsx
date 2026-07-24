@@ -8,6 +8,7 @@ import { AnalisesView } from '@/components/AnalisesView';
 import { HeatmapView } from '@/components/HeatmapView';
 import { RaioXView } from '@/components/RaioXView';
 import { ProspectingView } from '@/components/ProspectingView';
+import { FollowUpView } from '@/components/FollowUpView';
 import { CrmView } from '@/components/CrmView';
 import { PropostasView } from '@/components/PropostasView';
 import { ServicosView } from '@/components/ServicosView';
@@ -129,13 +130,14 @@ export default function Home() {
             <ProspectingView
               onShowToast={showToast}
               onOpenAiPitchModal={handleOpenAiPitchModal}
+              onOpenFollowUp={() => setActiveTab('followup')}
             />
           )}
 
           {activeTab === 'followup' && (
-            <ProspectingView
+            <FollowUpView
               onShowToast={showToast}
-              onOpenAiPitchModal={handleOpenAiPitchModal}
+              onOpenCrm={() => setActiveTab('crm')}
             />
           )}
 

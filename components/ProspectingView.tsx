@@ -1,284 +1,202 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { FormEvent, useMemo, useState } from 'react';
 import {
-  Search,
-  Filter,
-  Sparkles,
-  PhoneCall,
-  UserPlus,
-  Trash2,
+  CalendarPlus,
   CheckSquare,
+  ExternalLink,
+  MessageCircle,
+  PhoneCall,
+  Plus,
+  Search,
+  Sparkles,
   Square,
-  Globe,
-  MapPin,
-  Star,
-  Zap,
-  Building2,
-  Download,
+  UserPlus,
+  X,
 } from 'lucide-react';
+import { useLeads } from '@/hooks/use-leads';
+import { googleCalendarLink, Lead, LeadStatus, statusLabel, whatsappLink } from '@/lib/leads';
 
 interface ProspectingViewProps {
   onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
   onOpenAiPitchModal: (companyName: string) => void;
+  onOpenFollowUp: () => void;
 }
 
-export function ProspectingView({
-  onShowToast,
-  onOpenAiPitchModal,
-}: ProspectingViewProps) {
-  const [cityFilter, setCityFilter] = useState('São Paulo - SP');
-  const [categoryFilter, setCategoryFilter] = useState('Restaurantes');
-  const [missingWebOnly, setMissingWebOnly] = useState(false);
+type LeadForm = {
+  companyName: string;
+  category: string;
+  address: string;
+  city: string;
+  decisionMaker: string;
+  receptionist: string;
+  phone: string;
+  whatsapp: string;
+  email: string;
+  notes: string;
+  status: LeadStatus;
+  nextActionAt: string;
+};
+
+const emptyForm: LeadForm = {
+  companyName: '', category: '', address: '', city: '', decisionMaker: '', receptionist: '',
+  phone: '', whatsapp: '', email: '', notes: '', status: 'novo', nextActionAt: '',
+};
+
+const scheduleStatuses: LeadStatus[] = ['ligar_depois', 'retornar_depois', 'reuniao_marcada'];
+
+export function ProspectingView({ onShowToast, onOpenAiPitchModal, onOpenFollowUp }: ProspectingViewProps) {
+  const { leads, loading, error, createLead, updateLead } = useLeads();
+  const [form, setForm] = useState<LeadForm>(emptyForm);
+  const [formOpen, setFormOpen] = useState(false);
   const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
+  const [cityFilter, setCityFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
 
-  const [prospects, setProspects] = useState([
-    {
-      id: 'p1',
-      name: 'Restaurante Sabor da Roça',
-      category: 'Gastronomia',
-      address: 'Rua Augusta, 890 - Consolação',
-      rating: 3.9,
-      reviews: 42,
-      hasWebsite: false,
-      claimed: true,
-      healthScore: 54,
-      aiProb: 92,
-    },
-    {
-      id: 'p2',
-      name: 'Oficina AutoTech Express',
-      category: 'Automotivo',
-      address: 'Av. Santo Amaro, 2100 - Vila Nova',
-      rating: 4.1,
-      reviews: 28,
-      hasWebsite: true,
-      claimed: false,
-      healthScore: 48,
-      aiProb: 88,
-    },
-    {
-      id: 'p3',
-      name: 'Clínica Odonto Estética',
-      category: 'Saúde',
-      address: 'Rua Vergueiro, 1500 - Paraíso',
-      rating: 4.6,
-      reviews: 110,
-      hasWebsite: true,
-      claimed: true,
-      healthScore: 68,
-      aiProb: 75,
-    },
-    {
-      id: 'p4',
-      name: 'Pizzaria Napolitana Tradicional',
-      category: 'Gastronomia',
-      address: 'Rua Moema, 320 - Moema',
-      rating: 3.7,
-      reviews: 19,
-      hasWebsite: false,
-      claimed: false,
-      healthScore: 38,
-      aiProb: 96,
-    },
-  ]);
+  const prospects = useMemo(() => leads.filter(lead => {
+    const cityMatch = !cityFilter || (lead.city || '').toLowerCase().includes(cityFilter.toLowerCase());
+    const categoryMatch = !categoryFilter || (lead.category || '').toLowerCase().includes(categoryFilter.toLowerCase());
+    return cityMatch && categoryMatch;
+  }), [leads, cityFilter, categoryFilter]);
 
-  const toggleSelectLead = (id: string) => {
-    setSelectedLeads(prev =>
-      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-    );
-  };
+  const toggleLead = (id: string) => setSelectedLeads(current => current.includes(id)
+    ? current.filter(item => item !== id) : [...current, id]);
 
-  const toggleSelectAll = () => {
-    if (selectedLeads.length === prospects.length) {
-      setSelectedLeads([]);
-    } else {
-      setSelectedLeads(prospects.map(p => p.id));
+  const toggleAll = () => setSelectedLeads(current => current.length === prospects.length ? [] : prospects.map(lead => lead.id));
+
+  const updateStatus = async (lead: Lead, status: LeadStatus) => {
+    const patch: Partial<Lead> = { status, last_contact_at: status === 'novo' ? lead.last_contact_at : new Date().toISOString() };
+    const result = await updateLead(lead.id, patch);
+    if (result.error) return onShowToast(result.error, 'error');
+    if (status === 'reuniao_marcada' && lead.next_action_at) {
+      window.open(googleCalendarLink({ ...lead, status }, lead.next_action_at), '_blank', 'noopener,noreferrer');
+      onShowToast('Google Agenda aberto com a reunião preenchida.');
+    } else if (scheduleStatuses.includes(status)) {
+      onShowToast('Lead encaminhado ao Follow-up.');
     }
   };
 
-  const handleBatchPitch = () => {
-    if (selectedLeads.length === 0) {
-      onShowToast('Selecione ao menos um lead para auditar!', 'error');
-      return;
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!form.companyName.trim()) return onShowToast('Informe o nome da empresa.', 'error');
+    if (scheduleStatuses.includes(form.status) && !form.nextActionAt) {
+      return onShowToast('Informe a data e a hora da próxima ação.', 'error');
     }
-    onShowToast(`Disparando auditoria e geração de pitch IA para ${selectedLeads.length} leads selecionados!`);
+    const result = await createLead({
+      company_name: form.companyName.trim(), category: form.category || null, address: form.address || null,
+      city: form.city || null, decision_maker_name: form.decisionMaker || null,
+      receptionist_name: form.receptionist || null, phone: form.phone || null, whatsapp: form.whatsapp || form.phone || null,
+      email: form.email || null, notes: form.notes || null, source: 'presencial', status: form.status,
+      next_action_at: form.nextActionAt ? new Date(form.nextActionAt).toISOString() : null,
+    });
+    if (result.error) return onShowToast(result.error, 'error');
+    if (result.data && form.status === 'reuniao_marcada' && form.nextActionAt) {
+      window.open(googleCalendarLink(result.data, new Date(form.nextActionAt).toISOString()), '_blank', 'noopener,noreferrer');
+    }
+    setForm(emptyForm);
+    setFormOpen(false);
+    onShowToast('Empresa cadastrada e salva na prospecção.');
   };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      {/* Top Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-[#141936] p-5 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
         <div>
-          <h2 className="text-xl font-bold font-poppins text-[#1a1b22] dark:text-[#f8f7ff]">
-            Prospecção Ativa & Auditoria em Lote
-          </h2>
-          <p className="text-xs text-[#727687]">
-            Encontre estabelecimentos locais com cadastro falho no Google e gere abordagens de alto impacto
-          </p>
+          <h2 className="text-xl font-bold font-poppins text-[#1a1b22] dark:text-[#f8f7ff]">Prospecção Ativa & Auditoria em Lote</h2>
+          <p className="text-xs text-[#727687]">Cadastre visitas presenciais, acompanhe contatos e envie retornos ao Follow-up.</p>
         </div>
-
-        {/* Batch Action Buttons */}
-        {selectedLeads.length > 0 && (
-          <div className="flex items-center gap-2 animate-in fade-in">
-            <span className="text-xs font-bold text-[#0066ff]">
-              {selectedLeads.length} Selecionado(s)
-            </span>
-            <button
-              onClick={handleBatchPitch}
-              className="flex items-center gap-1.5 bg-[#0066ff] hover:bg-[#0050cb] text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow transition-all"
-            >
-              <Sparkles className="w-4 h-4" /> Pitch em Lote
-            </button>
-            <button
-              onClick={() => {
-                onShowToast(`${selectedLeads.length} leads importados para o CRM!`);
-                setSelectedLeads([]);
-              }}
-              className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow transition-all"
-            >
-              <UserPlus className="w-4 h-4" /> Mover para CRM
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Filter Bar */}
-      <div className="bg-white dark:bg-[#141936] p-4 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-center">
-        <div>
-          <label className="text-[10px] font-bold uppercase text-[#727687] block mb-1">Cidade / Região:</label>
-          <input
-            type="text"
-            value={cityFilter}
-            onChange={(e) => setCityFilter(e.target.value)}
-            className="w-full px-3 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] text-[#1a1b22] dark:text-[#f8f7ff] border border-[#c2c6d8]/40 dark:border-[#2e366b] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0066ff]"
-          />
-        </div>
-
-        <div>
-          <label className="text-[10px] font-bold uppercase text-[#727687] block mb-1">Categoria:</label>
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="w-full px-3 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] text-[#1a1b22] dark:text-[#f8f7ff] border border-[#c2c6d8]/40 dark:border-[#2e366b] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0066ff]"
-          >
-            <option value="Gastronomia">Gastronomia / Restaurantes</option>
-            <option value="Automotivo">Oficinas / Automotivo</option>
-            <option value="Saúde">Clínicas & Saúde</option>
-            <option value="Beleza">Salões de Beleza & Estética</option>
-          </select>
-        </div>
-
-        <div className="flex items-center gap-2 pt-4">
-          <input
-            type="checkbox"
-            id="missingWeb"
-            checked={missingWebOnly}
-            onChange={(e) => setMissingWebOnly(e.target.checked)}
-            className="w-4 h-4 text-[#0066ff] rounded border-gray-300 focus:ring-[#0066ff]"
-          />
-          <label htmlFor="missingWeb" className="text-xs font-semibold text-[#1a1b22] dark:text-[#f8f7ff] cursor-pointer">
-            Apenas sem Website cadastrado
-          </label>
-        </div>
-
-        <div className="flex justify-end pt-4">
-          <button
-            onClick={() => onShowToast(`Prospecção realizada em ${cityFilter}!`)}
-            className="w-full sm:w-auto px-5 py-2 bg-[#0066ff] hover:bg-[#0050cb] text-white font-bold text-xs rounded-xl shadow flex items-center justify-center gap-2"
-          >
-            <Search className="w-4 h-4" /> Buscar Empresas no Google
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={() => setFormOpen(true)} className="flex items-center gap-2 bg-[#0066ff] hover:bg-[#0050cb] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition-all active:scale-95">
+            <Plus className="w-4 h-4" /> Cadastrar visita
           </button>
+          {selectedLeads.length > 0 && <>
+            <button onClick={() => onShowToast('A geração de pitch em lote será conectada à IA na próxima etapa.', 'info')} className="flex items-center gap-1.5 bg-[#0066ff] hover:bg-[#0050cb] text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow">
+              <Sparkles className="w-4 h-4" /> Pitch em lote
+            </button>
+            <button onClick={() => onShowToast(`${selectedLeads.length} lead(s) selecionado(s).`, 'info')} className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow">
+              <UserPlus className="w-4 h-4" /> Preparar CRM
+            </button>
+          </>}
         </div>
       </div>
 
-      {/* Lead Table */}
+      <div className="bg-white dark:bg-[#141936] p-4 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
+        <label className="text-[10px] font-bold uppercase text-[#727687]">Cidade / Região
+          <input value={cityFilter} onChange={event => setCityFilter(event.target.value)} placeholder="Filtrar cidade" className="mt-1 w-full px-3 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 dark:border-[#2e366b] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0066ff]" />
+        </label>
+        <label className="text-[10px] font-bold uppercase text-[#727687]">Categoria
+          <input value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)} placeholder="Filtrar segmento" className="mt-1 w-full px-3 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 dark:border-[#2e366b] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0066ff]" />
+        </label>
+        <button onClick={() => onShowToast('A busca pelo Google Places será ligada com a chave configurada na Vercel.', 'info')} className="px-5 py-2 bg-[#0066ff] hover:bg-[#0050cb] text-white font-bold text-xs rounded-xl shadow flex items-center justify-center gap-2">
+          <Search className="w-4 h-4" /> Buscar Empresas no Google
+        </button>
+      </div>
+
+      {error && <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800">{error}</div>}
+
       <div className="bg-white dark:bg-[#141936] rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] overflow-hidden shadow-sm">
         <div className="p-4 bg-[#f4f2fd] dark:bg-[#10142e] border-b border-[#c2c6d8]/30 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <button onClick={toggleSelectAll} className="text-[#0066ff]">
-              {selectedLeads.length === prospects.length ? (
-                <CheckSquare className="w-5 h-5" />
-              ) : (
-                <Square className="w-5 h-5 text-gray-400" />
-              )}
+            <button onClick={toggleAll} className="text-[#0066ff]" disabled={!prospects.length}>
+              {selectedLeads.length === prospects.length && prospects.length ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5 text-gray-400" />}
             </button>
-            <span className="text-xs font-bold text-[#1a1b22] dark:text-[#f8f7ff]">
-              Resultados da Busca ({prospects.length} empresas encontradas)
-            </span>
+            <span className="text-xs font-bold text-[#1a1b22] dark:text-[#f8f7ff]">Leads cadastrados ({prospects.length})</span>
           </div>
-          <span className="text-[11px] text-[#727687]">Dados em tempo real via Google Maps Places API</span>
+          <button onClick={onOpenFollowUp} className="text-[11px] font-semibold text-[#0066ff] hover:underline">Abrir Follow-up</button>
         </div>
-
         <div className="divide-y divide-[#c2c6d8]/20 dark:divide-[#2e366b]">
-          {prospects.map((p) => {
-            const isSelected = selectedLeads.includes(p.id);
-
-            return (
-              <div
-                key={p.id}
-                className={`p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors ${
-                  isSelected ? 'bg-[#0066ff]/5 dark:bg-[#0066ff]/10' : 'hover:bg-gray-50 dark:hover:bg-gray-800/40'
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <button onClick={() => toggleSelectLead(p.id)} className="mt-1 text-[#0066ff]">
-                    {isSelected ? (
-                      <CheckSquare className="w-5 h-5" />
-                    ) : (
-                      <Square className="w-5 h-5 text-gray-300 dark:text-gray-600" />
-                    )}
-                  </button>
-
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h4 className="font-bold text-sm text-[#1a1b22] dark:text-[#f8f7ff]">{p.name}</h4>
-                      {!p.hasWebsite && (
-                        <span className="text-[10px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded border border-rose-500/20">
-                          Sem Website
-                        </span>
-                      )}
-                      {!p.claimed && (
-                        <span className="text-[10px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded border border-amber-500/20">
-                          Não Reclamado
-                        </span>
-                      )}
-                    </div>
-
-                    <p className="text-xs text-[#727687]">{p.address} • {p.category}</p>
-
-                    <div className="flex items-center gap-3 text-xs font-semibold pt-1">
-                      <span className="flex items-center gap-1 text-amber-500">
-                        <Star className="w-3.5 h-3.5 fill-amber-400" /> {p.rating} ({p.reviews})
-                      </span>
-                      <span className="text-rose-500 font-bold">
-                        Health Score Est.: {p.healthScore}/100
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right Action Trigger */}
-                <div className="flex items-center gap-3 shrink-0">
-                  <div className="text-right hidden sm:block">
-                    <span className="text-[10px] text-[#727687] font-bold block uppercase">Chance de Fechamento IA</span>
-                    <span className="text-xs font-bold text-purple-600 flex items-center justify-end gap-1">
-                      <Zap className="w-3.5 h-3.5 fill-purple-600" /> {p.aiProb}%
-                    </span>
-                  </div>
-
-                  <button
-                    onClick={() => onOpenAiPitchModal(p.name)}
-                    className="flex items-center gap-1.5 px-3.5 py-2 bg-[#0066ff] hover:bg-[#0050cb] text-white font-bold text-xs rounded-xl shadow transition-all active:scale-95"
-                  >
-                    <Sparkles className="w-4 h-4" /> Gerar Pitch IA
-                  </button>
+          {loading && <div className="p-8 text-center text-xs text-[#727687]">Carregando leads…</div>}
+          {!loading && prospects.length === 0 && <div className="p-8 text-center text-xs text-[#727687]">Nenhuma empresa cadastrada. Use “Cadastrar visita” para começar.</div>}
+          {prospects.map(lead => {
+            const isSelected = selectedLeads.includes(lead.id);
+            const wa = whatsappLink(lead.whatsapp || lead.phone);
+            return <div key={lead.id} className={`p-4 flex flex-col xl:flex-row xl:items-center justify-between gap-4 ${isSelected ? 'bg-[#0066ff]/5 dark:bg-[#0066ff]/10' : 'hover:bg-gray-50 dark:hover:bg-gray-800/40'}`}>
+              <div className="flex items-start gap-3 min-w-0">
+                <button onClick={() => toggleLead(lead.id)} className="mt-1 text-[#0066ff]">{isSelected ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5 text-gray-300 dark:text-gray-600" />}</button>
+                <div className="min-w-0 space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap"><h4 className="font-bold text-sm text-[#1a1b22] dark:text-[#f8f7ff]">{lead.company_name}</h4><span className="text-[10px] font-bold text-[#0066ff] bg-[#0066ff]/10 px-2 py-0.5 rounded">{statusLabel[lead.status]}</span></div>
+                  <p className="text-xs text-[#727687]">{[lead.category, lead.city, lead.address].filter(Boolean).join(' • ') || 'Visita presencial'}</p>
+                  <p className="text-[11px] text-[#727687]">{lead.decision_maker_name ? `Decisor: ${lead.decision_maker_name}` : 'Decisor não informado'}{lead.receptionist_name ? ` · Atendimento: ${lead.receptionist_name}` : ''}</p>
+                  {lead.next_action_at && <p className="text-[11px] font-semibold text-amber-600">Próxima ação: {new Date(lead.next_action_at).toLocaleString('pt-BR')}</p>}
                 </div>
               </div>
-            );
+              <div className="flex items-center gap-2 flex-wrap shrink-0">
+                {wa && <a href={wa} target="_blank" rel="noreferrer" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg" title="Abrir WhatsApp"><MessageCircle className="w-4 h-4" /></a>}
+                {lead.phone && <a href={`tel:${lead.phone.replace(/\D/g, '')}`} className="p-2 text-[#0066ff] hover:bg-[#0066ff]/10 rounded-lg" title="Ligar"><PhoneCall className="w-4 h-4" /></a>}
+                <select value={lead.status} onChange={event => void updateStatus(lead, event.target.value as LeadStatus)} className="px-2.5 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl focus:outline-none">
+                  {Object.entries(statusLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+                <button onClick={() => onOpenAiPitchModal(lead.company_name)} className="flex items-center gap-1.5 px-3 py-2 bg-[#0066ff] hover:bg-[#0050cb] text-white font-bold text-xs rounded-xl"><Sparkles className="w-3.5 h-3.5" /> Pitch IA</button>
+              </div>
+            </div>;
           })}
         </div>
       </div>
+
+      {formOpen && <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <form onSubmit={submit} className="w-full max-w-3xl max-h-[92vh] overflow-y-auto bg-white dark:bg-[#141936] rounded-2xl shadow-2xl border border-[#c2c6d8]/30 p-6 space-y-5">
+          <div className="flex items-center justify-between"><div><h3 className="font-bold text-lg">Cadastrar visita presencial</h3><p className="text-xs text-[#727687]">O registro fica disponível para todo o fluxo comercial.</p></div><button type="button" onClick={() => setFormOpen(false)} className="p-2 rounded-lg hover:bg-gray-100"><X className="w-5 h-5" /></button></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <Field label="Empresa *" value={form.companyName} onChange={value => setForm({ ...form, companyName: value })} />
+            <Field label="Segmento" value={form.category} onChange={value => setForm({ ...form, category: value })} />
+            <Field label="Cidade" value={form.city} onChange={value => setForm({ ...form, city: value })} />
+            <Field label="Endereço" value={form.address} onChange={value => setForm({ ...form, address: value })} />
+            <Field label="Nome do decisor" value={form.decisionMaker} onChange={value => setForm({ ...form, decisionMaker: value })} />
+            <Field label="Nome da atendente" value={form.receptionist} onChange={value => setForm({ ...form, receptionist: value })} />
+            <Field label="Telefone" type="tel" value={form.phone} onChange={value => setForm({ ...form, phone: value })} />
+            <Field label="WhatsApp" type="tel" value={form.whatsapp} onChange={value => setForm({ ...form, whatsapp: value })} />
+            <Field label="E-mail" type="email" value={form.email} onChange={value => setForm({ ...form, email: value })} />
+            <label className="text-xs font-semibold">Próxima ação<select value={form.status} onChange={event => setForm({ ...form, status: event.target.value as LeadStatus })} className="mt-1 w-full px-3 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl">{Object.entries(statusLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+            {scheduleStatuses.includes(form.status) && <label className="text-xs font-semibold">Data e hora do retorno *<input required type="datetime-local" value={form.nextActionAt} onChange={event => setForm({ ...form, nextActionAt: event.target.value })} className="mt-1 w-full px-3 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl" /></label>}
+          </div>
+          <label className="text-xs font-semibold block">Observações<textarea value={form.notes} onChange={event => setForm({ ...form, notes: event.target.value })} rows={3} className="mt-1 w-full px-3 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl" placeholder="Resumo da conversa, objeções e próximos passos" /></label>
+          <div className="flex justify-end gap-2"><button type="button" onClick={() => setFormOpen(false)} className="px-4 py-2 text-xs font-bold rounded-xl border border-[#c2c6d8]/40">Cancelar</button><button className="px-4 py-2 text-xs font-bold rounded-xl bg-[#0066ff] hover:bg-[#0050cb] text-white">Salvar empresa</button></div>
+        </form>
+      </div>}
     </div>
   );
+}
+
+function Field({ label, value, onChange, type = 'text' }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
+  return <label className="text-xs font-semibold">{label}<input type={type} value={value} onChange={event => onChange(event.target.value)} className="mt-1 w-full px-3 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl" /></label>;
 }
