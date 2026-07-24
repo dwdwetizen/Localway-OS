@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Search,
   CheckCircle2,
@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Zap,
 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 interface AnalisesViewProps {
   onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
@@ -30,6 +31,19 @@ export function AnalisesView({
 }: AnalisesViewProps) {
   const [selectedCompany, setSelectedCompany] = useState('padaria');
   const [roiGrowth, setRoiGrowth] = useState(35);
+  const [canSeeSolutions, setCanSeeSolutions] = useState(false);
+
+  useEffect(() => {
+    const loadPermission = async () => {
+      if (!supabase) return;
+      const { data: session } = await supabase.auth.getSession();
+      const userId = session.session?.user.id;
+      if (!userId) return;
+      const { data } = await supabase.from('profiles').select('role, permissions').eq('id', userId).single();
+      setCanSeeSolutions(data?.role === 'Administrador' || (data?.permissions || []).includes('analises_solucoes'));
+    };
+    void loadPermission();
+  }, []);
 
   const companiesData = {
     padaria: {
@@ -276,8 +290,17 @@ export function AnalisesView({
         </div>
       </div>
 
+      <div className="bg-white dark:bg-[#141936] p-6 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
+        <h3 className="font-bold font-poppins text-lg text-[#1a1b22] dark:text-[#f8f7ff] mb-4">Diagnóstico detalhado do perfil</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+          <div className="p-4 rounded-xl bg-[#f4f2fd] dark:bg-[#10142e]"><p className="font-bold text-[#0066ff]">Reputação</p><p className="mt-2 text-[#424656] dark:text-[#b0b4ce]">Nota {current.rating}/5 com {current.totalReviews} avaliações. O score considera volume, nota e respostas recentes.</p></div>
+          <div className="p-4 rounded-xl bg-[#f4f2fd] dark:bg-[#10142e]"><p className="font-bold text-[#0066ff]">Visibilidade local</p><p className="mt-2 text-[#424656] dark:text-[#b0b4ce]">{current.views} visualizações, {current.routes} rotas e {current.calls} chamadas no período analisado.</p></div>
+          <div className="p-4 rounded-xl bg-[#f4f2fd] dark:bg-[#10142e]"><p className="font-bold text-[#0066ff]">Presença digital</p><p className="mt-2 text-[#424656] dark:text-[#b0b4ce]">{current.siteClicks} acessos ao site. O score mostra a saúde geral do perfil e não expõe as soluções comerciais.</p></div>
+        </div>
+      </div>
+
       {/* ROI Simulator & Priority Recommendations */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {canSeeSolutions ? <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* ROI Growth Projections */}
         <div className="bg-gradient-to-br from-[#0050cb] to-[#0066ff] text-white p-6 rounded-2xl shadow-lg flex flex-col justify-between">
           <div className="space-y-3">
@@ -377,7 +400,7 @@ export function AnalisesView({
             </div>
           </div>
         </div>
-      </div>
+      </div> : <div className="p-4 bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/30 rounded-2xl text-xs text-[#727687]">Você está vendo o diagnóstico do perfil. As recomendações e simuladores comerciais foram reservados pelo administrador.</div>}
 
       {/* Reviews Section with AI Auto-respond Modal trigger */}
       <div className="bg-white dark:bg-[#141936] p-6 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
@@ -414,7 +437,7 @@ export function AnalisesView({
               </div>
 
               <div>
-                {!rev.responded ? (
+                {!rev.responded && canSeeSolutions ? (
                   <button
                     onClick={() => onOpenAiReviewModal(current.name, rev.name, rev.text)}
                     className="flex items-center gap-1.5 px-3.5 py-2 bg-[#0066ff] hover:bg-[#0050cb] text-white font-bold text-xs rounded-xl shadow transition-all active:scale-95"
@@ -422,11 +445,11 @@ export function AnalisesView({
                     <Sparkles className="w-4 h-4" />
                     Responder com IA
                   </button>
-                ) : (
+                ) : rev.responded ? (
                   <span className="text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 rounded-xl border border-emerald-500/20 flex items-center gap-1">
                     <CheckCircle2 className="w-3.5 h-3.5" /> Respondida
                   </span>
-                )}
+                ) : <span className="text-[11px] text-[#727687]">Ação de resposta reservada</span>}
               </div>
             </div>
           ))}
