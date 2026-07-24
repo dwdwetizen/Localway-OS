@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-main: #fbf8ff;
+    --surface-main: #ffffff;
+    --surface-container: #eeedf7;
+    --surface-container-low: #f4f2fd;
+    --surface-container-high: #e8e7f1;
+    --text-primary: #1a1b22;
+    --text-secondary: #424656;
+    --border-color: #c2c6d8;
+    --border-subtle: #e3e1ec;
+    --primary-main: #0050cb;
+    --primary-container: #0066ff;
+    --sidebar-bg: #1a1b22;
+    --sidebar-text: #e3e1ec;
+  }
+
+  .dark {
+    --bg-main: #0a0e27;
+    --surface-main: #141936;
+    --surface-container: #1d234a;
+    --surface-container-low: #10142e;
+    --surface-container-high: #252c5c;
+    --text-primary: #f8f7ff;
+    --text-secondary: #b0b4ce;
+    --border-color: #2e366b;
+    --border-subtle: #1e244d;
+    --primary-main: #3b82f6;
+    --primary-container: #0066ff;
+    --sidebar-bg: #060919;
+    --sidebar-text: #c2c6d8;
+  }
+}
+
+/* Material Symbols Outlined font */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block');
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+h1, h2, h3, h4, .font-poppins {
+  font-family: 'Poppins', sans-serif;
+}
+
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(194, 198, 216, 0.5);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(114, 118, 135, 0.8);
+}
+
+/* Gauge circles & gauge animation */
+.gauge-svg {
+  transform: rotate(-90deg);
+}
+
+.gauge-circle-bg {
+  fill: none;
+  stroke: var(--surface-container);
+  stroke-width: 12;
+}
+
+.gauge-circle-progress {
+  fill: none;
+  stroke-width: 12;
+  stroke-linecap: round;
+  stroke-dasharray: 440;
+  transition: stroke-dashoffset 1s ease-out;
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.dark .glass-card {
+  background: rgba(20, 25, 54, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
