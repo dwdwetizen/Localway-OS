@@ -58,6 +58,15 @@ export default function Home() {
     }
   }, [darkMode]);
 
+  useEffect(() => {
+    const savedTheme = window.localStorage.getItem('localway-theme');
+    if (savedTheme === 'dark') setDarkMode(true);
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem('localway-theme', darkMode ? 'dark' : 'light');
+  }, [darkMode]);
+
   const showToast = (message: string, type: 'success' | 'info' | 'error' = 'success') => {
     const newToast: ToastMessage = {
       id: String(Date.now()),

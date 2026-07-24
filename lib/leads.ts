@@ -8,6 +8,7 @@ export type LeadStatus =
   | 'perdido';
 
 export type LeadSource = 'presencial' | 'google_places' | 'manual';
+export type CrmStage = 'qualificacao' | 'proposta' | 'negociacao' | 'fechado' | 'perdido';
 
 export interface Lead {
   id: string;
@@ -30,6 +31,8 @@ export interface Lead {
   has_website: boolean | null;
   health_score: number | null;
   opportunity: string | null;
+  crm_stage: CrmStage | null;
+  estimated_value: number | null;
   source: LeadSource;
   status: LeadStatus;
   next_action_at: string | null;
