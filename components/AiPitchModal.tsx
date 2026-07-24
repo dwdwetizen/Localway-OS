@@ -2,14 +2,16 @@
 
 import React, { useState } from 'react';
 import { Sparkles, Copy, Send, Check, X, RefreshCw, MessageSquare } from 'lucide-react';
+import { Lead } from '@/lib/leads';
 
 interface AiPitchModalProps {
   companyName: string;
+  lead?: Lead;
   onClose: () => void;
   onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
 }
 
-export function AiPitchModal({ companyName, onClose, onShowToast }: AiPitchModalProps) {
+export function AiPitchModal({ companyName, lead, onClose, onShowToast }: AiPitchModalProps) {
   const [loading, setLoading] = useState(false);
   const [pitchText, setPitchText] = useState('');
   const [copied, setCopied] = useState(false);
@@ -25,9 +27,9 @@ export function AiPitchModal({ companyName, onClose, onShowToast }: AiPitchModal
         body: JSON.stringify({
           action: 'generate_pitch',
           companyName,
-          category,
-          rating: '4.2',
-          issue: 'Perfil sem postagens atualizadas, fotos antigas e sem resposta rápida a comentários de clientes.',
+          category: lead?.category || category,
+          rating: String(lead?.rating || 'sem avaliação'),
+          issue: lead?.opportunity || 'Perfil sem postagens atualizadas, fotos antigas e sem resposta rápida a comentários de clientes.',
         }),
       });
 

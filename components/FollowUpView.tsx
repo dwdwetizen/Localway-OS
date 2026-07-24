@@ -1,18 +1,17 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { CalendarPlus, CheckCircle2, MessageCircle, PhoneCall } from 'lucide-react';
+import { CalendarPlus, CheckCircle2, ExternalLink, MessageCircle, PhoneCall } from 'lucide-react';
 import { useLeads } from '@/hooks/use-leads';
 import { googleCalendarLink, Lead, LeadStatus, statusLabel, whatsappLink } from '@/lib/leads';
 
 interface FollowUpViewProps {
   onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
-  onOpenCrm: () => void;
 }
 
 const followUpStatuses: LeadStatus[] = ['ligar_depois', 'retornar_depois', 'reuniao_marcada'];
 
-export function FollowUpView({ onShowToast, onOpenCrm }: FollowUpViewProps) {
+export function FollowUpView({ onShowToast }: FollowUpViewProps) {
   const { leads, loading, error, updateLead, addInteraction } = useLeads();
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [dates, setDates] = useState<Record<string, string>>({});
@@ -39,8 +38,7 @@ export function FollowUpView({ onShowToast, onOpenCrm }: FollowUpViewProps) {
 
   return <div className="space-y-6 animate-in fade-in duration-300">
     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-[#141936] p-5 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
-      <div><h2 className="text-xl font-bold font-poppins">Follow-up</h2><p className="text-xs text-[#727687]">Retornos programados, histórico de contatos e passagem segura para o CRM.</p></div>
-      <button onClick={onOpenCrm} className="px-4 py-2.5 bg-[#0066ff] hover:bg-[#0050cb] text-white font-bold text-xs rounded-xl shadow">Abrir CRM</button>
+      <div><h2 className="text-xl font-bold font-poppins">Follow-up</h2><p className="text-xs text-[#727687]">Leads com retorno, ligação ou reunião programada.</p></div>
     </div>
     {error && <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800">{error}</div>}
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -55,8 +53,9 @@ export function FollowUpView({ onShowToast, onOpenCrm }: FollowUpViewProps) {
         <div className="flex flex-col lg:flex-row gap-5 justify-between">
           <div className="space-y-1"><div className="flex items-center gap-2 flex-wrap"><h3 className="font-bold text-sm">{lead.company_name}</h3><span className={`text-[10px] font-bold px-2 py-0.5 rounded ${isDue(lead) ? 'bg-rose-100 text-rose-700' : 'bg-[#0066ff]/10 text-[#0066ff]'}`}>{isDue(lead) ? 'Ação pendente' : statusLabel[lead.status]}</span></div>
             <p className="text-xs text-[#727687]">{lead.decision_maker_name ? `Decisor: ${lead.decision_maker_name}` : 'Decisor não informado'}{lead.receptionist_name ? ` · Atendimento: ${lead.receptionist_name}` : ''}</p>
+            <p className="text-[11px] text-[#727687]">⭐ {lead.rating ?? '—'} ({lead.review_count ?? 0} avaliações) · {lead.has_website ? 'Tem site' : 'Sem site'}</p>
             <p className="text-xs text-[#727687]">Próxima ação: {lead.next_action_at ? new Date(lead.next_action_at).toLocaleString('pt-BR') : 'não agendada'}</p>
-            <div className="flex gap-1 pt-1">{whatsappLink(lead.whatsapp || lead.phone) && <a href={whatsappLink(lead.whatsapp || lead.phone) as string} target="_blank" rel="noreferrer" className="p-2 rounded-lg text-emerald-600 hover:bg-emerald-50" title="WhatsApp"><MessageCircle className="w-4 h-4" /></a>}{lead.phone && <a href={`tel:${lead.phone.replace(/\D/g, '')}`} className="p-2 rounded-lg text-[#0066ff] hover:bg-[#0066ff]/10" title="Ligar"><PhoneCall className="w-4 h-4" /></a>}</div>
+            <div className="flex gap-1 pt-1">{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer" className="p-2 rounded-lg text-[#0066ff] hover:bg-[#0066ff]/10" title="Abrir perfil no Google Maps"><ExternalLink className="w-4 h-4" /></a>}{whatsappLink(lead.whatsapp || lead.phone) && <a href={whatsappLink(lead.whatsapp || lead.phone) as string} target="_blank" rel="noreferrer" className="p-2 rounded-lg text-emerald-600 hover:bg-emerald-50" title="WhatsApp"><MessageCircle className="w-4 h-4" /></a>}{lead.phone && <a href={`tel:${lead.phone.replace(/\D/g, '')}`} className="p-2 rounded-lg text-[#0066ff] hover:bg-[#0066ff]/10" title="Ligar"><PhoneCall className="w-4 h-4" /></a>}</div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1 max-w-3xl">
             <label className="text-[11px] font-semibold">Resultado<select value={outcomes[lead.id] || lead.status} onChange={event => setOutcomes({ ...outcomes, [lead.id]: event.target.value as LeadStatus })} className="mt-1 w-full p-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl">{Object.entries(statusLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>

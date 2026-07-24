@@ -21,6 +21,15 @@ export interface Lead {
   whatsapp: string | null;
   email: string | null;
   notes: string | null;
+  google_place_id: string | null;
+  google_maps_url: string | null;
+  website_url: string | null;
+  rating: number | null;
+  review_count: number | null;
+  photo_count: number | null;
+  has_website: boolean | null;
+  health_score: number | null;
+  opportunity: string | null;
   source: LeadSource;
   status: LeadStatus;
   next_action_at: string | null;

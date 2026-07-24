@@ -20,6 +20,7 @@ import { AiPitchModal } from '@/components/AiPitchModal';
 import { AiReviewModal } from '@/components/AiReviewModal';
 import { SupportModal } from '@/components/SupportModal';
 import { AuthGate } from '@/components/AuthGate';
+import { Lead } from '@/lib/leads';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
@@ -29,7 +30,7 @@ export default function Home() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   // Modals state
-  const [aiPitchData, setAiPitchData] = useState<{ isOpen: boolean; companyName: string }>({
+  const [aiPitchData, setAiPitchData] = useState<{ isOpen: boolean; companyName: string; lead?: Lead }>({
     isOpen: false,
     companyName: '',
   });
@@ -70,8 +71,8 @@ export default function Home() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  const handleOpenAiPitchModal = (companyName: string) => {
-    setAiPitchData({ isOpen: true, companyName });
+  const handleOpenAiPitchModal = (companyName: string, lead?: Lead) => {
+    setAiPitchData({ isOpen: true, companyName, lead });
   };
 
   const handleOpenAiReviewModal = (companyName: string, reviewerName: string, reviewText: string) => {
@@ -131,14 +132,12 @@ export default function Home() {
             <ProspectingView
               onShowToast={showToast}
               onOpenAiPitchModal={handleOpenAiPitchModal}
-              onOpenFollowUp={() => setActiveTab('followup')}
             />
           )}
 
           {activeTab === 'followup' && (
             <FollowUpView
               onShowToast={showToast}
-              onOpenCrm={() => setActiveTab('crm')}
             />
           )}
 
@@ -171,9 +170,10 @@ export default function Home() {
 
       {/* Modals */}
       {aiPitchData.isOpen && (
-        <AiPitchModal
-          companyName={aiPitchData.companyName}
-          onClose={() => setAiPitchData({ isOpen: false, companyName: '' })}
+          <AiPitchModal
+            companyName={aiPitchData.companyName}
+            lead={aiPitchData.lead}
+            onClose={() => setAiPitchData({ isOpen: false, companyName: '' })}
           onShowToast={showToast}
         />
       )}
