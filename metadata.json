@@ -1,0 +1,6 @@
+{
+  "name": "LocalWay OS",
+  "description": "Plataforma SaaS premium de gestão de marketing local, prospecção de vendas e auditoria GBP",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
