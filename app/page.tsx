@@ -19,6 +19,7 @@ import { ToastContainer, ToastMessage } from '@/components/Toast';
 import { AiPitchModal } from '@/components/AiPitchModal';
 import { AiReviewModal } from '@/components/AiReviewModal';
 import { SupportModal } from '@/components/SupportModal';
+import { AuthGate } from '@/components/AuthGate';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
@@ -78,7 +79,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-[#fbf8ff] dark:bg-[#0a0e27] text-[#1a1b22] dark:text-[#f8f7ff] transition-colors duration-300">
+    <AuthGate><div className="min-h-screen bg-[#fbf8ff] dark:bg-[#0a0e27] text-[#1a1b22] dark:text-[#f8f7ff] transition-colors duration-300">
       {/* Fixed Sidebar */}
       <Sidebar
         activeTab={activeTab}
@@ -200,6 +201,6 @@ export default function Home() {
           onShowToast={showToast}
         />
       )}
-    </div>
+    </div></AuthGate>
   );
 }
