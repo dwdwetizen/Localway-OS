@@ -25,7 +25,7 @@ function reply(status: number, body: Record<string, unknown>) {
 }
 
 Deno.serve(async (request: Request) => {
-  if (request.method !== "POST") {
+  if (request.method !== "POST" && request.method !== "DELETE") {
     return reply(405, { error: "Método não permitido." });
   }
 
@@ -66,7 +66,58 @@ Deno.serve(async (request: Request) => {
 
   const normalizedRole = profile?.role?.trim().toLowerCase();
   if (normalizedRole !== "admin" && normalizedRole !== "administrador") {
-    return reply(403, { error: "Apenas administradores podem criar usuários." });
+    return reply(403, { error: "Apenas administradores podem gerenciar usuários." });
+  }
+
+  if (request.method === "DELETE") {
+    let payload: { userId?: string };
+
+    try {
+      payload = await request.json();
+    } catch {
+      return reply(400, { error: "Dados inválidos." });
+    }
+
+    const userId = payload.userId?.trim();
+    if (!userId) {
+      return reply(400, { error: "Usuário não informado." });
+    }
+    if (userId === current.user.id) {
+      return reply(400, { error: "Você não pode excluir o próprio usuário." });
+    }
+
+    const { data: targetProfile, error: targetProfileError } = await admin
+      .from("profiles")
+      .select("*")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (targetProfileError) {
+      return reply(500, { error: "Não foi possível localizar o perfil do usuário." });
+    }
+    if (!targetProfile) {
+      return reply(404, { error: "Usuário não encontrado." });
+    }
+
+    const { error: removeProfileError } = await admin
+      .from("profiles")
+      .delete()
+      .eq("id", userId);
+
+    if (removeProfileError) {
+      return reply(500, { error: "Não foi possível remover o perfil do usuário." });
+    }
+
+    const { error: deleteUserError } = await admin.auth.admin.deleteUser(userId, true);
+    if (deleteUserError) {
+      const { error: restoreError } = await admin.from("profiles").upsert(targetProfile);
+      if (restoreError) {
+        console.error("Falha ao restaurar perfil:", restoreError.message);
+      }
+      return reply(500, { error: deleteUserError.message || "Não foi possível excluir o login." });
+    }
+
+    return reply(200, { ok: true });
   }
 
   let payload: {

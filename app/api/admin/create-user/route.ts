@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-export async function POST(request: NextRequest) {
+async function proxyUserManagement(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const authorization = request.headers.get('authorization') || '';
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
   }
 
   const response = await fetch(`${url}/functions/v1/admin-create-user`, {
-    method: 'POST',
+    method: request.method,
     headers: {
       apikey: publishableKey!,
       Authorization: authorization,
@@ -34,4 +34,12 @@ export async function POST(request: NextRequest) {
   }));
 
   return NextResponse.json(result, { status: response.status });
+}
+
+export async function POST(request: NextRequest) {
+  return proxyUserManagement(request);
+}
+
+export async function DELETE(request: NextRequest) {
+  return proxyUserManagement(request);
 }

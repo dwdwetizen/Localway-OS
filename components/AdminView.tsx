@@ -4,7 +4,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import React, { ChangeEvent, useCallback, useEffect, useState } from 'react';
-import { Plus, Settings, Upload, Loader2 } from 'lucide-react';
+import { Plus, Settings, Upload, Loader2, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface AdminViewProps { onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void; }
@@ -14,12 +14,13 @@ const initialForm = { nome: '', email: '', password: '', permissions: ['Dashboar
 
 export function AdminView({ onShowToast }: AdminViewProps) {
   const [activeTab, setActiveTab] = useState<'usuarios' | 'servicos' | 'integracoes'>('usuarios');
-  const [profiles, setProfiles] = useState<Profile[]>([]); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [form, setForm] = useState(initialForm);
+  const [profiles, setProfiles] = useState<Profile[]>([]); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [deletingId, setDeletingId] = useState<string | null>(null); const [form, setForm] = useState(initialForm);
   const load = useCallback(async () => { const client = supabase; if (!client) return; setLoading(true); const { data, error } = await client.from('profiles').select('id,email,nome,role,permissions,photo_url').order('nome'); if (error) onShowToast(error.message, 'error'); else { const rows = await Promise.all((data || []).map(async row => { if (!row.photo_url) return row; const signed = await client.storage.from('profile-photos').createSignedUrl(row.photo_url, 3600); return { ...row, photo_url: signed.data?.signedUrl || null }; })); setProfiles(rows as Profile[]); } setLoading(false); }, [onShowToast]);
   useEffect(() => { void load(); }, [load]);
   const toggle = (item: string) => setForm(current => ({ ...current, permissions: current.permissions.includes(item) ? current.permissions.filter(value => value !== item) : [...current.permissions, item] }));
   const toggleSolutions = (profile: Profile) => { const current = profile.permissions || []; const permissions = current.includes('analises_solucoes') ? current.filter(item => item !== 'analises_solucoes') : [...current, 'analises_solucoes']; if (!supabase) return; void supabase.from('profiles').update({ permissions }).eq('id', profile.id).then(({ error }) => { if (error) onShowToast(error.message, 'error'); else { onShowToast('Acesso às soluções atualizado.'); void load(); } }); };
   const createLogin = async () => { if (!supabase) return; setSaving(true); const { data } = await supabase.auth.getSession(); const response = await fetch('/api/admin/create-user', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token || ''}` }, body: JSON.stringify(form) }); const result = await response.json(); setSaving(false); if (!response.ok) return onShowToast(result.error || 'Não foi possível criar o login.', 'error'); onShowToast('Login criado. Passe o e-mail e a senha ao usuário por um canal seguro.'); setForm(initialForm); void load(); };
+  const deleteUser = async (profile: Profile) => { if (!supabase || !window.confirm(`Excluir o login de ${profile.nome || profile.email}? O histórico de leads será preservado.`)) return; setDeletingId(profile.id); const { data } = await supabase.auth.getSession(); const response = await fetch('/api/admin/create-user', { method: 'DELETE', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token || ''}` }, body: JSON.stringify({ userId: profile.id }) }); const result = await response.json(); setDeletingId(null); if (!response.ok) return onShowToast(result.error || 'Não foi possível excluir o usuário.', 'error'); onShowToast('Usuário excluído e login desativado.'); void load(); };
   const uploadPhoto = async (profile: Profile, event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file || !supabase) return; const path = `${profile.id}/avatar.${file.name.split('.').pop() || 'jpg'}`; const { error } = await supabase.storage.from('profile-photos').upload(path, file, { upsert: true, contentType: file.type }); if (error) return onShowToast(error.message, 'error'); const { error: updateError } = await supabase.from('profiles').update({ photo_url: path }).eq('id', profile.id); if (updateError) return onShowToast(updateError.message, 'error'); onShowToast('Foto atualizada.'); void load(); };
   return <div className="space-y-6 animate-in fade-in duration-300">
     <div className="bg-white dark:bg-[#141936] p-5 rounded-2xl border">
@@ -64,7 +65,12 @@ export function AdminView({ onShowToast }: AdminViewProps) {
                 {(profile.permissions || []).includes('analises_solucoes') || ['administrador', 'admin'].includes((profile.role || '').toLowerCase()) ? 'Soluções na análise: liberadas' : 'Soluções na análise: bloqueadas'}
               </button>
             </div>
-            <label className="text-xs text-[#0066ff] font-bold cursor-pointer"><Upload className="w-4 h-4 inline mr-1"/>Foto<input className="hidden" type="file" accept="image/*" onChange={e => void uploadPhoto(profile,e)}/></label>
+            <div className="flex items-center gap-3">
+              <label className="text-xs text-[#0066ff] font-bold cursor-pointer"><Upload className="w-4 h-4 inline mr-1"/>Foto<input className="hidden" type="file" accept="image/*" onChange={e => void uploadPhoto(profile,e)}/></label>
+              <button disabled={deletingId === profile.id} onClick={() => void deleteUser(profile)} className="p-2 rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-50" aria-label={`Excluir ${profile.nome || profile.email}`} title="Excluir usuário">
+                {deletingId === profile.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <Trash2 className="w-4 h-4"/>}
+              </button>
+            </div>
           </div>)}
         </div>}
       </section>
