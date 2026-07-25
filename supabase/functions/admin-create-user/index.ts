@@ -6,18 +6,23 @@ const jsonHeaders = {
   "Cache-Control": "no-store",
 };
 
-function getDefaultKey(environmentName: string) {
+function getApiKey(
+  environmentName: string,
+  modernPrefix: "sb_publishable_" | "sb_secret_",
+  legacyEnvironmentName: string,
+) {
   const encodedKeys = Deno.env.get(environmentName);
   if (encodedKeys) {
     try {
       const keys = JSON.parse(encodedKeys) as Record<string, string>;
-      const key = keys.default || Object.values(keys)[0];
-      if (key) return key;
+      const values = Object.values(keys);
+      const modernKey = values.find((key) => key.startsWith(modernPrefix));
+      if (modernKey) return modernKey;
     } catch {
-      return undefined;
+      // Fall through to the stable legacy environment variable.
     }
   }
-  return undefined;
+  return Deno.env.get(legacyEnvironmentName);
 }
 
 function reply(status: number, body: Record<string, unknown>) {
@@ -30,8 +35,16 @@ Deno.serve(async (request: Request) => {
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const publishableKey = getDefaultKey("SUPABASE_PUBLISHABLE_KEYS");
-  const secretKey = getDefaultKey("SUPABASE_SECRET_KEYS");
+  const publishableKey = getApiKey(
+    "SUPABASE_PUBLISHABLE_KEYS",
+    "sb_publishable_",
+    "SUPABASE_ANON_KEY",
+  );
+  const secretKey = getApiKey(
+    "SUPABASE_SECRET_KEYS",
+    "sb_secret_",
+    "SUPABASE_SERVICE_ROLE_KEY",
+  );
   const authorization = request.headers.get("Authorization") || "";
   const accessToken = authorization.replace(/^Bearer\s+/i, "");
 
