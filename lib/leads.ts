@@ -89,7 +89,7 @@ export const statusLabel: Record<LeadStatus, string> = {
   contato_realizado: 'Contato realizado',
   nao_atendeu: 'Não atendeu',
   ligar_depois: 'Ligar depois',
-  retornar_depois: 'Retornar depois',
+  retornar_depois: 'Aguardando retorno',
   reuniao_marcada: 'Reunião marcada',
   qualificado: 'Enviar para CRM',
   sem_interesse: 'Sem interesse',

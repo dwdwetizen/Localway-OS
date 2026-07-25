@@ -3,13 +3,13 @@
 import React, { useMemo, useState } from 'react';
 import { CalendarPlus, CheckCircle2, ExternalLink, MessageCircle, PhoneCall, Plus, X } from 'lucide-react';
 import { useLeads } from '@/hooks/use-leads';
-import { googleCalendarLink, Lead, LeadStatus, statusLabel, whatsappLink } from '@/lib/leads';
+import { Lead, LeadStatus, statusLabel, whatsappLink } from '@/lib/leads';
 
 interface FollowUpViewProps {
   onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
 }
 
-const followUpStatuses: LeadStatus[] = ['ligar_depois', 'retornar_depois', 'reuniao_marcada'];
+const followUpStatuses: LeadStatus[] = ['ligar_depois', 'retornar_depois'];
 
 export function FollowUpView({ onShowToast }: FollowUpViewProps) {
   const { leads, loading, error, updateLead } = useLeads();
@@ -31,13 +31,12 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
     const note = notes[lead.id] || '';
     const result = await updateLead(
       lead.id,
-      { status, crm_stage: status === 'qualificado' ? (lead.crm_stage || 'qualificacao') : lead.crm_stage, next_action_at: followUpStatuses.includes(status) ? nextActionAt : null, last_contact_at: new Date().toISOString(), notes: note ? `${lead.notes ? `${lead.notes}\n\n` : ''}${new Date().toLocaleString('pt-BR')}: ${note}` : lead.notes },
+      { status, crm_stage: status === 'qualificado' || status === 'reuniao_marcada' ? (lead.crm_stage || 'qualificacao') : lead.crm_stage, next_action_at: status === 'reuniao_marcada' || followUpStatuses.includes(status) ? nextActionAt : null, last_contact_at: new Date().toISOString(), notes: note ? `${lead.notes ? `${lead.notes}\n\n` : ''}${new Date().toLocaleString('pt-BR')}: ${note}` : lead.notes },
       { outcome: statusLabel[status], notes: note || null, next_action_at: followUpStatuses.includes(status) ? nextActionAt : null, event_type: 'follow_up' },
     );
     if (result.error) return onShowToast(result.error, 'error');
-    if (status === 'reuniao_marcada' && nextActionAt) window.open(googleCalendarLink({ ...lead, status }, nextActionAt), '_blank', 'noopener,noreferrer');
     setNotes(current => ({ ...current, [lead.id]: '' }));
-    onShowToast(status === 'qualificado' ? 'Lead enviado para a etapa de CRM.' : 'Follow-up atualizado.');
+    onShowToast(status === 'qualificado' || status === 'reuniao_marcada' ? 'Empresa enviada para a primeira coluna do CRM.' : 'Follow-up atualizado.');
   };
 
   const addFollowUp = async () => {
@@ -60,12 +59,9 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
       },
     );
     if (result.error) return onShowToast(result.error, 'error');
-    if (newFollowUp.status === 'reuniao_marcada') {
-      window.open(googleCalendarLink({ ...lead, status: newFollowUp.status }, nextActionAt), '_blank', 'noopener,noreferrer');
-    }
     setNewFollowUp({ leadId: '', status: 'retornar_depois', date: '', note: '' });
     setAddOpen(false);
-    onShowToast(newFollowUp.status === 'reuniao_marcada' ? 'Follow-up salvo e evento preparado no Google Agenda.' : 'Follow-up adicionado.');
+    onShowToast('Follow-up adicionado.');
   };
 
   const isDue = (lead: Lead) => Boolean(

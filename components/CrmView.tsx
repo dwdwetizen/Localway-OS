@@ -26,7 +26,7 @@ export function CrmView({ onShowToast, onOpenAiPitchModal }: CrmViewProps) {
   const [viewMode, setViewMode] = useState<'kanban' | 'tabela'>('kanban');
   const [draggedId, setDraggedId] = useState<string | null>(null);
 
-  const deals = useMemo(() => leads.filter(lead => lead.crm_stage || lead.status === 'qualificado'), [leads]);
+  const deals = useMemo(() => leads.filter(lead => lead.crm_stage || lead.status === 'qualificado' || lead.status === 'reuniao_marcada'), [leads]);
   const pipelineTotal = deals.reduce((sum, lead) => sum + Number(lead.estimated_value || 0), 0);
   const avgScore = deals.length ? Math.round(deals.reduce((sum, lead) => sum + (lead.health_score || 0), 0) / deals.length) : 0;
 

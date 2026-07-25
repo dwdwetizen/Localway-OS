@@ -3,7 +3,7 @@
 import React, { FormEvent, useMemo, useState } from 'react';
 import { CheckSquare, ExternalLink, MessageCircle, PhoneCall, Plus, Search, Sparkles, Square, X } from 'lucide-react';
 import { useLeads } from '@/hooks/use-leads';
-import { googleCalendarLink, Lead, LeadStatus, statusLabel, whatsappLink } from '@/lib/leads';
+import { Lead, LeadStatus, statusLabel, whatsappLink } from '@/lib/leads';
 import { supabase } from '@/lib/supabase';
 
 interface ProspectingViewProps {
@@ -25,7 +25,10 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
   const [manual, setManual] = useState(emptyManual);
   const [selected, setSelected] = useState<string[]>([]);
 
-  const prospects = useMemo(() => leads.filter(lead => lead.status !== 'qualificado' && lead.status !== 'perdido'), [leads]);
+  const prospects = useMemo(
+    () => leads.filter(lead => !(lead.source === 'manual' && lead.google_place_id) && !lead.crm_stage && lead.status !== 'qualificado' && lead.status !== 'reuniao_marcada' && lead.status !== 'perdido'),
+    [leads],
+  );
   const toggle = (id: string) => setSelected(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
   const toggleAll = () => setSelected(current => current.length === prospects.length ? [] : prospects.map(lead => lead.id));
 
@@ -57,7 +60,7 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
       phone: manual.phone || null, whatsapp: manual.whatsapp || manual.phone || null, email: manual.email || null, notes: manual.notes || null,
       decision_maker_name: manual.decisionMaker || null, receptionist_name: manual.receptionist || null, source: 'presencial', status: 'novo', next_action_at: null,
       google_place_id: null, google_maps_url: null, website_url: null, rating: null, review_count: null, photo_count: null, has_website: null, health_score: null, opportunity: null,
-      latitude: null, longitude: null, analysis_data: null, analysed_at: null,
+      latitude: null, longitude: null, analysis_data: {}, analysed_at: null,
     });
     if (result.error) return onShowToast(result.error, 'error');
     setManual(emptyManual); setManualOpen(false); onShowToast('Empresa adicionada à lista de prospecção.');
@@ -72,7 +75,9 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
       lead.id,
       {
         status,
-        crm_stage: status === 'qualificado' ? (lead.crm_stage || 'qualificacao') : lead.crm_stage,
+        crm_stage: status === 'qualificado' || status === 'reuniao_marcada'
+          ? (lead.crm_stage || 'qualificacao')
+          : lead.crm_stage,
         next_action_at: scheduledStatuses.includes(status) ? nextActionAt : null,
         last_contact_at: status === 'novo' ? lead.last_contact_at : new Date().toISOString(),
       },
@@ -84,10 +89,7 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
       },
     );
     if (result.error) onShowToast(result.error, 'error');
-    else if (status === 'reuniao_marcada' && nextActionAt) {
-      window.open(googleCalendarLink({ ...lead, status }, nextActionAt), '_blank', 'noopener,noreferrer');
-      onShowToast('Lead enviado ao Follow-up. O evento do Google Agenda foi preparado em outra aba.');
-    }
+    else if (status === 'reuniao_marcada') onShowToast('Reunião marcada e empresa enviada para a primeira coluna do CRM.');
     else if (status === 'retornar_depois' || status === 'ligar_depois') onShowToast('Lead enviado para a lista de Follow-up.');
     else if (status === 'qualificado') onShowToast('Lead enviado para a primeira coluna do CRM.');
     else onShowToast('Contato registrado no histórico.');

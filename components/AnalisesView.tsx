@@ -7,6 +7,7 @@ import {
   ExternalLink,
   Globe,
   Loader2,
+  Link2,
   MapPin,
   Phone,
   RefreshCw,
@@ -45,13 +46,15 @@ function formatDate(value: string | null) {
 
 export function AnalisesView({ onShowToast }: AnalisesViewProps) {
   const profile = useAuthProfile();
-  const { leads, loading, error, updateLead } = useLeads();
+  const { leads, loading, error, createLead, updateLead } = useLeads();
   const analyzable = useMemo(
     () => leads.filter(lead => Boolean(lead.google_place_id)),
     [leads],
   );
   const [selectedId, setSelectedId] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [googleMapsUrl, setGoogleMapsUrl] = useState('');
+  const [analyzingUrl, setAnalyzingUrl] = useState(false);
   const [roiGrowth, setRoiGrowth] = useState(30);
 
   const selected = analyzable.find(lead => lead.id === selectedId) || analyzable[0] || null;
@@ -125,6 +128,91 @@ export function AnalisesView({ onShowToast }: AnalisesViewProps) {
     }
   };
 
+  const analyzeGoogleMapsUrl = async () => {
+    if (!googleMapsUrl.trim() || !supabase) {
+      return onShowToast('Cole o link da empresa no Google Maps.', 'error');
+    }
+    setAnalyzingUrl(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const response = await fetch('/api/places', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${sessionData.session?.access_token || ''}`,
+        },
+        body: JSON.stringify({ action: 'analyze_url', googleMapsUrl: googleMapsUrl.trim() }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Não foi possível analisar esse link.');
+      const place = result.place as Partial<Lead>;
+      const placeId = place.google_place_id;
+      if (!placeId) throw new Error('O Google não retornou a identificação dessa empresa.');
+
+      const existing = leads.find(lead => lead.google_place_id === placeId);
+      const nextAnalysis = (place.analysis_data || {}) as LeadAnalysisData;
+      let savedLead: Lead;
+      if (existing) {
+        const updated = await updateLead(existing.id, {
+          ...place,
+          analysis_data: nextAnalysis,
+        });
+        if (updated.error || !updated.data) throw new Error(updated.error || 'Não foi possível salvar a análise.');
+        savedLead = updated.data;
+      } else {
+        const created = await createLead({
+          company_name: place.company_name || 'Empresa do Google',
+          category: place.category || null,
+          address: place.address || null,
+          city: place.city || null,
+          decision_maker_name: null,
+          receptionist_name: null,
+          phone: place.phone || null,
+          whatsapp: place.whatsapp || place.phone || null,
+          email: null,
+          notes: null,
+          google_place_id: placeId,
+          google_maps_url: place.google_maps_url || googleMapsUrl.trim(),
+          website_url: place.website_url || null,
+          rating: place.rating ?? null,
+          review_count: place.review_count ?? null,
+          photo_count: place.photo_count ?? null,
+          has_website: place.has_website ?? null,
+          health_score: place.health_score ?? null,
+          opportunity: place.opportunity || null,
+          latitude: place.latitude ?? null,
+          longitude: place.longitude ?? null,
+          analysis_data: nextAnalysis,
+          analysed_at: place.analysed_at || new Date().toISOString(),
+          source: 'manual',
+          status: 'novo',
+          next_action_at: null,
+        });
+        if (created.error || !created.data) throw new Error(created.error || 'Não foi possível salvar a análise.');
+        savedLead = created.data;
+      }
+
+      const { error: snapshotError } = await supabase.from('lead_analyses').insert({
+        lead_id: savedLead.id,
+        score: savedLead.health_score ?? 0,
+        summary: nextAnalysis.summary || savedLead.opportunity || 'Análise do perfil',
+        strengths: nextAnalysis.strengths || [],
+        weaknesses: nextAnalysis.weaknesses || [],
+        recommendations: nextAnalysis.recommendations || [],
+        metrics: nextAnalysis.metrics || {},
+        source: 'google_places_link',
+      });
+      if (snapshotError) throw new Error(`A empresa foi analisada, mas o histórico não pôde ser salvo: ${snapshotError.message}`);
+      setSelectedId(savedLead.id);
+      setGoogleMapsUrl('');
+      onShowToast('Empresa analisada e salva com sucesso.', 'success');
+    } catch (requestError) {
+      onShowToast(requestError instanceof Error ? requestError.message : 'Erro ao analisar o link.', 'error');
+    } finally {
+      setAnalyzingUrl(false);
+    }
+  };
+
   if (loading) {
     return <div className="p-12 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-[#0066ff]" /></div>;
   }
@@ -150,12 +238,42 @@ export function AnalisesView({ onShowToast }: AnalisesViewProps) {
         </div>
       </div>
 
+      <section className="bg-white dark:bg-[#141936] p-5 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
+        <div className="flex items-center gap-2 mb-3">
+          <Link2 className="w-5 h-5 text-[#0066ff]" />
+          <div>
+            <h3 className="font-bold text-sm">Analisar uma empresa pelo Google Maps</h3>
+            <p className="text-xs text-[#727687]">Cole o link curto ou completo da ficha da empresa. Esta análise é independente da Prospecção.</p>
+          </div>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input
+            type="url"
+            value={googleMapsUrl}
+            onChange={event => setGoogleMapsUrl(event.target.value)}
+            onKeyDown={event => {
+              if (event.key === 'Enter') void analyzeGoogleMapsUrl();
+            }}
+            placeholder="https://maps.app.goo.gl/... ou https://www.google.com/maps/place/..."
+            className="flex-1 px-4 py-3 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl"
+          />
+          <button
+            disabled={analyzingUrl || !googleMapsUrl.trim()}
+            onClick={() => void analyzeGoogleMapsUrl()}
+            className="px-5 py-3 bg-[#0066ff] disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2"
+          >
+            {analyzingUrl ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+            {analyzingUrl ? 'Analisando...' : 'Analisar empresa'}
+          </button>
+        </div>
+      </section>
+
       {error && <div className="p-4 rounded-xl bg-rose-50 text-rose-700 text-xs border border-rose-200">{error}</div>}
       {!selected ? (
         <div className="bg-white dark:bg-[#141936] p-10 rounded-2xl border text-center">
           <MapPin className="w-8 h-8 mx-auto text-[#0066ff] mb-3" />
-          <h3 className="font-bold">Gere o primeiro lead pelo Google</h3>
-          <p className="text-xs text-[#727687] mt-1">As empresas geradas na Prospecção aparecerão aqui automaticamente.</p>
+          <h3 className="font-bold">Cole o link de uma empresa acima</h3>
+          <p className="text-xs text-[#727687] mt-1">Aceitamos links curtos e completos do Google Maps.</p>
         </div>
       ) : (
         <>

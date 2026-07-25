@@ -200,6 +200,97 @@ function mapPlace(place: PlaceRecord, fallbackCategory = '', fallbackCity = '') 
   };
 }
 
+function isGoogleMapsHost(hostname: string) {
+  const host = hostname.toLowerCase();
+  return host === 'maps.app.goo.gl'
+    || host === 'goo.gl'
+    || host === 'google.com'
+    || host.endsWith('.google.com')
+    || host === 'google.com.br'
+    || host.endsWith('.google.com.br');
+}
+
+function extractPlaceReference(value: string) {
+  const url = new URL(value);
+  const directId = url.searchParams.get('query_place_id');
+  if (directId) return { placeId: directId, query: '' };
+
+  const dataPlaceId = decodeURIComponent(url.href).match(/!1s(ChI[^!/?&]+)/)?.[1] || '';
+  const placePath = decodeURIComponent(url.pathname).match(/\/place\/([^/]+)/)?.[1] || '';
+  const query = (url.searchParams.get('query') || placePath)
+    .replace(/\+/g, ' ')
+    .trim();
+  return { placeId: dataPlaceId, query };
+}
+
+async function placeFromGoogleMapsUrl(rawUrl: string, apiKey: string) {
+  let submitted: URL;
+  try {
+    submitted = new URL(rawUrl);
+  } catch {
+    throw new Error('Cole um link válido do Google Maps.');
+  }
+  if (!isGoogleMapsHost(submitted.hostname)) {
+    throw new Error('O link precisa ser do Google Maps.');
+  }
+
+  let resolvedUrl = submitted.href;
+  if (submitted.hostname === 'maps.app.goo.gl' || submitted.hostname === 'goo.gl') {
+    const expanded = await fetch(submitted.href, {
+      method: 'GET',
+      redirect: 'follow',
+      headers: { 'User-Agent': 'LocalWay-OS/1.0' },
+    });
+    resolvedUrl = expanded.url;
+  }
+
+  const resolved = new URL(resolvedUrl);
+  if (!isGoogleMapsHost(resolved.hostname)) {
+    throw new Error('O link curto não direcionou para uma empresa no Google Maps.');
+  }
+  const reference = extractPlaceReference(resolved.href);
+
+  if (reference.placeId) {
+    const detailsResponse = await fetch(
+      `https://places.googleapis.com/v1/places/${encodeURIComponent(reference.placeId)}?languageCode=pt-BR&regionCode=BR`,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask': detailFieldMask,
+        },
+      },
+    );
+    const details = await detailsResponse.json();
+    if (detailsResponse.ok) return mapPlace(details);
+  }
+
+  if (!reference.query) {
+    throw new Error('Não foi possível identificar a empresa nesse link. Abra a ficha da empresa no Google Maps e copie o link novamente.');
+  }
+  const searchResponse = await fetch('https://places.googleapis.com/v1/places:searchText', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': apiKey,
+      'X-Goog-FieldMask': searchFieldMask,
+    },
+    body: JSON.stringify({
+      textQuery: reference.query,
+      languageCode: 'pt-BR',
+      regionCode: 'BR',
+      pageSize: 1,
+    }),
+  });
+  const searchResult = await searchResponse.json();
+  if (!searchResponse.ok) {
+    throw new Error(searchResult?.error?.message || 'O Google não conseguiu localizar essa empresa.');
+  }
+  const place = Array.isArray(searchResult.places) ? searchResult.places[0] : null;
+  if (!place) throw new Error('Nenhuma empresa foi encontrada para esse link.');
+  return mapPlace(place);
+}
+
 function createGrid(centerLatitude: number, centerLongitude: number, radiusMeters: number, gridSize: number) {
   const half = Math.floor(gridSize / 2);
   const stepMeters = radiusMeters / half;
@@ -318,10 +409,14 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const action = body.action === 'analyze' ? 'analyze' : body.action === 'grid' ? 'grid' : 'search';
+  const action = body.action === 'analyze' || body.action === 'analyze_url'
+    ? body.action
+    : body.action === 'grid'
+      ? 'grid'
+      : 'search';
   const authorization = await authorize(
     request,
-    action === 'analyze' ? 'analises' : action === 'grid' ? 'mapa' : 'prospeccao',
+    action === 'analyze' || action === 'analyze_url' ? 'analises' : action === 'grid' ? 'mapa' : 'prospeccao',
   );
   if (authorization.error) return authorization.error;
 
@@ -455,6 +550,18 @@ export async function POST(request: NextRequest) {
       );
     }
     return NextResponse.json({ place: mapPlace(details) });
+  }
+
+  if (action === 'analyze_url') {
+    try {
+      const place = await placeFromGoogleMapsUrl(String(body.googleMapsUrl || '').trim(), apiKey);
+      return NextResponse.json({ place });
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : 'Não foi possível analisar esse link.' },
+        { status: 400 },
+      );
+    }
   }
 
   const category = String(body.category || '').trim();

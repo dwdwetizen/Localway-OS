@@ -52,7 +52,10 @@ export function useLeads() {
     if (!supabase) return { error: supabaseConfigurationError() };
     const { data, error: requestError } = await supabase
       .from('leads')
-      .insert(input)
+      .insert({
+        ...input,
+        analysis_data: input.analysis_data ?? {},
+      })
       .select()
       .single();
     if (requestError) return { error: requestError.message };
