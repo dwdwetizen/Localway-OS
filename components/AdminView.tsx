@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase';
 
 interface AdminViewProps { onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void; }
 type Profile = { id: string; email: string; nome: string | null; role: string | null; permissions: string[] | null; photo_url: string | null; };
-const pages = ['Dashboard', 'Análises', 'Mapa', 'Raio-X', 'Prospecção', 'Follow-up', 'CRM', 'Propostas', 'Meus Serviços', 'Equipe', 'Avaliações', 'Administração'];
+const pages = ['Dashboard', 'Análises', 'Mapa', 'Raio-X', 'Prospecção', 'Follow-up', 'CRM', 'Propostas', 'Meus Serviços', 'Equipe', 'Avaliações'];
 const initialForm = { nome: '', email: '', password: '', permissions: ['Dashboard', 'Prospecção', 'Follow-up'] };
 
 export function AdminView({ onShowToast }: AdminViewProps) {

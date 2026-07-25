@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect, useMemo } from 'react';
 import { Sidebar, TabType } from '@/components/Sidebar';
 import { Header } from '@/components/Header';
 import { DashboardView } from '@/components/DashboardView';
@@ -19,11 +19,45 @@ import { ToastContainer, ToastMessage } from '@/components/Toast';
 import { AiPitchModal } from '@/components/AiPitchModal';
 import { AiReviewModal } from '@/components/AiReviewModal';
 import { SupportModal } from '@/components/SupportModal';
-import { AuthGate } from '@/components/AuthGate';
+import { AuthGate, useAuthProfile } from '@/components/AuthGate';
 import { Lead } from '@/lib/leads';
 import { supabase, supabaseConfigurationError } from '@/lib/supabase';
 
+const permissionByTab: Record<Exclude<TabType, 'admin'>, string[]> = {
+  dashboard: ['Dashboard', 'dashboard'],
+  analises: ['Análises', 'analises'],
+  mapa: ['Mapa', 'mapa'],
+  raiox: ['Raio-X', 'raiox'],
+  prospeccao: ['Prospecção', 'prospeccao'],
+  followup: ['Follow-up', 'followup'],
+  crm: ['CRM', 'crm'],
+  propostas: ['Propostas', 'propostas'],
+  servicos: ['Meus Serviços', 'servicos'],
+  equipe: ['Equipe', 'equipe'],
+  avaliacoes: ['Avaliações', 'avaliacoes'],
+};
+
+const allTabs: TabType[] = [
+  'dashboard',
+  'analises',
+  'mapa',
+  'raiox',
+  'prospeccao',
+  'followup',
+  'crm',
+  'propostas',
+  'servicos',
+  'equipe',
+  'avaliacoes',
+  'admin',
+];
+
 export default function Home() {
+  return <AuthGate><AuthenticatedHome /></AuthGate>;
+}
+
+function AuthenticatedHome() {
+  const profile = useAuthProfile();
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [darkMode, setDarkMode] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -50,6 +84,15 @@ export default function Home() {
   });
 
   const [showSupportModal, setShowSupportModal] = useState(false);
+  const isAdmin = ['admin', 'administrador'].includes((profile.role || '').trim().toLowerCase());
+  const allowedTabs = useMemo<TabType[]>(() => {
+    if (isAdmin) return allTabs;
+    const permissions = profile.permissions || [];
+    return allTabs.filter((tab): tab is Exclude<TabType, 'admin'> =>
+      tab !== 'admin' && permissionByTab[tab].some(permission => permissions.includes(permission))
+    );
+  }, [isAdmin, profile.permissions]);
+  const visibleTab = allowedTabs.includes(activeTab) ? activeTab : allowedTabs[0] || null;
 
   // Sync dark mode class with root html
   useEffect(() => {
@@ -108,16 +151,17 @@ export default function Home() {
   };
 
   return (
-    <AuthGate><div className="min-h-screen bg-[#fbf8ff] dark:bg-[#0a0e27] text-[#1a1b22] dark:text-[#f8f7ff] transition-colors duration-300">
+    <div className="min-h-screen bg-[#fbf8ff] dark:bg-[#0a0e27] text-[#1a1b22] dark:text-[#f8f7ff] transition-colors duration-300">
       {/* Fixed Sidebar */}
       <Sidebar
-        activeTab={activeTab}
+        activeTab={visibleTab || 'dashboard'}
         setActiveTab={setActiveTab}
         isOpenMobile={isMobileSidebarOpen}
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
         onOpenSupport={() => setShowSupportModal(true)}
         onLogout={() => void handleLogout()}
         isLoggingOut={isLoggingOut}
+        allowedTabs={allowedTabs}
       />
 
       {/* Main Layout Area */}
@@ -134,7 +178,13 @@ export default function Home() {
 
         {/* Content Body */}
         <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
-          {activeTab === 'dashboard' && (
+          {!allowedTabs.length && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
+              Seu perfil ainda não possui módulos liberados. Fale com o administrador.
+            </div>
+          )}
+          {visibleTab && <>
+          {visibleTab === 'dashboard' && (
             <DashboardView
               setActiveTab={setActiveTab}
               onShowToast={showToast}
@@ -142,56 +192,57 @@ export default function Home() {
             />
           )}
 
-          {activeTab === 'analises' && (
+          {visibleTab === 'analises' && (
             <AnalisesView
               onShowToast={showToast}
               onOpenAiReviewModal={handleOpenAiReviewModal}
             />
           )}
 
-          {activeTab === 'mapa' && <HeatmapView onShowToast={showToast} />}
+          {visibleTab === 'mapa' && <HeatmapView onShowToast={showToast} />}
 
-          {activeTab === 'raiox' && (
+          {visibleTab === 'raiox' && (
             <RaioXView
               onShowToast={showToast}
               onOpenAiPitchModal={handleOpenAiPitchModal}
             />
           )}
 
-          {activeTab === 'prospeccao' && (
+          {visibleTab === 'prospeccao' && (
             <ProspectingView
               onShowToast={showToast}
               onOpenAiPitchModal={handleOpenAiPitchModal}
             />
           )}
 
-          {activeTab === 'followup' && (
+          {visibleTab === 'followup' && (
             <FollowUpView
               onShowToast={showToast}
             />
           )}
 
-          {activeTab === 'crm' && (
+          {visibleTab === 'crm' && (
             <CrmView
               onShowToast={showToast}
               onOpenAiPitchModal={handleOpenAiPitchModal}
             />
           )}
 
-          {activeTab === 'propostas' && <PropostasView onShowToast={showToast} />}
+          {visibleTab === 'propostas' && <PropostasView onShowToast={showToast} />}
 
-          {activeTab === 'servicos' && <ServicosView onShowToast={showToast} />}
+          {visibleTab === 'servicos' && <ServicosView onShowToast={showToast} />}
 
-          {activeTab === 'equipe' && <EquipeView onShowToast={showToast} />}
+          {visibleTab === 'equipe' && <EquipeView onShowToast={showToast} />}
 
-          {activeTab === 'avaliacoes' && (
+          {visibleTab === 'avaliacoes' && (
             <AvaliacoesView
               onShowToast={showToast}
               onOpenAiReviewModal={handleOpenAiReviewModal}
             />
           )}
 
-          {activeTab === 'admin' && <AdminView onShowToast={showToast} />}
+          {visibleTab === 'admin' && <AdminView onShowToast={showToast} />}
+          </>}
         </main>
       </div>
 
@@ -231,6 +282,6 @@ export default function Home() {
           onShowToast={showToast}
         />
       )}
-    </div></AuthGate>
+    </div>
   );
 }

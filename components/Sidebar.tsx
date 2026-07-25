@@ -42,6 +42,7 @@ interface SidebarProps {
   onOpenSupport: () => void;
   onLogout: () => void;
   isLoggingOut: boolean;
+  allowedTabs: TabType[];
 }
 
 export function Sidebar({
@@ -52,6 +53,7 @@ export function Sidebar({
   onOpenSupport,
   onLogout,
   isLoggingOut,
+  allowedTabs,
 }: SidebarProps) {
   const navItems: Array<{
     id: TabType;
@@ -100,7 +102,7 @@ export function Sidebar({
 
       {/* Navigation List */}
       <nav className="flex-1 space-y-1 overflow-y-auto pr-1">
-        {navItems.map(item => {
+        {navItems.filter(item => allowedTabs.includes(item.id)).map(item => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
           return (
