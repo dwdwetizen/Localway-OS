@@ -54,6 +54,7 @@ export function useLeads() {
       .from('leads')
       .insert({
         ...input,
+        created_by: profile.id,
         analysis_data: input.analysis_data ?? {},
       })
       .select()
@@ -61,7 +62,7 @@ export function useLeads() {
     if (requestError) return { error: requestError.message };
     setLeads(current => [data as Lead, ...current]);
     return { data: data as Lead };
-  }, []);
+  }, [profile.id]);
 
   const updateLead = useCallback(async (id: string, patch: Partial<Lead>, activity?: ActivityDetails) => {
     if (!supabase) return { error: supabaseConfigurationError() };
@@ -85,6 +86,7 @@ export function useLeads() {
           : 'Lead atualizado';
       const { error: historyError } = await supabase.from('lead_interactions').insert({
         lead_id: id,
+        created_by: profile.id,
         outcome: activity?.outcome || fallbackOutcome,
         notes: activity?.notes || null,
         next_action_at: activity?.next_action_at ?? next.next_action_at,
@@ -97,18 +99,19 @@ export function useLeads() {
       if (historyError) return { error: `Lead atualizado, mas o histórico falhou: ${historyError.message}` };
     }
     return { data: next };
-  }, [leads, profile.email, profile.nome]);
+  }, [leads, profile.email, profile.id, profile.nome]);
 
   const addInteraction = useCallback(async (interaction: Omit<LeadInteraction, 'id' | 'occurred_at' | 'created_by' | 'actor_name' | 'actor_email'> & { occurred_at?: string }) => {
     if (!supabase) return { error: supabaseConfigurationError() };
     const { error: requestError } = await supabase.from('lead_interactions').insert({
       ...interaction,
+      created_by: profile.id,
       occurred_at: interaction.occurred_at || new Date().toISOString(),
       actor_name: profile.nome,
       actor_email: profile.email,
     });
     return requestError ? { error: requestError.message } : {};
-  }, [profile.email, profile.nome]);
+  }, [profile.email, profile.id, profile.nome]);
 
   return { leads, loading, error, refresh, createLead, updateLead, addInteraction };
 }

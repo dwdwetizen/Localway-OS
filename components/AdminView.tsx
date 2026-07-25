@@ -3,14 +3,15 @@
 /* Signed Supabase avatar URLs expire, so the native image element is intentional here. */
 /* eslint-disable @next/next/no-img-element */
 
-import React, { ChangeEvent, useCallback, useEffect, useState } from 'react';
+import React, { ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Settings, Upload, Loader2, Trash2, Target, Pencil, Save, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface AdminViewProps { onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void; }
 type Profile = { id: string; email: string; nome: string | null; role: string | null; permissions: string[] | null; photo_url: string | null; is_active: boolean; };
 type Goal = { id: string; user_id: string; period_start: string; period_end: string; target_leads: number; target_contacts: number; target_meetings: number; };
-type Activity = { id: string; created_by: string | null; actor_name: string | null; actor_email: string | null; outcome: string; notes: string | null; occurred_at: string; leads: { company_name?: string } | Array<{ company_name?: string }> | null; };
+type ActivityLead = { company_name?: string; source?: string };
+type Activity = { id: string; created_by: string | null; actor_name: string | null; actor_email: string | null; outcome: string; notes: string | null; occurred_at: string; leads: ActivityLead | ActivityLead[] | null; };
 const pages = ['Análises', 'Mapa', 'Raio-X', 'Prospecção', 'Follow-up', 'CRM', 'Propostas', 'Meus Serviços', 'Equipe', 'Avaliações'];
 const initialForm = { nome: '', email: '', password: '', permissions: ['Prospecção', 'Follow-up'] };
 const now = new Date();
@@ -22,6 +23,18 @@ const initialGoal = {
   targetContacts: 60,
   targetMeetings: 10,
 };
+
+function activityOwnerKey(item: Activity) {
+  if (item.created_by) return `id:${item.created_by}`;
+  if (item.actor_email) return `email:${item.actor_email.toLocaleLowerCase('pt-BR')}`;
+  return `name:${item.actor_name || 'usuario-removido'}`;
+}
+
+function sourceLabel(source?: string) {
+  if (source === 'google_places') return 'Prospecção online';
+  if (source === 'presencial') return 'Prospecção presencial';
+  return null;
+}
 
 export function AdminView({ onShowToast }: AdminViewProps) {
   const [activeTab, setActiveTab] = useState<'usuarios' | 'metas' | 'historico' | 'servicos' | 'integracoes'>('usuarios');
@@ -48,7 +61,7 @@ export function AdminView({ onShowToast }: AdminViewProps) {
     const [profilesRequest, goalsRequest, historyRequest, placesRequest] = await Promise.all([
       client.from('profiles').select('id,email,nome,role,permissions,photo_url,is_active').eq('is_active', true).order('nome'),
       client.from('user_goals').select('id,user_id,period_start,period_end,target_leads,target_contacts,target_meetings').order('period_start', { ascending: false }),
-      client.from('lead_interactions').select('id,created_by,actor_name,actor_email,outcome,notes,occurred_at,leads(company_name)').order('occurred_at', { ascending: false }).limit(100),
+      client.from('lead_interactions').select('id,created_by,actor_name,actor_email,outcome,notes,occurred_at,leads(company_name,source)').order('occurred_at', { ascending: false }),
       fetch('/api/places', { headers: { Authorization: `Bearer ${accessToken}` }, cache: 'no-store' }).then(response => response.json()).catch(() => ({ placesConfigured: false, mapsConfigured: false })),
     ]);
     if (profilesRequest.error) onShowToast(profilesRequest.error.message, 'error');
@@ -134,6 +147,20 @@ export function AdminView({ onShowToast }: AdminViewProps) {
     onShowToast('Integrações salvas. As chaves já estão disponíveis para a equipe.', 'success');
     void load();
   };
+  const historyOwners = useMemo(() => {
+    const owners = new Map<string, string>();
+    profiles.forEach(profile => owners.set(`id:${profile.id}`, profile.nome || profile.email));
+    history.forEach(item => {
+      const key = activityOwnerKey(item);
+      owners.set(key, item.actor_name || item.actor_email || 'Usuário removido');
+    });
+    return Array.from(owners, ([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+  }, [history, profiles]);
+  const visibleHistory = useMemo(
+    () => history.filter(item => historyUserId === 'all' || activityOwnerKey(item) === historyUserId),
+    [history, historyUserId],
+  );
   return <div className="space-y-6 animate-in fade-in duration-300">
     <div className="bg-white dark:bg-[#141936] p-5 rounded-2xl border">
       <h2 className="text-xl font-bold">Administração</h2>
@@ -235,11 +262,12 @@ export function AdminView({ onShowToast }: AdminViewProps) {
       </section>
     </div>}
     {activeTab === 'historico' && <section className="bg-white dark:bg-[#141936] rounded-2xl border overflow-hidden">
-      <div className="p-4 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><h3 className="font-bold text-sm">Histórico da equipe</h3><p className="text-[11px] text-[#727687]">Últimas 100 ações registradas no banco.</p></div><select value={historyUserId} onChange={event => setHistoryUserId(event.target.value)} className="px-3 py-2 rounded-xl border bg-[#f4f2fd] dark:bg-[#10142e] text-xs"><option value="all">Todos os colaboradores</option>{profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.nome || profile.email}</option>)}</select></div>
-      {!history.filter(item => historyUserId === 'all' || item.created_by === historyUserId).length && <div className="p-10 text-center text-xs text-[#727687]">Nenhuma atividade registrada para este perfil.</div>}
-      <div className="divide-y">{history.filter(item => historyUserId === 'all' || item.created_by === historyUserId).map(item => {
+      <div className="p-4 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><h3 className="font-bold text-sm">Histórico individual da equipe</h3><p className="text-[11px] text-[#727687]">Ações comerciais vinculadas à conta que as realizou, inclusive de usuários removidos.</p></div><select value={historyUserId} onChange={event => setHistoryUserId(event.target.value)} className="px-3 py-2 rounded-xl border bg-[#f4f2fd] dark:bg-[#10142e] text-xs"><option value="all">Todos os colaboradores</option>{historyOwners.map(owner => <option key={owner.value} value={owner.value}>{owner.label}</option>)}</select></div>
+      {!visibleHistory.length && <div className="p-10 text-center text-xs text-[#727687]">Nenhuma atividade registrada para este perfil.</div>}
+      <div className="divide-y">{visibleHistory.map(item => {
         const relation = Array.isArray(item.leads) ? item.leads[0] : item.leads;
-        return <div key={item.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2"><div><p className="text-xs font-bold">{item.outcome}</p><p className="text-[11px] text-[#727687]">{relation?.company_name || 'Empresa'} • {item.actor_name || item.actor_email || 'Usuário removido'}{item.notes ? ` • ${item.notes}` : ''}</p></div><time className="text-[10px] text-[#727687] whitespace-nowrap">{new Date(item.occurred_at).toLocaleString('pt-BR')}</time></div>;
+        const origin = sourceLabel(relation?.source);
+        return <div key={item.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2"><div><p className="text-xs font-bold">{item.outcome}</p><p className="text-[11px] text-[#727687]">{relation?.company_name || 'Empresa'} • {item.actor_name || item.actor_email || 'Usuário removido'}{origin ? ` • ${origin}` : ''}{item.notes ? ` • ${item.notes}` : ''}</p></div><time className="text-[10px] text-[#727687] whitespace-nowrap">{new Date(item.occurred_at).toLocaleString('pt-BR')}</time></div>;
       })}</div>
     </section>}
     {activeTab === 'servicos' && <section className="bg-white dark:bg-[#141936] p-6 rounded-2xl border"><h3 className="font-bold">Cadastrar novo serviço</h3><p className="text-xs text-[#727687] mt-1">Esta área foi movida para Administração.</p></section>}
