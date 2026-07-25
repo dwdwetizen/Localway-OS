@@ -4,7 +4,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import React, { ChangeEvent, useCallback, useEffect, useState } from 'react';
-import { Plus, Settings, Upload, Loader2, Trash2, Target } from 'lucide-react';
+import { Plus, Settings, Upload, Loader2, Trash2, Target, Pencil, Save, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface AdminViewProps { onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void; }
@@ -36,6 +36,9 @@ export function AdminView({ onShowToast }: AdminViewProps) {
   const [savingIntegrations, setSavingIntegrations] = useState(false);
   const [history, setHistory] = useState<Activity[]>([]);
   const [historyUserId, setHistoryUserId] = useState('all');
+  const [editingPermissionsId, setEditingPermissionsId] = useState<string | null>(null);
+  const [permissionsDraft, setPermissionsDraft] = useState<string[]>([]);
+  const [savingPermissionsId, setSavingPermissionsId] = useState<string | null>(null);
   const load = useCallback(async () => {
     const client = supabase;
     if (!client) return;
@@ -68,7 +71,29 @@ export function AdminView({ onShowToast }: AdminViewProps) {
   }, [onShowToast]);
   useEffect(() => { void load(); }, [load]);
   const toggle = (item: string) => setForm(current => ({ ...current, permissions: current.permissions.includes(item) ? current.permissions.filter(value => value !== item) : [...current.permissions, item] }));
-  const toggleSolutions = (profile: Profile) => { const current = profile.permissions || []; const permissions = current.includes('analises_solucoes') ? current.filter(item => item !== 'analises_solucoes') : [...current, 'analises_solucoes']; if (!supabase) return; void supabase.from('profiles').update({ permissions }).eq('id', profile.id).then(({ error }) => { if (error) onShowToast(error.message, 'error'); else { onShowToast('Acesso às soluções atualizado.'); void load(); } }); };
+  const startEditingPermissions = (profile: Profile) => {
+    setEditingPermissionsId(profile.id);
+    setPermissionsDraft(profile.permissions || []);
+  };
+  const togglePermissionDraft = (item: string) => {
+    setPermissionsDraft(current => current.includes(item) ? current.filter(value => value !== item) : [...current, item]);
+  };
+  const savePermissions = async (profile: Profile) => {
+    if (!supabase) return;
+    setSavingPermissionsId(profile.id);
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ permissions: permissionsDraft })
+      .eq('id', profile.id)
+      .select('id,permissions')
+      .maybeSingle();
+    setSavingPermissionsId(null);
+    if (error || !data) return onShowToast(error?.message || 'Não foi possível atualizar os acessos.', 'error');
+    setProfiles(current => current.map(item => item.id === profile.id ? { ...item, permissions: data.permissions } : item));
+    setEditingPermissionsId(null);
+    setPermissionsDraft([]);
+    onShowToast(`Acessos de ${profile.nome || profile.email} atualizados.`);
+  };
   const createLogin = async () => { if (!supabase) return; setSaving(true); const { data } = await supabase.auth.getSession(); const response = await fetch('/api/admin/create-user', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token || ''}` }, body: JSON.stringify(form) }); const result = await response.json(); setSaving(false); if (!response.ok) return onShowToast(result.error || 'Não foi possível criar o login.', 'error'); onShowToast('Login criado. Passe o e-mail e a senha ao usuário por um canal seguro.'); setForm(initialForm); void load(); };
   const deleteUser = async (profile: Profile) => { if (!supabase || !window.confirm(`Excluir o login de ${profile.nome || profile.email}? O histórico de leads será preservado.`)) return; setDeletingId(profile.id); const { data } = await supabase.auth.getSession(); const response = await fetch('/api/admin/create-user', { method: 'DELETE', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token || ''}` }, body: JSON.stringify({ userId: profile.id }) }); const result = await response.json(); setDeletingId(null); if (!response.ok) return onShowToast(result.error || 'Não foi possível excluir o usuário.', 'error'); onShowToast('Usuário excluído e login desativado.'); void load(); };
   const uploadPhoto = async (profile: Profile, event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file || !supabase) return; const path = `${profile.id}/avatar.${file.name.split('.').pop() || 'jpg'}`; const { error } = await supabase.storage.from('profile-photos').upload(path, file, { upsert: true, contentType: file.type }); if (error) return onShowToast(error.message, 'error'); const { error: updateError } = await supabase.from('profiles').update({ photo_url: path }).eq('id', profile.id); if (updateError) return onShowToast(updateError.message, 'error'); onShowToast('Foto atualizada.'); void load(); };
@@ -143,24 +168,50 @@ export function AdminView({ onShowToast }: AdminViewProps) {
       <section className="bg-white dark:bg-[#141936] rounded-2xl border overflow-hidden">
         <div className="p-4 font-bold text-sm">Usuários cadastrados</div>
         {loading ? <div className="p-8 flex justify-center"><Loader2 className="animate-spin"/></div> : <div className="divide-y">
-          {profiles.map(profile => <div key={profile.id} className="p-4 flex gap-3 items-center">
-            <div className="w-11 h-11 rounded-full bg-[#0066ff]/10 overflow-hidden flex items-center justify-center font-bold">
-              {profile.photo_url ? <img src={profile.photo_url} className="w-full h-full object-cover" alt=""/> : (profile.nome || profile.email).slice(0,1)}
-            </div>
-            <div className="flex-1">
-              <p className="font-bold text-xs">{profile.nome || 'Sem nome'}</p>
-              <p className="text-[11px] text-[#727687]">{profile.email}</p>
-              <button onClick={() => toggleSolutions(profile)} className={`mt-2 px-2 py-1 rounded-lg text-[10px] font-bold ${(profile.permissions || []).includes('analises_solucoes') || ['administrador', 'admin'].includes((profile.role || '').toLowerCase()) ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
-                {(profile.permissions || []).includes('analises_solucoes') || ['administrador', 'admin'].includes((profile.role || '').toLowerCase()) ? 'Soluções na análise: liberadas' : 'Soluções na análise: bloqueadas'}
-              </button>
-            </div>
-            <div className="flex items-center gap-3">
-              <label className="text-xs text-[#0066ff] font-bold cursor-pointer"><Upload className="w-4 h-4 inline mr-1"/>Foto<input className="hidden" type="file" accept="image/*" onChange={e => void uploadPhoto(profile,e)}/></label>
-              <button disabled={deletingId === profile.id} onClick={() => void deleteUser(profile)} className="p-2 rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-50" aria-label={`Excluir ${profile.nome || profile.email}`} title="Excluir usuário">
-                {deletingId === profile.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <Trash2 className="w-4 h-4"/>}
-              </button>
-            </div>
-          </div>)}
+          {profiles.map(profile => {
+            const isAdmin = ['administrador', 'admin'].includes((profile.role || '').toLowerCase());
+            const isEditing = editingPermissionsId === profile.id;
+            return <div key={profile.id} className="p-4">
+              <div className="flex gap-3 items-center">
+                <div className="w-11 h-11 rounded-full bg-[#0066ff]/10 overflow-hidden flex items-center justify-center font-bold">
+                  {profile.photo_url ? <img src={profile.photo_url} className="w-full h-full object-cover" alt=""/> : (profile.nome || profile.email).slice(0,1)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-xs">{profile.nome || 'Sem nome'}</p>
+                  <p className="text-[11px] text-[#727687] truncate">{profile.email}</p>
+                  <span className={`inline-block mt-2 px-2 py-1 rounded-lg text-[10px] font-bold ${(profile.permissions || []).includes('analises_solucoes') || isAdmin ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                    {(profile.permissions || []).includes('analises_solucoes') || isAdmin ? 'Soluções na análise: liberadas' : 'Soluções na análise: bloqueadas'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {!isAdmin && <button onClick={() => isEditing ? setEditingPermissionsId(null) : startEditingPermissions(profile)} className="px-2 py-2 rounded-lg text-[#0066ff] hover:bg-blue-50 text-xs font-bold flex items-center gap-1" aria-label={`Editar acessos de ${profile.nome || profile.email}`} title="Editar acessos">
+                    {isEditing ? <X className="w-4 h-4"/> : <Pencil className="w-4 h-4"/>}<span className="hidden xl:inline">{isEditing ? 'Fechar' : 'Acessos'}</span>
+                  </button>}
+                  <label className="text-xs text-[#0066ff] font-bold cursor-pointer"><Upload className="w-4 h-4 inline mr-1"/>Foto<input className="hidden" type="file" accept="image/*" onChange={e => void uploadPhoto(profile,e)}/></label>
+                  <button disabled={deletingId === profile.id} onClick={() => void deleteUser(profile)} className="p-2 rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-50" aria-label={`Excluir ${profile.nome || profile.email}`} title="Excluir usuário">
+                    {deletingId === profile.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <Trash2 className="w-4 h-4"/>}
+                  </button>
+                </div>
+              </div>
+              {isAdmin && <p className="mt-3 text-[10px] text-[#727687]">Administrador tem acesso completo ao aplicativo.</p>}
+              {isEditing && <div className="mt-4 p-4 rounded-xl border bg-[#f8f9ff] dark:bg-[#10142e]">
+                <p className="text-xs font-bold">Editar acessos liberados</p>
+                <p className="text-[10px] text-[#727687] mt-1">As mudanças aparecem para este usuário no próximo carregamento da conta.</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-3">
+                  {pages.map(page => <label key={page} className="text-[11px] flex gap-1.5 items-center"><input type="checkbox" checked={permissionsDraft.includes(page)} onChange={() => togglePermissionDraft(page)}/>{page}</label>)}
+                </div>
+                <label className="mt-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 flex gap-2 text-xs font-bold">
+                  <input type="checkbox" checked={permissionsDraft.includes('analises_solucoes')} onChange={() => togglePermissionDraft('analises_solucoes')}/> Pode ver soluções e ROI na análise
+                </label>
+                <div className="mt-3 flex justify-end gap-2">
+                  <button onClick={() => { setEditingPermissionsId(null); setPermissionsDraft([]); }} className="px-3 py-2 rounded-xl border text-xs font-bold">Cancelar</button>
+                  <button disabled={savingPermissionsId === profile.id} onClick={() => void savePermissions(profile)} className="px-4 py-2 rounded-xl bg-[#0066ff] text-white text-xs font-bold flex items-center gap-2 disabled:opacity-50">
+                    {savingPermissionsId === profile.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>} Salvar acessos
+                  </button>
+                </div>
+              </div>}
+            </div>;
+          })}
         </div>}
       </section>
     </div>}
