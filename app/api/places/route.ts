@@ -15,6 +15,14 @@ type VisibilityPoint = {
   position: number | null;
   found: boolean;
   top_place_ids: string[];
+  top_places: Array<{
+    id: string;
+    name: string;
+    address: string | null;
+    category: string | null;
+    rating: number | null;
+    review_count: number;
+  }>;
 };
 
 const searchFieldMask = [
@@ -295,7 +303,7 @@ function createGrid(centerLatitude: number, centerLongitude: number, radiusMeter
   const centerIndex = (gridSize - 1) / 2;
   const stepMeters = radiusMeters / Math.max(centerIndex, 1);
   const longitudeScale = Math.max(Math.cos(centerLatitude * Math.PI / 180), 0.2);
-  const points: Array<Omit<VisibilityPoint, 'position' | 'found' | 'top_place_ids'>> = [];
+  const points: Array<Omit<VisibilityPoint, 'position' | 'found' | 'top_place_ids' | 'top_places'>> = [];
 
   for (let row = 0; row < gridSize; row += 1) {
     for (let column = 0; column < gridSize; column += 1) {
@@ -483,7 +491,14 @@ export async function POST(request: NextRequest) {
         headers: {
           'Content-Type': 'application/json',
           'X-Goog-Api-Key': apiKey,
-          'X-Goog-FieldMask': 'places.id',
+          'X-Goog-FieldMask': [
+            'places.id',
+            'places.displayName',
+            'places.formattedAddress',
+            'places.primaryTypeDisplayName',
+            'places.rating',
+            'places.userRatingCount',
+          ].join(','),
         },
         body: JSON.stringify({
           textQuery: keyword,
@@ -503,7 +518,8 @@ export async function POST(request: NextRequest) {
       if (!response.ok) {
         throw new Error(result?.error?.message || 'O Google não respondeu a um dos pontos da grade.');
       }
-      const ids = (Array.isArray(result.places) ? result.places : [])
+      const places = (Array.isArray(result.places) ? result.places : []) as PlaceRecord[];
+      const ids = places
         .map((place: PlaceRecord) => readText(place.id))
         .filter((id: string | null): id is string => Boolean(id));
       const index = ids.indexOf(targetPlaceId);
@@ -512,6 +528,18 @@ export async function POST(request: NextRequest) {
         position: index >= 0 ? index + 1 : null,
         found: index >= 0,
         top_place_ids: ids.slice(0, 3),
+        top_places: places.slice(0, 5).flatMap(place => {
+          const id = readText(place.id);
+          if (!id) return [];
+          return [{
+            id,
+            name: readDisplayName(place.displayName) || 'Empresa',
+            address: readText(place.formattedAddress),
+            category: readDisplayName(place.primaryTypeDisplayName),
+            rating: typeof place.rating === 'number' ? place.rating : null,
+            review_count: typeof place.userRatingCount === 'number' ? place.userRatingCount : 0,
+          }];
+        }),
       } satisfies VisibilityPoint;
     }).catch(error => ({ error: error instanceof Error ? error.message : 'Falha ao consultar a grade.' }));
 

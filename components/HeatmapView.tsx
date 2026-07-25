@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Grid3X3, History, Layers, Link2, Loader2, MapPin, Target, TrendingUp } from 'lucide-react';
+import { Clock3, Grid3X3, History, Layers, Link2, Loader2, MapPin, Star } from 'lucide-react';
 import { useLeads } from '@/hooks/use-leads';
 import { Lead } from '@/lib/leads';
 import { supabase } from '@/lib/supabase';
@@ -22,12 +22,24 @@ type BoundsInstance = {
 type MarkerInstance = {
   setMap: (map: MapInstance | null) => void;
 };
+type CircleInstance = {
+  setMap: (map: MapInstance | null) => void;
+};
 type MapsNamespace = {
   Map: new (element: HTMLElement, options: Record<string, unknown>) => MapInstance;
   LatLngBounds: new () => BoundsInstance;
   Marker: new (options: Record<string, unknown>) => MarkerInstance;
+  Circle: new (options: Record<string, unknown>) => CircleInstance;
   SymbolPath: { CIRCLE: number };
   importLibrary?: (library: string) => Promise<unknown>;
+};
+type RankedPlace = {
+  id: string;
+  name: string;
+  address: string | null;
+  category: string | null;
+  rating: number | null;
+  review_count: number;
 };
 type VisibilityPoint = {
   row: number;
@@ -37,6 +49,7 @@ type VisibilityPoint = {
   position: number | null;
   found: boolean;
   top_place_ids: string[];
+  top_places?: RankedPlace[];
 };
 type VisibilityScan = {
   id: string;
@@ -64,7 +77,7 @@ let mapsPromise: Promise<MapsNamespace> | null = null;
 
 function loadGoogleMaps(key: string) {
   const readyMaps = window.google?.maps;
-  if (readyMaps && typeof readyMaps.Map === 'function' && typeof readyMaps.Marker === 'function') {
+  if (readyMaps && typeof readyMaps.Map === 'function' && typeof readyMaps.Marker === 'function' && typeof readyMaps.Circle === 'function') {
     return Promise.resolve(readyMaps);
   }
   if (mapsPromise) return mapsPromise;
@@ -93,10 +106,11 @@ function loadGoogleMaps(key: string) {
           Map: mapLibrary.Map || maps.Map,
           LatLngBounds: mapLibrary.LatLngBounds || maps.LatLngBounds,
           Marker: markerLibrary.Marker || maps.Marker,
+          Circle: mapLibrary.Circle || maps.Circle,
           SymbolPath: maps.SymbolPath,
           importLibrary: maps.importLibrary,
         };
-        if (typeof completeMaps.Map !== 'function' || typeof completeMaps.Marker !== 'function') {
+        if (typeof completeMaps.Map !== 'function' || typeof completeMaps.Marker !== 'function' || typeof completeMaps.Circle !== 'function') {
           throw new Error('A biblioteca do mapa não foi carregada por completo.');
         }
         settled = true;
@@ -127,10 +141,10 @@ function loadGoogleMaps(key: string) {
 }
 
 function colorForPosition(position: number | null) {
-  if (position === null) return '#64748b';
+  if (position === null) return '#9f1239';
   if (position <= 3) return '#10b981';
   if (position <= 10) return '#f59e0b';
-  return '#e11d48';
+  return '#fb5b6d';
 }
 
 function scanGridSize(scan: VisibilityScan) {
@@ -138,9 +152,8 @@ function scanGridSize(scan: VisibilityScan) {
   return Number.isInteger(sizeFromPoints) ? sizeFromPoints : scan.grid_size;
 }
 
-function GridMapCanvas({ scan, companyName, mapsKey, onError }: {
+function GridMapCanvas({ scan, mapsKey, onError }: {
   scan: VisibilityScan;
-  companyName: string;
   mapsKey: string;
   onError: (message: string) => void;
 }) {
@@ -150,6 +163,7 @@ function GridMapCanvas({ scan, companyName, mapsKey, onError }: {
     if (!node.current || !mapsKey || !scan.points.length) return;
     let active = true;
     const markers: MarkerInstance[] = [];
+    const circles: CircleInstance[] = [];
     void loadGoogleMaps(mapsKey).then(maps => {
       if (!active || !node.current) return;
       const map = new maps.Map(node.current, {
@@ -159,6 +173,7 @@ function GridMapCanvas({ scan, companyName, mapsKey, onError }: {
         streetViewControl: false,
         fullscreenControl: true,
         clickableIcons: false,
+        gestureHandling: 'greedy',
         styles: [
           { elementType: 'geometry', stylers: [{ color: '#f4f6f8' }] },
           { elementType: 'labels.text.fill', stylers: [{ color: '#667085' }] },
@@ -174,9 +189,22 @@ function GridMapCanvas({ scan, companyName, mapsKey, onError }: {
         ],
       });
       const bounds = new maps.LatLngBounds();
+      const gridStep = scan.radius_m / Math.max((scanGridSize(scan) - 1) / 2, 1);
+      const pointRadius = Math.max(180, gridStep * 0.42);
       scan.points.forEach(point => {
         const position = { lat: point.latitude, lng: point.longitude };
         bounds.extend(position);
+        const circle = new maps.Circle({
+          map,
+          center: position,
+          radius: pointRadius,
+          fillColor: '#22c55e',
+          fillOpacity: 0.16,
+          strokeColor: '#16a34a',
+          strokeOpacity: 0.28,
+          strokeWeight: 1,
+          clickable: false,
+        });
         const marker = new maps.Marker({
           map,
           position,
@@ -194,18 +222,12 @@ function GridMapCanvas({ scan, companyName, mapsKey, onError }: {
             strokeColor: '#ffffff',
             strokeOpacity: 1,
             strokeWeight: 2,
-            scale: 18,
+            scale: 19,
           },
         });
+        circles.push(circle);
         markers.push(marker);
       });
-      const companyMarker = new maps.Marker({
-        map,
-        position: { lat: scan.center_latitude, lng: scan.center_longitude },
-        title: companyName,
-        zIndex: 100,
-      });
-      markers.push(companyMarker);
       map.fitBounds(bounds);
     }).catch(error => {
       if (active) onError(error instanceof Error ? error.message : 'Erro ao abrir a grade.');
@@ -213,10 +235,11 @@ function GridMapCanvas({ scan, companyName, mapsKey, onError }: {
     return () => {
       active = false;
       markers.forEach(marker => marker.setMap(null));
+      circles.forEach(circle => circle.setMap(null));
     };
-  }, [companyName, mapsKey, onError, scan]);
+  }, [mapsKey, onError, scan]);
 
-  return <div ref={node} className="w-full min-h-[590px] rounded-2xl bg-[#eef2f6]" />;
+  return <div ref={node} className="w-full min-h-[680px] bg-[#eef2f6]" />;
 }
 
 export function HeatmapView({ onShowToast }: HeatmapViewProps) {
@@ -266,6 +289,44 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
   );
   const selected = located.find(lead => lead.id === selectedId) || null;
   const activeScanLead = activeScan ? leads.find(lead => lead.id === activeScan.lead_id) || null : null;
+  const competitors = useMemo(() => {
+    if (!activeScan) return [];
+    const targetPlaceId = activeScanLead?.google_place_id;
+    const grouped = new Map<string, RankedPlace & {
+      appearances: number;
+      total_position: number;
+      best_position: number;
+    }>();
+    activeScan.points.forEach(point => {
+      (point.top_places || []).forEach((place, index) => {
+        if (place.id === targetPlaceId) return;
+        const current = grouped.get(place.id);
+        if (current) {
+          current.appearances += 1;
+          current.total_position += index + 1;
+          current.best_position = Math.min(current.best_position, index + 1);
+        } else {
+          grouped.set(place.id, {
+            ...place,
+            appearances: 1,
+            total_position: index + 1,
+            best_position: index + 1,
+          });
+        }
+      });
+    });
+    return Array.from(grouped.values())
+      .map(place => ({ ...place, average_position: place.total_position / place.appearances }))
+      .sort((a, b) => b.appearances - a.appearances || a.average_position - b.average_position)
+      .slice(0, 20);
+  }, [activeScan, activeScanLead?.google_place_id]);
+  const areaDifficulty = !activeScan
+    ? null
+    : competitors.length >= 12 || activeScan.visibility_percentage < 25
+      ? 'Alta'
+      : competitors.length >= 6 || activeScan.visibility_percentage < 60
+        ? 'Média'
+        : 'Baixa';
 
   const handleMapError = useCallback((message: string) => onShowToast(message, 'error'), [onShowToast]);
   const resolveGoogleProfile = async () => {
@@ -422,34 +483,64 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
         </div>}
       </section>
 
-      <div className="flex flex-wrap gap-2 text-[10px] font-semibold items-center justify-end">
-        <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-100">1–3</span>
-        <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 border border-amber-100">4–10</span>
-        <span className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-100">11–20</span>
-        <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 border border-slate-200">20+</span>
-      </div>
-
-      <div className={`grid grid-cols-1 gap-5 ${activeScan ? 'lg:grid-cols-[280px_1fr]' : ''}`}>
-        {activeScan && <aside className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <Summary icon={<Target className="w-4 h-4" />} label="Presença" value={`${Math.round(activeScan.visibility_percentage)}%`} />
-            <Summary icon={<TrendingUp className="w-4 h-4" />} label="Melhor posição" value={activeScan.best_position || '20+'} />
+      <div className={`grid grid-cols-1 overflow-hidden rounded-2xl border border-[#c2c6d8]/45 bg-white dark:bg-[#141936] shadow-sm ${activeScan ? 'lg:grid-cols-[350px_1fr]' : ''}`}>
+        {activeScan && <aside className="flex flex-col min-h-[680px] max-h-[760px] border-b lg:border-b-0 lg:border-r border-[#c2c6d8]/35 bg-white dark:bg-[#141936]">
+          <div className="p-5 border-b border-[#c2c6d8]/30">
+            <p className="text-xs text-[#727687]">Palavra-chave</p>
+            <span className="inline-flex mt-1.5 px-3 py-1 rounded-full bg-[#0066ff] text-white text-xs font-semibold">{activeScan.keyword}</span>
+            <div className="mt-4 p-4 rounded-2xl bg-[#f0f3ff] dark:bg-[#10142e]">
+              <div className="flex items-start gap-3">
+                <span className="shrink-0 px-2 py-1 rounded-lg bg-white text-rose-600 text-[10px] font-bold shadow-sm">
+                  Pos. {activeScan.average_position ? Math.round(activeScan.average_position) : '20+'}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold leading-tight">{activeScanLead?.company_name || 'Empresa analisada'}</p>
+                  <p className="text-[11px] text-[#727687] mt-1 line-clamp-2">{activeScanLead?.address}</p>
+                </div>
+              </div>
+              <div className="mt-4">
+                <div className="flex justify-between text-[11px]"><span>Visibilidade do negócio</span><strong>{Math.round(activeScan.visibility_percentage)}%</strong></div>
+                <div className="h-2 mt-1.5 rounded-full bg-[#d9dce7] overflow-hidden"><div className="h-full rounded-full bg-[#0066ff]" style={{ width: `${Math.max(activeScan.visibility_percentage, 2)}%` }} /></div>
+              </div>
+              <div className="mt-3">
+                <div className="flex justify-between text-[11px]"><span>Dificuldade da área</span><strong className={areaDifficulty === 'Alta' ? 'text-rose-600' : areaDifficulty === 'Média' ? 'text-amber-600' : 'text-emerald-600'}>{areaDifficulty}</strong></div>
+                <div className="h-2 mt-1.5 rounded-full bg-[#d9dce7] overflow-hidden"><div className={`h-full rounded-full ${areaDifficulty === 'Alta' ? 'w-[88%] bg-rose-500' : areaDifficulty === 'Média' ? 'w-[58%] bg-amber-500' : 'w-[30%] bg-emerald-500'}`} /></div>
+              </div>
+              {activeScanLead?.google_maps_url && <a href={activeScanLead.google_maps_url} target="_blank" rel="noreferrer" className="inline-flex mt-3 text-xs font-medium text-[#0066ff] hover:underline">Abrir no Google ↗</a>}
+            </div>
           </div>
-          <div className="p-4 rounded-2xl bg-white dark:bg-[#141936] border border-[#c2c6d8]/35">
-            <p className="text-[10px] text-[#727687] uppercase tracking-[0.12em] font-semibold">Posição média</p>
-            <p className="text-3xl font-semibold tracking-tight mt-1">{activeScan.average_position?.toFixed(1) || '20+'}</p>
-            <p className="text-[11px] text-[#727687] mt-3">Busca automática</p>
-            <p className="text-xs font-medium">{activeScan.keyword}</p>
-            <p className="text-[11px] text-[#727687] mt-2">Raio de 2 km • {activeScan.points.length} pontos</p>
+
+          <div className="px-5 py-3 flex items-center justify-between border-b border-[#c2c6d8]/25">
+            <div><p className="text-sm font-medium">Concorrentes</p><p className="text-[10px] text-[#727687]">Mais presentes nos pontos consultados</p></div>
+            <span className="px-2 py-1 rounded-lg bg-[#f4f2fd] dark:bg-[#10142e] text-[10px] font-semibold">{competitors.length}</span>
+          </div>
+          <div className="flex-1 overflow-y-auto divide-y divide-[#c2c6d8]/25">
+            {!competitors.length && <div className="p-6 text-center text-xs text-[#727687]">Gere uma nova grade para carregar os concorrentes encontrados pelo Google.</div>}
+            {competitors.map(competitor => {
+              const displayPosition = Math.max(1, Math.round(competitor.average_position));
+              return <article key={competitor.id} className="p-4 flex gap-3">
+                <div className="shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-[#e9efff] to-[#dce6ff] text-[#0066ff] grid place-items-center font-semibold text-sm">{competitor.name.slice(0, 2).toUpperCase()}</div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2"><p className="text-xs font-semibold leading-tight line-clamp-2">{competitor.name}</p><span className={`shrink-0 px-2 py-0.5 rounded-full text-[9px] font-bold ${displayPosition <= 3 ? 'bg-emerald-50 text-emerald-700' : displayPosition <= 10 ? 'bg-amber-50 text-amber-700' : 'bg-rose-50 text-rose-700'}`}>Pos. {displayPosition}</span></div>
+                  <p className="text-[10px] text-[#727687] mt-1 truncate">{competitor.address || 'Endereço não informado'}</p>
+                  <p className="text-[10px] text-[#727687] mt-1">{competitor.category || activeScan.keyword}</p>
+                  {competitor.rating !== null && <p className="flex items-center gap-1 text-[10px] mt-1 text-amber-500"><Star className="w-3 h-3 fill-current" /><strong>{competitor.rating.toFixed(1)}</strong><span className="text-[#727687]">({competitor.review_count})</span></p>}
+                </div>
+              </article>;
+            })}
           </div>
         </aside>}
 
-        <section className="relative rounded-2xl overflow-hidden border border-[#c2c6d8]/45 bg-[#eef2f6] min-h-[590px] shadow-sm">
+        <section className="relative overflow-hidden bg-[#eef2f6] min-h-[680px]">
+          {activeScan && <div className="absolute z-10 top-4 left-1/2 -translate-x-1/2 px-4 py-2.5 rounded-2xl bg-white/95 shadow-xl border border-white flex items-center gap-2 text-xs font-medium whitespace-nowrap"><Clock3 className="w-4 h-4 text-[#0066ff]" />{new Date(activeScan.created_at).toLocaleString('pt-BR', { dateStyle: 'long', timeStyle: 'short' })}</div>}
+          {activeScan && <div className="absolute z-10 top-4 right-4 hidden xl:flex flex-col gap-1.5 p-2 rounded-xl bg-white/95 shadow-lg text-[9px] font-semibold">
+            <span className="text-emerald-700">● 1–3</span><span className="text-amber-600">● 4–10</span><span className="text-rose-500">● 11–20</span><span className="text-rose-800">● 20+</span>
+          </div>}
           {(loading || generatingGrid) && <div className="absolute inset-0 z-20 grid place-items-center bg-white/85 backdrop-blur-[2px]"><div className="text-center"><Loader2 className="w-7 h-7 animate-spin text-[#0066ff] mx-auto" /><p className="text-xs font-semibold mt-2">{generatingGrid ? `Consultando ${gridSize * gridSize} pontos…` : 'Carregando mapa…'}</p></div></div>}
           {!mapsKey
             ? <EmptyMap title="Chave do mapa ainda não configurada" detail="O administrador pode cadastrar a chave em Administração → Integrações." />
             : activeScan
-              ? <GridMapCanvas scan={activeScan} companyName={activeScanLead?.company_name || 'Empresa analisada'} mapsKey={mapsKey} onError={handleMapError}/>
+              ? <GridMapCanvas scan={activeScan} mapsKey={mapsKey} onError={handleMapError}/>
               : <EmptyMap title="Pronto para analisar" detail="Cole o link do perfil do Google Maps acima. O sistema identifica a empresa e o segmento automaticamente." />}
         </section>
       </div>
@@ -481,10 +572,6 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
   );
 }
 
-function Summary({ icon, label, value }: { icon: React.ReactNode; label: string; value: number | string }) {
-  return <div className="p-4 rounded-2xl bg-white dark:bg-[#141936] border border-[#c2c6d8]/35"><div className="text-[#0066ff]">{icon}</div><p className="text-2xl font-semibold tracking-tight mt-2">{value}</p><p className="text-[10px] text-[#727687] mt-0.5">{label}</p></div>;
-}
-
 function EmptyMap({ title, detail }: { title: string; detail: string }) {
-  return <div className="min-h-[590px] grid place-items-center p-8 text-center bg-gradient-to-br from-[#f8fafc] to-[#eef2f6] dark:from-[#141936] dark:to-[#10142e]"><div><Layers className="w-10 h-10 mx-auto text-[#0066ff]/70" /><p className="font-semibold mt-3">{title}</p><p className="text-xs text-[#727687] mt-1 max-w-sm">{detail}</p></div></div>;
+  return <div className="min-h-[680px] grid place-items-center p-8 text-center bg-gradient-to-br from-[#f8fafc] to-[#eef2f6] dark:from-[#141936] dark:to-[#10142e]"><div><Layers className="w-10 h-10 mx-auto text-[#0066ff]/70" /><p className="font-semibold mt-3">{title}</p><p className="text-xs text-[#727687] mt-1 max-w-sm">{detail}</p></div></div>;
 }
