@@ -1,7 +1,7 @@
 'use client';
 
 import React, { FormEvent, useMemo, useState } from 'react';
-import { CheckSquare, ExternalLink, MessageCircle, PhoneCall, Plus, Search, Sparkles, Square, X } from 'lucide-react';
+import { Building2, CheckSquare, ExternalLink, Globe2, MessageCircle, PhoneCall, Plus, Search, Sparkles, Square, X } from 'lucide-react';
 import { useLeads } from '@/hooks/use-leads';
 import { Lead, LeadStatus, statusLabel, whatsappLink } from '@/lib/leads';
 import { supabase } from '@/lib/supabase';
@@ -24,10 +24,21 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
   const [manualOpen, setManualOpen] = useState(false);
   const [manual, setManual] = useState(emptyManual);
   const [selected, setSelected] = useState<string[]>([]);
+  const [prospectingMode, setProspectingMode] = useState<'presencial' | 'online'>('online');
 
   const prospects = useMemo(
-    () => leads.filter(lead => !(lead.source === 'manual' && lead.google_place_id) && !lead.crm_stage && lead.status !== 'qualificado' && lead.status !== 'reuniao_marcada' && lead.status !== 'perdido'),
-    [leads],
+    () => leads.filter(lead => {
+      const isActive = !(lead.source === 'manual' && lead.google_place_id)
+        && !lead.crm_stage
+        && lead.status !== 'qualificado'
+        && lead.status !== 'reuniao_marcada'
+        && lead.status !== 'perdido';
+      const matchesMode = prospectingMode === 'online'
+        ? lead.source === 'google_places'
+        : lead.source !== 'google_places';
+      return isActive && matchesMode;
+    }),
+    [leads, prospectingMode],
   );
   const toggle = (id: string) => setSelected(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
   const toggleAll = () => setSelected(current => current.length === prospects.length ? [] : prospects.map(lead => lead.id));
@@ -98,23 +109,28 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
 
   return <div className="space-y-6 animate-in fade-in duration-300">
     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-[#141936] p-5 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
-      <div><h2 className="text-xl font-bold font-poppins text-[#1a1b22] dark:text-[#f8f7ff]">Prospecção Ativa & Auditoria em Lote</h2><p className="text-xs text-[#727687]">Gere empresas pelo Google Maps, analise oportunidades e inicie o contato.</p></div>
-      <button aria-label="Adicionar empresa presencial" title="Adicionar empresa presencial" onClick={() => setManualOpen(true)} className="px-4 h-10 flex items-center gap-2 bg-[#0066ff] hover:bg-[#0050cb] text-white rounded-xl shadow text-xs font-bold"><Plus className="w-4 h-4" /> Adicionar presencial</button>
+      <div><h2 className="text-xl font-bold font-poppins text-[#1a1b22] dark:text-[#f8f7ff]">Prospecção</h2><p className="text-xs text-[#727687]">Organize separadamente os contatos presenciais e os leads gerados online.</p></div>
+      {prospectingMode === 'presencial' && <button aria-label="Adicionar empresa presencial" title="Adicionar empresa presencial" onClick={() => setManualOpen(true)} className="px-4 h-10 flex items-center gap-2 bg-[#0066ff] hover:bg-[#0050cb] text-white rounded-xl shadow text-xs font-bold"><Plus className="w-4 h-4" /> Adicionar presencial</button>}
     </div>
 
-    <div className="bg-white dark:bg-[#141936] p-4 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-4 items-end">
+    <div className="grid grid-cols-2 gap-2 rounded-2xl bg-white dark:bg-[#141936] p-2 border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
+      <button onClick={() => { setProspectingMode('presencial'); setSelected([]); }} className={`h-12 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-colors ${prospectingMode === 'presencial' ? 'bg-[#0066ff] text-white shadow' : 'text-[#727687] hover:bg-[#f4f2fd] dark:hover:bg-[#10142e]'}`}><Building2 className="w-4 h-4" /> Prospecção presencial</button>
+      <button onClick={() => { setProspectingMode('online'); setSelected([]); }} className={`h-12 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-colors ${prospectingMode === 'online' ? 'bg-[#0066ff] text-white shadow' : 'text-[#727687] hover:bg-[#f4f2fd] dark:hover:bg-[#10142e]'}`}><Globe2 className="w-4 h-4" /> Prospecção online</button>
+    </div>
+
+    {prospectingMode === 'online' && <div className="bg-white dark:bg-[#141936] p-4 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-4 items-end">
       <Field label="Segmento" value={category} onChange={setCategory} placeholder="Ex.: clínicas odontológicas" />
       <Field label="Cidade ou bairro" value={city} onChange={setCity} placeholder="Ex.: Fortaleza, CE" />
       <label className="text-[10px] font-bold uppercase text-[#727687]">Quantidade<select value={limit} onChange={event => setLimit(Number(event.target.value))} className="mt-1 w-full px-3 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl">{[5, 10, 15, 20].map(value => <option key={value}>{value}</option>)}</select></label>
       <button disabled={searching} onClick={() => void generateLeads()} className="px-5 py-2.5 bg-[#0066ff] disabled:opacity-60 hover:bg-[#0050cb] text-white font-bold text-xs rounded-xl shadow flex items-center justify-center gap-2"><Search className="w-4 h-4" />{searching ? 'Gerando…' : 'Gerar leads'}</button>
-    </div>
+    </div>}
     {error && <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800">{error}</div>}
 
     <div className="bg-white dark:bg-[#141936] rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] overflow-hidden shadow-sm">
-      <div className="p-4 bg-[#f4f2fd] dark:bg-[#10142e] border-b border-[#c2c6d8]/30 flex items-center justify-between"><div className="flex items-center gap-2"><button onClick={toggleAll} className="text-[#0066ff]">{selected.length === prospects.length && prospects.length ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5 text-gray-400" />}</button><span className="text-xs font-bold">Leads encontrados ({prospects.length})</span></div><span className="text-[11px] text-[#727687]">Google Places API</span></div>
+      <div className="p-4 bg-[#f4f2fd] dark:bg-[#10142e] border-b border-[#c2c6d8]/30 flex items-center justify-between"><div className="flex items-center gap-2"><button onClick={toggleAll} className="text-[#0066ff]">{selected.length === prospects.length && prospects.length ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5 text-gray-400" />}</button><span className="text-xs font-bold">{prospectingMode === 'online' ? 'Leads online' : 'Empresas presenciais'} ({prospects.length})</span></div><span className="text-[11px] text-[#727687]">{prospectingMode === 'online' ? 'Google Places API' : 'Cadastro manual'}</span></div>
       <div className="divide-y divide-[#c2c6d8]/20 dark:divide-[#2e366b]">
         {loading && <div className="p-8 text-center text-xs text-[#727687]">Carregando leads…</div>}
-        {!loading && !prospects.length && <div className="p-10 text-center text-xs text-[#727687]">Informe o segmento e a região, depois clique em “Gerar leads”.</div>}
+        {!loading && !prospects.length && <div className="p-10 text-center text-xs text-[#727687]">{prospectingMode === 'online' ? 'Informe o segmento e a região, depois clique em “Gerar leads”.' : 'Nenhuma empresa presencial cadastrada. Clique em “Adicionar presencial”.'}</div>}
         {prospects.map(lead => <LeadRow key={lead.id} lead={lead} selected={selected.includes(lead.id)} toggle={toggle} updateStep={updateStep} onPitch={onOpenAiPitchModal} />)}
       </div>
     </div>
