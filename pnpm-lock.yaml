@@ -8,9 +8,6 @@ importers:
 
   .:
     dependencies:
-      '@google/genai':
-        specifier: ^2.4.0
-        version: 2.13.0(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))
       '@hookform/resolvers':
         specifier: ^5.2.1
         version: 5.4.0(react-hook-form@7.82.0(react@19.2.8))
