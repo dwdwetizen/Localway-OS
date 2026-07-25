@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ExternalLink, Layers, Loader2, MapPin, RefreshCw, Search, Target, TrendingUp } from 'lucide-react';
 import { useLeads } from '@/hooks/use-leads';
 import { Lead } from '@/lib/leads';
+import { supabase } from '@/lib/supabase';
 
 interface HeatmapViewProps {
   onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
@@ -64,20 +65,20 @@ function colorForScore(score: number | null) {
   return '#10b981';
 }
 
-function MapCanvas({ leads, selectedId, onSelect, onError }: {
+function MapCanvas({ leads, selectedId, mapsKey, onSelect, onError }: {
   leads: Lead[];
   selectedId: string;
+  mapsKey: string;
   onSelect: (id: string) => void;
   onError: (message: string) => void;
 }) {
   const node = useRef<HTMLDivElement>(null);
-  const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
   useEffect(() => {
-    if (!node.current || !key || !leads.length) return;
+    if (!node.current || !mapsKey || !leads.length) return;
     let active = true;
     const circles: CircleInstance[] = [];
-    void loadGoogleMaps(key).then(maps => {
+    void loadGoogleMaps(mapsKey).then(maps => {
       if (!active || !node.current) return;
       const first = leads[0];
       const map = new maps.Map(node.current, {
@@ -120,7 +121,7 @@ function MapCanvas({ leads, selectedId, onSelect, onError }: {
       active = false;
       circles.forEach(circle => circle.setMap(null));
     };
-  }, [key, leads, onError, onSelect, selectedId]);
+  }, [leads, mapsKey, onError, onSelect, selectedId]);
 
   return <div ref={node} className="w-full min-h-[520px] rounded-2xl bg-[#10142e]" />;
 }
@@ -131,7 +132,24 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
   const [category, setCategory] = useState('all');
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState('');
-  const mapsKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+  const [mapsKey, setMapsKey] = useState(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '');
+
+  useEffect(() => {
+    let active = true;
+    const loadConfiguration = async () => {
+      if (!supabase) return;
+      const { data } = await supabase.auth.getSession();
+      const response = await fetch('/api/places', {
+        headers: { Authorization: `Bearer ${data.session?.access_token || ''}` },
+        cache: 'no-store',
+      });
+      if (!response.ok) return;
+      const configuration = await response.json();
+      if (active && configuration.mapsBrowserKey) setMapsKey(configuration.mapsBrowserKey);
+    };
+    void loadConfiguration();
+    return () => { active = false; };
+  }, []);
 
   const located = useMemo(
     () => leads.filter(lead => typeof lead.latitude === 'number' && typeof lead.longitude === 'number'),
@@ -194,7 +212,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
 
         <section className="relative rounded-2xl overflow-hidden border bg-[#10142e] min-h-[520px]">
           {loading && <div className="absolute inset-0 z-20 grid place-items-center bg-white/80"><Loader2 className="w-7 h-7 animate-spin text-[#0066ff]" /></div>}
-          {!mapsKey ? <EmptyMap title="Chave do mapa ainda não configurada" detail="Adicione NEXT_PUBLIC_GOOGLE_MAPS_API_KEY na Vercel. A geração de leads usa outra chave, separada e segura." /> : !filtered.length ? <EmptyMap title="Nenhum lead com coordenadas" detail="Gere novos leads pelo Google Places ou atualize a análise dos leads antigos." /> : <MapCanvas leads={filtered} selectedId={selected?.id || ''} onSelect={handleSelect} onError={handleMapError} />}
+          {!mapsKey ? <EmptyMap title="Chave do mapa ainda não configurada" detail="O administrador pode colar a chave em Administração → Integrações." /> : !filtered.length ? <EmptyMap title="Nenhum lead com coordenadas" detail="Gere novos leads pelo Google Places ou atualize a análise dos leads antigos." /> : <MapCanvas leads={filtered} selectedId={selected?.id || ''} mapsKey={mapsKey} onSelect={handleSelect} onError={handleMapError} />}
         </section>
       </div>
       {error && <div className="p-4 rounded-xl bg-rose-50 text-rose-700 text-xs">{error}</div>}

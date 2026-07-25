@@ -191,7 +191,28 @@ function mapPlace(place: PlaceRecord, fallbackCategory = '', fallbackCity = '') 
   };
 }
 
-async function authorize(request: NextRequest, required: 'prospeccao' | 'analises') {
+async function loadGoogleConfiguration() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serverSecret = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  let stored: { google_key: string | null; google_maps_browser_key: string | null } | null = null;
+  if (supabaseUrl && serverSecret) {
+    const serverClient = createClient(supabaseUrl, serverSecret, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data } = await serverClient
+      .from('settings')
+      .select('google_key,google_maps_browser_key')
+      .eq('id', 1)
+      .maybeSingle();
+    stored = data;
+  }
+  return {
+    placesKey: process.env.GOOGLE_PLACES_API_KEY || stored?.google_key || '',
+    mapsBrowserKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || stored?.google_maps_browser_key || '',
+  };
+}
+
+async function authorize(request: NextRequest, required: 'prospeccao' | 'analises' | 'any') {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const accessToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
@@ -217,9 +238,10 @@ async function authorize(request: NextRequest, required: 'prospeccao' | 'analise
     .maybeSingle();
   const permissions = (profile?.permissions || []).map((item: string) => item.toLocaleLowerCase('pt-BR'));
   const isAdmin = ['admin', 'administrador'].includes((profile?.role || '').toLowerCase());
-  const allowed = required === 'prospeccao'
-    ? permissions.some((item: string) => ['prospecção', 'prospeccao'].includes(item))
-    : permissions.some((item: string) => ['análises', 'analises'].includes(item));
+  const allowed = required === 'any'
+    || (required === 'prospeccao'
+      ? permissions.some((item: string) => ['prospecção', 'prospeccao'].includes(item))
+      : permissions.some((item: string) => ['análises', 'analises'].includes(item)));
   if (!profile?.is_active || (!isAdmin && !allowed)) {
     return {
       error: NextResponse.json(
@@ -231,10 +253,16 @@ async function authorize(request: NextRequest, required: 'prospeccao' | 'analise
   return { error: null };
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authorization = await authorize(request, 'any');
+  if (authorization.error) return authorization.error;
+  const configuration = await loadGoogleConfiguration();
   return NextResponse.json({
-    placesConfigured: Boolean(process.env.GOOGLE_PLACES_API_KEY),
-    mapsConfigured: Boolean(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY),
+    placesConfigured: Boolean(configuration.placesKey),
+    mapsConfigured: Boolean(configuration.mapsBrowserKey),
+    mapsBrowserKey: configuration.mapsBrowserKey || null,
+  }, {
+    headers: { 'Cache-Control': 'private, no-store, max-age=0' },
   });
 }
 
@@ -244,9 +272,10 @@ export async function POST(request: NextRequest) {
   const authorization = await authorize(request, action === 'analyze' ? 'analises' : 'prospeccao');
   if (authorization.error) return authorization.error;
 
-  const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+  const configuration = await loadGoogleConfiguration();
+  const apiKey = configuration.placesKey;
   if (!apiKey) {
-    return NextResponse.json({ error: 'GOOGLE_PLACES_API_KEY não configurada na Vercel.' }, { status: 500 });
+    return NextResponse.json({ error: 'A chave do Google Places ainda não foi cadastrada em Administração → Integrações.' }, { status: 500 });
   }
 
   if (action === 'analyze') {

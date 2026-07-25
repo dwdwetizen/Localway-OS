@@ -31,17 +31,22 @@ export function AdminView({ onShowToast }: AdminViewProps) {
   const [savingGoal, setSavingGoal] = useState(false);
   const [placesConfigured, setPlacesConfigured] = useState<boolean | null>(null);
   const [mapsConfigured, setMapsConfigured] = useState<boolean | null>(null);
+  const [placesKeyInput, setPlacesKeyInput] = useState('');
+  const [mapsKeyInput, setMapsKeyInput] = useState('');
+  const [savingIntegrations, setSavingIntegrations] = useState(false);
   const [history, setHistory] = useState<Activity[]>([]);
   const [historyUserId, setHistoryUserId] = useState('all');
   const load = useCallback(async () => {
     const client = supabase;
     if (!client) return;
     setLoading(true);
+    const { data: sessionData } = await client.auth.getSession();
+    const accessToken = sessionData.session?.access_token || '';
     const [profilesRequest, goalsRequest, historyRequest, placesRequest] = await Promise.all([
       client.from('profiles').select('id,email,nome,role,permissions,photo_url,is_active').eq('is_active', true).order('nome'),
       client.from('user_goals').select('id,user_id,period_start,period_end,target_leads,target_contacts,target_meetings').order('period_start', { ascending: false }),
       client.from('lead_interactions').select('id,created_by,actor_name,actor_email,outcome,notes,occurred_at,leads(company_name)').order('occurred_at', { ascending: false }).limit(100),
-      fetch('/api/places').then(response => response.json()).catch(() => ({ placesConfigured: false, mapsConfigured: false })),
+      fetch('/api/places', { headers: { Authorization: `Bearer ${accessToken}` }, cache: 'no-store' }).then(response => response.json()).catch(() => ({ placesConfigured: false, mapsConfigured: false })),
     ]);
     if (profilesRequest.error) onShowToast(profilesRequest.error.message, 'error');
     else {
@@ -82,6 +87,26 @@ export function AdminView({ onShowToast }: AdminViewProps) {
     setSavingGoal(false);
     if (error) return onShowToast(error.message, 'error');
     onShowToast('Meta salva e liberada no dashboard do colaborador.');
+    void load();
+  };
+  const saveIntegrations = async () => {
+    if (!supabase) return;
+    const googleKey = placesKeyInput.trim();
+    const mapsKey = mapsKeyInput.trim();
+    if (!googleKey && !mapsKey) return onShowToast('Cole pelo menos uma chave para salvar.', 'error');
+    setSavingIntegrations(true);
+    const patch: { id: number; google_key?: string; google_maps_browser_key?: string; updated_at: string } = {
+      id: 1,
+      updated_at: new Date().toISOString(),
+    };
+    if (googleKey) patch.google_key = googleKey;
+    if (mapsKey) patch.google_maps_browser_key = mapsKey;
+    const { error } = await supabase.from('settings').upsert(patch, { onConflict: 'id' });
+    setSavingIntegrations(false);
+    if (error) return onShowToast(error.message, 'error');
+    setPlacesKeyInput('');
+    setMapsKeyInput('');
+    onShowToast('Integrações salvas. As chaves já estão disponíveis para a equipe.', 'success');
     void load();
   };
   return <div className="space-y-6 animate-in fade-in duration-300">
@@ -167,7 +192,7 @@ export function AdminView({ onShowToast }: AdminViewProps) {
       })}</div>
     </section>}
     {activeTab === 'servicos' && <section className="bg-white dark:bg-[#141936] p-6 rounded-2xl border"><h3 className="font-bold">Cadastrar novo serviço</h3><p className="text-xs text-[#727687] mt-1">Esta área foi movida para Administração.</p></section>}
-    {activeTab === 'integracoes' && <section className="bg-white dark:bg-[#141936] p-6 rounded-2xl border"><Settings className="text-[#0066ff]"/><h3 className="font-bold mt-3">Integrações</h3><div className="mt-4 grid gap-3 md:grid-cols-2"><IntegrationStatus configured={placesConfigured} title="Google Places API (New)" ready="Geração de leads e análise de perfis prontas." missing="Adicione GOOGLE_PLACES_API_KEY na Vercel."/><IntegrationStatus configured={mapsConfigured} title="Google Maps JavaScript API" ready="Mapa geográfico de oportunidades pronto." missing="Adicione NEXT_PUBLIC_GOOGLE_MAPS_API_KEY na Vercel."/></div></section>}
+    {activeTab === 'integracoes' && <section className="bg-white dark:bg-[#141936] p-6 rounded-2xl border"><Settings className="text-[#0066ff]"/><h3 className="font-bold mt-3">Integrações</h3><p className="text-xs text-[#727687] mt-1">Cole as chaves uma vez. Elas ficarão salvas para todos os navegadores da equipe.</p><div className="mt-4 grid gap-3 md:grid-cols-2"><IntegrationStatus configured={placesConfigured} title="Google Places API (New)" ready="Geração de leads e análise de perfis prontas." missing="Cole abaixo a chave da Places API (New)."/><IntegrationStatus configured={mapsConfigured} title="Google Maps JavaScript API" ready="Mapa geográfico de oportunidades pronto." missing="Cole abaixo a chave do Maps JavaScript."/></div><div className="mt-5 grid gap-4 md:grid-cols-2"><label className="text-xs font-bold">Chave secreta — Places API<input type="password" autoComplete="off" value={placesKeyInput} onChange={event => setPlacesKeyInput(event.target.value)} placeholder={placesConfigured ? 'Configurada — cole somente para substituir' : 'Cole a chave do Google Places'} className="input mt-1"/><span className="block text-[10px] font-normal text-[#727687] mt-1">Usada apenas pelo servidor; colaboradores não conseguem visualizá-la.</span></label><label className="text-xs font-bold">Chave do mapa — Maps JavaScript API<input type="password" autoComplete="off" value={mapsKeyInput} onChange={event => setMapsKeyInput(event.target.value)} placeholder={mapsConfigured ? 'Configurada — cole somente para substituir' : 'Cole a chave do Google Maps'} className="input mt-1"/><span className="block text-[10px] font-normal text-[#727687] mt-1">Restrinja esta chave aos domínios do aplicativo no Google Cloud.</span></label></div><button disabled={savingIntegrations || (!placesKeyInput.trim() && !mapsKeyInput.trim())} onClick={() => void saveIntegrations()} className="mt-5 px-5 py-2.5 bg-[#0066ff] disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-2">{savingIntegrations ? <Loader2 className="w-4 h-4 animate-spin"/> : <Settings className="w-4 h-4"/>}Salvar integrações</button></section>}
   </div>;
   function Tab({ id, label }: { id: typeof activeTab; label: string }) { return <button onClick={() => setActiveTab(id)} className={`px-4 py-2 rounded-xl text-xs font-bold ${activeTab === id ? 'bg-[#0066ff] text-white' : 'text-[#727687]'}`}>{label}</button>; }
 }
