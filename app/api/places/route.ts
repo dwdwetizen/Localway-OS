@@ -225,15 +225,17 @@ function extractPlaceReference(value: string) {
   const decodedHref = decodeURIComponent(url.href);
   const coordinateMatch = decodedHref.match(/@(-?\d{1,2}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)/);
   const dataCoordinateMatch = decodedHref.match(/!3d(-?\d{1,2}(?:\.\d+)?).*?!4d(-?\d{1,3}(?:\.\d+)?)/);
-  const latitude = coordinateMatch
-    ? Number(coordinateMatch[1])
-    : dataCoordinateMatch
-      ? Number(dataCoordinateMatch[1])
+  // !3d/!4d are the selected business coordinates. The @ coordinates can
+  // represent only the current camera center and may be many kilometres away.
+  const latitude = dataCoordinateMatch
+    ? Number(dataCoordinateMatch[1])
+    : coordinateMatch
+      ? Number(coordinateMatch[1])
       : null;
-  const longitude = coordinateMatch
-    ? Number(coordinateMatch[2])
-    : dataCoordinateMatch
-      ? Number(dataCoordinateMatch[2])
+  const longitude = dataCoordinateMatch
+    ? Number(dataCoordinateMatch[2])
+    : coordinateMatch
+      ? Number(coordinateMatch[2])
       : null;
   if (directId) return { placeId: directId, query: '', latitude, longitude };
 
@@ -254,13 +256,80 @@ function placeSearchQueries(value: string) {
   const withoutLocationSuffix = beforeSeparator
     .replace(/\s+em\s+[A-ZÀ-Ú][\p{L}\s.-]+$/iu, '')
     .trim();
-  const withoutMarketingSuffix = beforeSeparator
-    .replace(/\s+(?:ag[eê]ncia\s+de\s+)?marketing\s+digital.*$/iu, '')
-    .trim();
-  return [normalized, beforeSeparator, withoutLocationSuffix, withoutMarketingSuffix]
+  return [normalized, beforeSeparator, withoutLocationSuffix]
     .filter(query => query.length >= 2)
     .filter((query, index, queries) =>
       queries.findIndex(item => item.toLocaleLowerCase('pt-BR') === query.toLocaleLowerCase('pt-BR')) === index);
+}
+
+function normalizeBusinessName(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function businessNameTokens(value: string) {
+  const ignored = new Set([
+    'a', 'as', 'o', 'os', 'de', 'da', 'das', 'do', 'dos', 'e', 'em',
+    'agencia', 'marketing', 'digital', 'servico', 'servicos', 'brasil',
+    'fortaleza',
+  ]);
+  const tokens = normalizeBusinessName(value)
+    .split(' ')
+    .filter(token => token.length >= 3 && !ignored.has(token));
+  return tokens.length ? tokens : normalizeBusinessName(value).split(' ').filter(Boolean);
+}
+
+function businessNameMatches(expected: string, candidate: string) {
+  const expectedTokens = businessNameTokens(expected);
+  const candidateTokens = new Set(businessNameTokens(candidate));
+  if (!expectedTokens.length || !candidateTokens.size) return false;
+  return expectedTokens.some(token => candidateTokens.has(token));
+}
+
+function distanceInKilometres(
+  first: { latitude: number; longitude: number },
+  second: { latitude: number; longitude: number },
+) {
+  const toRadians = (value: number) => value * Math.PI / 180;
+  const latitudeDelta = toRadians(second.latitude - first.latitude);
+  const longitudeDelta = toRadians(second.longitude - first.longitude);
+  const a = Math.sin(latitudeDelta / 2) ** 2
+    + Math.cos(toRadians(first.latitude))
+    * Math.cos(toRadians(second.latitude))
+    * Math.sin(longitudeDelta / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function pickMatchingPlace(
+  places: PlaceRecord[],
+  expectedName: string,
+  reference: { latitude: number | null; longitude: number | null },
+) {
+  const matching = places.filter(place =>
+    businessNameMatches(expectedName, readDisplayName(place.displayName) || ''));
+  if (!matching.length) return null;
+  if (reference.latitude === null || reference.longitude === null) return matching[0];
+  return matching.sort((first, second) => {
+    const firstLocation = readLocation(first.location);
+    const secondLocation = readLocation(second.location);
+    const firstDistance = firstLocation.latitude === null || firstLocation.longitude === null
+      ? Number.POSITIVE_INFINITY
+      : distanceInKilometres(
+        { latitude: reference.latitude!, longitude: reference.longitude! },
+        { latitude: firstLocation.latitude, longitude: firstLocation.longitude },
+      );
+    const secondDistance = secondLocation.latitude === null || secondLocation.longitude === null
+      ? Number.POSITIVE_INFINITY
+      : distanceInKilometres(
+        { latitude: reference.latitude!, longitude: reference.longitude! },
+        { latitude: secondLocation.latitude, longitude: secondLocation.longitude },
+      );
+    return firstDistance - secondDistance;
+  })[0];
 }
 
 async function fetchPlaceDetails(placeId: string, apiKey: string) {
@@ -320,6 +389,8 @@ async function findPlaceWithAutocomplete(
     const suggestions = Array.isArray(result.suggestions) ? result.suggestions : [];
     for (const suggestion of suggestions.slice(0, 5)) {
       const placeId = readText(suggestion?.placePrediction?.placeId);
+      const suggestionName = readDisplayName(suggestion?.placePrediction?.text);
+      if (!suggestionName || !businessNameMatches(query, suggestionName)) continue;
       if (!placeId) continue;
       const details = await fetchPlaceDetails(placeId, apiKey);
       if (details.response.ok) return { place: details.result as PlaceRecord, error: '' };
@@ -340,7 +411,6 @@ async function placeFromGoogleMapsUrl(rawUrl: string, apiKey: string) {
   }
 
   let resolvedUrl = submitted.href;
-  let mapsPage = '';
   try {
     const expanded = await fetch(submitted.href, {
       method: 'GET',
@@ -351,7 +421,6 @@ async function placeFromGoogleMapsUrl(rawUrl: string, apiKey: string) {
       },
     });
     resolvedUrl = expanded.url;
-    if (expanded.ok) mapsPage = await expanded.text();
   } catch {
     // A URL ainda pode conter nome, coordenadas ou Place ID suficientes.
   }
@@ -361,11 +430,9 @@ async function placeFromGoogleMapsUrl(rawUrl: string, apiKey: string) {
     throw new Error('O link curto não direcionou para uma empresa no Google Maps.');
   }
   const reference = extractPlaceReference(resolved.href);
-  const embeddedPlaceId = mapsPage.match(/\bChI[A-Za-z0-9_-]{20,}\b/)?.[0] || '';
-  const directPlaceId = reference.placeId || embeddedPlaceId;
 
-  if (directPlaceId) {
-    const details = await fetchPlaceDetails(directPlaceId, apiKey);
+  if (reference.placeId) {
+    const details = await fetchPlaceDetails(reference.placeId, apiKey);
     if (details.response.ok) return mapPlace(details.result);
   }
 
@@ -402,7 +469,8 @@ async function placeFromGoogleMapsUrl(rawUrl: string, apiKey: string) {
       lastSearchError = searchResult?.error?.message || 'O Google não conseguiu localizar essa empresa.';
       continue;
     }
-    const place = Array.isArray(searchResult.places) ? searchResult.places[0] : null;
+    const places = (Array.isArray(searchResult.places) ? searchResult.places : []) as PlaceRecord[];
+    const place = pickMatchingPlace(places, reference.query, reference);
     if (place) return mapPlace(place);
   }
   const autocomplete = await findPlaceWithAutocomplete(queries, reference, apiKey);
