@@ -224,8 +224,17 @@ function extractPlaceReference(value: string) {
   const directId = url.searchParams.get('query_place_id');
   const decodedHref = decodeURIComponent(url.href);
   const coordinateMatch = decodedHref.match(/@(-?\d{1,2}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)/);
-  const latitude = coordinateMatch ? Number(coordinateMatch[1]) : null;
-  const longitude = coordinateMatch ? Number(coordinateMatch[2]) : null;
+  const dataCoordinateMatch = decodedHref.match(/!3d(-?\d{1,2}(?:\.\d+)?).*?!4d(-?\d{1,3}(?:\.\d+)?)/);
+  const latitude = coordinateMatch
+    ? Number(coordinateMatch[1])
+    : dataCoordinateMatch
+      ? Number(dataCoordinateMatch[1])
+      : null;
+  const longitude = coordinateMatch
+    ? Number(coordinateMatch[2])
+    : dataCoordinateMatch
+      ? Number(dataCoordinateMatch[2])
+      : null;
   if (directId) return { placeId: directId, query: '', latitude, longitude };
 
   const dataPlaceId = decodedHref.match(/!1s(ChI[^!/?&]+)/)?.[1] || '';
@@ -245,10 +254,78 @@ function placeSearchQueries(value: string) {
   const withoutLocationSuffix = beforeSeparator
     .replace(/\s+em\s+[A-ZÀ-Ú][\p{L}\s.-]+$/iu, '')
     .trim();
-  return [normalized, beforeSeparator, withoutLocationSuffix]
+  const withoutMarketingSuffix = beforeSeparator
+    .replace(/\s+(?:ag[eê]ncia\s+de\s+)?marketing\s+digital.*$/iu, '')
+    .trim();
+  return [normalized, beforeSeparator, withoutLocationSuffix, withoutMarketingSuffix]
     .filter(query => query.length >= 2)
     .filter((query, index, queries) =>
       queries.findIndex(item => item.toLocaleLowerCase('pt-BR') === query.toLocaleLowerCase('pt-BR')) === index);
+}
+
+async function fetchPlaceDetails(placeId: string, apiKey: string) {
+  const response = await fetch(
+    `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}?languageCode=pt-BR&regionCode=BR`,
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': detailFieldMask,
+      },
+    },
+  );
+  const result = await response.json();
+  return { response, result };
+}
+
+async function findPlaceWithAutocomplete(
+  queries: string[],
+  reference: { latitude: number | null; longitude: number | null },
+  apiKey: string,
+) {
+  let lastError = '';
+  for (const query of queries) {
+    const response = await fetch('https://places.googleapis.com/v1/places:autocomplete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': [
+          'suggestions.placePrediction.placeId',
+          'suggestions.placePrediction.text',
+        ].join(','),
+      },
+      body: JSON.stringify({
+        input: query,
+        languageCode: 'pt-BR',
+        regionCode: 'BR',
+        ...(reference.latitude !== null && reference.longitude !== null ? {
+          locationBias: {
+            circle: {
+              center: {
+                latitude: reference.latitude,
+                longitude: reference.longitude,
+              },
+              radius: 20_000,
+            },
+          },
+        } : {}),
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      lastError = result?.error?.message || '';
+      continue;
+    }
+    const suggestions = Array.isArray(result.suggestions) ? result.suggestions : [];
+    for (const suggestion of suggestions.slice(0, 5)) {
+      const placeId = readText(suggestion?.placePrediction?.placeId);
+      if (!placeId) continue;
+      const details = await fetchPlaceDetails(placeId, apiKey);
+      if (details.response.ok) return { place: details.result as PlaceRecord, error: '' };
+    }
+  }
+  return { place: null, error: lastError };
 }
 
 async function placeFromGoogleMapsUrl(rawUrl: string, apiKey: string) {
@@ -263,13 +340,20 @@ async function placeFromGoogleMapsUrl(rawUrl: string, apiKey: string) {
   }
 
   let resolvedUrl = submitted.href;
-  if (submitted.hostname === 'maps.app.goo.gl' || submitted.hostname === 'goo.gl') {
+  let mapsPage = '';
+  try {
     const expanded = await fetch(submitted.href, {
       method: 'GET',
       redirect: 'follow',
-      headers: { 'User-Agent': 'LocalWay-OS/1.0' },
+      headers: {
+        'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+        'User-Agent': 'Mozilla/5.0 (compatible; LocalWay-OS/1.0)',
+      },
     });
     resolvedUrl = expanded.url;
+    if (expanded.ok) mapsPage = await expanded.text();
+  } catch {
+    // A URL ainda pode conter nome, coordenadas ou Place ID suficientes.
   }
 
   const resolved = new URL(resolvedUrl);
@@ -277,27 +361,20 @@ async function placeFromGoogleMapsUrl(rawUrl: string, apiKey: string) {
     throw new Error('O link curto não direcionou para uma empresa no Google Maps.');
   }
   const reference = extractPlaceReference(resolved.href);
+  const embeddedPlaceId = mapsPage.match(/\bChI[A-Za-z0-9_-]{20,}\b/)?.[0] || '';
+  const directPlaceId = reference.placeId || embeddedPlaceId;
 
-  if (reference.placeId) {
-    const detailsResponse = await fetch(
-      `https://places.googleapis.com/v1/places/${encodeURIComponent(reference.placeId)}?languageCode=pt-BR&regionCode=BR`,
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Goog-Api-Key': apiKey,
-          'X-Goog-FieldMask': detailFieldMask,
-        },
-      },
-    );
-    const details = await detailsResponse.json();
-    if (detailsResponse.ok) return mapPlace(details);
+  if (directPlaceId) {
+    const details = await fetchPlaceDetails(directPlaceId, apiKey);
+    if (details.response.ok) return mapPlace(details.result);
   }
 
   if (!reference.query) {
     throw new Error('Não foi possível identificar a empresa nesse link. Abra a ficha da empresa no Google Maps e copie o link novamente.');
   }
+  const queries = placeSearchQueries(reference.query);
   let lastSearchError = '';
-  for (const query of placeSearchQueries(reference.query)) {
+  for (const query of queries) {
     const searchResponse = await fetch('https://places.googleapis.com/v1/places:searchText', {
       method: 'POST',
       headers: {
@@ -314,7 +391,7 @@ async function placeFromGoogleMapsUrl(rawUrl: string, apiKey: string) {
           locationBias: {
             circle: {
               center: { latitude: reference.latitude, longitude: reference.longitude },
-              radius: 1500,
+              radius: 20_000,
             },
           },
         } : {}),
@@ -328,6 +405,9 @@ async function placeFromGoogleMapsUrl(rawUrl: string, apiKey: string) {
     const place = Array.isArray(searchResult.places) ? searchResult.places[0] : null;
     if (place) return mapPlace(place);
   }
+  const autocomplete = await findPlaceWithAutocomplete(queries, reference, apiKey);
+  if (autocomplete.place) return mapPlace(autocomplete.place);
+  if (autocomplete.error) lastSearchError = autocomplete.error;
   throw new Error(lastSearchError || 'Nenhuma empresa foi encontrada para esse link. Abra a ficha da empresa no Google Maps e use a opção “Compartilhar” para copiar o link.');
 }
 
