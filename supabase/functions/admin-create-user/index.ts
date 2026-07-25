@@ -6,7 +6,7 @@ const jsonHeaders = {
   "Cache-Control": "no-store",
 };
 
-function getDefaultKey(environmentName: string, legacyEnvironmentName: string) {
+function getDefaultKey(environmentName: string) {
   const encodedKeys = Deno.env.get(environmentName);
   if (encodedKeys) {
     try {
@@ -14,10 +14,10 @@ function getDefaultKey(environmentName: string, legacyEnvironmentName: string) {
       const key = keys.default || Object.values(keys)[0];
       if (key) return key;
     } catch {
-      // Fall back to the legacy key while projects finish migrating API keys.
+      return undefined;
     }
   }
-  return Deno.env.get(legacyEnvironmentName);
+  return undefined;
 }
 
 function reply(status: number, body: Record<string, unknown>) {
@@ -30,8 +30,8 @@ Deno.serve(async (request: Request) => {
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const publishableKey = getDefaultKey("SUPABASE_PUBLISHABLE_KEYS", "SUPABASE_ANON_KEY");
-  const secretKey = getDefaultKey("SUPABASE_SECRET_KEYS", "SUPABASE_SERVICE_ROLE_KEY");
+  const publishableKey = getDefaultKey("SUPABASE_PUBLISHABLE_KEYS");
+  const secretKey = getDefaultKey("SUPABASE_SECRET_KEYS");
   const authorization = request.headers.get("Authorization") || "";
   const accessToken = authorization.replace(/^Bearer\s+/i, "");
 
@@ -108,13 +108,18 @@ Deno.serve(async (request: Request) => {
       return reply(500, { error: "Não foi possível remover o perfil do usuário." });
     }
 
-    const { error: deleteUserError } = await admin.auth.admin.deleteUser(userId, true);
-    if (deleteUserError) {
+    // Avoid Supabase Auth's DELETE endpoint, which rejects this project's
+    // modern ES256 credentials. The login is anonymized and blocked for 100 years.
+    const { error: disableUserError } = await admin.auth.admin.updateUserById(userId, {
+      email: `removido.${userId}@usuarios.localway.app`,
+      ban_duration: "876000h",
+    });
+    if (disableUserError) {
       const { error: restoreError } = await admin.from("profiles").upsert(targetProfile);
       if (restoreError) {
         console.error("Falha ao restaurar perfil:", restoreError.message);
       }
-      return reply(500, { error: deleteUserError.message || "Não foi possível excluir o login." });
+      return reply(500, { error: disableUserError.message || "Não foi possível desativar o login." });
     }
 
     return reply(200, { ok: true });
@@ -165,7 +170,10 @@ Deno.serve(async (request: Request) => {
 
   if (saveProfileError) {
     console.error("Falha ao salvar perfil:", saveProfileError.message);
-    await admin.auth.admin.deleteUser(created.user.id);
+    await admin.auth.admin.updateUserById(created.user.id, {
+      email: `removido.${created.user.id}@usuarios.localway.app`,
+      ban_duration: "876000h",
+    });
     return reply(500, { error: "O login foi revertido porque o perfil não pôde ser criado." });
   }
 
