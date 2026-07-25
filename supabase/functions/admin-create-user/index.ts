@@ -6,6 +6,20 @@ const jsonHeaders = {
   "Cache-Control": "no-store",
 };
 
+function getDefaultKey(environmentName: string, legacyEnvironmentName: string) {
+  const encodedKeys = Deno.env.get(environmentName);
+  if (encodedKeys) {
+    try {
+      const keys = JSON.parse(encodedKeys) as Record<string, string>;
+      const key = keys.default || Object.values(keys)[0];
+      if (key) return key;
+    } catch {
+      // Fall back to the legacy key while projects finish migrating API keys.
+    }
+  }
+  return Deno.env.get(legacyEnvironmentName);
+}
+
 function reply(status: number, body: Record<string, unknown>) {
   return new Response(JSON.stringify(body), { status, headers: jsonHeaders });
 }
@@ -16,22 +30,22 @@ Deno.serve(async (request: Request) => {
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const publishableKey = getDefaultKey("SUPABASE_PUBLISHABLE_KEYS", "SUPABASE_ANON_KEY");
+  const secretKey = getDefaultKey("SUPABASE_SECRET_KEYS", "SUPABASE_SERVICE_ROLE_KEY");
   const authorization = request.headers.get("Authorization") || "";
   const accessToken = authorization.replace(/^Bearer\s+/i, "");
 
-  if (!supabaseUrl || !anonKey || !serviceRoleKey) {
+  if (!supabaseUrl || !publishableKey || !secretKey) {
     return reply(500, { error: "Configuração interna do Supabase incompleta." });
   }
   if (!accessToken) {
     return reply(401, { error: "Sessão de administrador ausente." });
   }
 
-  const caller = createClient(supabaseUrl, anonKey, {
+  const caller = createClient(supabaseUrl, publishableKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const admin = createClient(supabaseUrl, serviceRoleKey, {
+  const admin = createClient(supabaseUrl, secretKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
