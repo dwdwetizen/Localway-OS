@@ -292,15 +292,15 @@ async function placeFromGoogleMapsUrl(rawUrl: string, apiKey: string) {
 }
 
 function createGrid(centerLatitude: number, centerLongitude: number, radiusMeters: number, gridSize: number) {
-  const half = Math.floor(gridSize / 2);
-  const stepMeters = radiusMeters / half;
+  const centerIndex = (gridSize - 1) / 2;
+  const stepMeters = radiusMeters / Math.max(centerIndex, 1);
   const longitudeScale = Math.max(Math.cos(centerLatitude * Math.PI / 180), 0.2);
   const points: Array<Omit<VisibilityPoint, 'position' | 'found' | 'top_place_ids'>> = [];
 
   for (let row = 0; row < gridSize; row += 1) {
     for (let column = 0; column < gridSize; column += 1) {
-      const northMeters = (half - row) * stepMeters;
-      const eastMeters = (column - half) * stepMeters;
+      const northMeters = (centerIndex - row) * stepMeters;
+      const eastMeters = (column - centerIndex) * stepMeters;
       points.push({
         row,
         column,
@@ -310,6 +310,24 @@ function createGrid(centerLatitude: number, centerLongitude: number, radiusMeter
     }
   }
   return { points, stepMeters };
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<R>,
+) {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await mapper(items[currentIndex]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
 }
 
 async function loadGoogleConfiguration() {
@@ -409,14 +427,18 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const action = body.action === 'analyze' || body.action === 'analyze_url'
+  const action = body.action === 'analyze' || body.action === 'analyze_url' || body.action === 'resolve_map_profile'
     ? body.action
     : body.action === 'grid'
       ? 'grid'
       : 'search';
   const authorization = await authorize(
     request,
-    action === 'analyze' || action === 'analyze_url' ? 'analises' : action === 'grid' ? 'mapa' : 'prospeccao',
+    action === 'analyze' || action === 'analyze_url'
+      ? 'analises'
+      : action === 'grid' || action === 'resolve_map_profile'
+        ? 'mapa'
+        : 'prospeccao',
   );
   if (authorization.error) return authorization.error;
 
@@ -432,7 +454,8 @@ export async function POST(request: NextRequest) {
     const keyword = String(body.keyword || '').trim();
     const centerLatitude = Number(body.latitude);
     const centerLongitude = Number(body.longitude);
-    const gridSize = 5;
+    const requestedGridSize = Number(body.gridSize) || 5;
+    const gridSize = [3, 4, 5, 6, 7].includes(requestedGridSize) ? requestedGridSize : 5;
     const radiusMeters = Math.min(Math.max(Number(body.radiusMeters) || 2000, 500), 5000);
 
     if (!leadId || !targetPlaceId) {
@@ -454,7 +477,7 @@ export async function POST(request: NextRequest) {
     );
     const searchRadius = Math.min(Math.max(Math.round(stepMeters * 0.8), 100), 5000);
 
-    const pointResults = await Promise.all(gridPoints.map(async point => {
+    const pointResults = await mapWithConcurrency(gridPoints, 7, async point => {
       const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
         method: 'POST',
         headers: {
@@ -490,7 +513,7 @@ export async function POST(request: NextRequest) {
         found: index >= 0,
         top_place_ids: ids.slice(0, 3),
       } satisfies VisibilityPoint;
-    })).catch(error => ({ error: error instanceof Error ? error.message : 'Falha ao consultar a grade.' }));
+    }).catch(error => ({ error: error instanceof Error ? error.message : 'Falha ao consultar a grade.' }));
 
     if (!Array.isArray(pointResults)) {
       return NextResponse.json({ error: pointResults.error }, { status: 502 });
@@ -505,9 +528,7 @@ export async function POST(request: NextRequest) {
       : null;
     const bestPosition = positions.length ? Math.min(...positions) : null;
 
-    const { data: scan, error: saveError } = await authorization.client!
-      .from('local_visibility_scans')
-      .insert({
+    const scanPayload = {
         lead_id: leadId,
         keyword,
         grid_size: gridSize,
@@ -519,9 +540,24 @@ export async function POST(request: NextRequest) {
         best_position: bestPosition,
         points: pointResults,
         created_by: authorization.userId,
-      })
+      };
+    let { data: scan, error: saveError } = await authorization.client!
+      .from('local_visibility_scans')
+      .insert(scanPayload)
       .select()
       .single();
+
+    // Older databases accepted only odd grid sizes. Keep 4×4 and 6×6 usable
+    // until the accompanying constraint migration is applied.
+    if (saveError && [4, 6].includes(gridSize) && /grid_size/i.test(saveError.message)) {
+      const fallback = await authorization.client!
+        .from('local_visibility_scans')
+        .insert({ ...scanPayload, grid_size: 5 })
+        .select()
+        .single();
+      scan = fallback.data ? { ...fallback.data, grid_size: gridSize } : null;
+      saveError = fallback.error;
+    }
 
     if (saveError) {
       return NextResponse.json({ error: `A grade foi calculada, mas o histórico não pôde ser salvo: ${saveError.message}` }, { status: 500 });
@@ -552,7 +588,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ place: mapPlace(details) });
   }
 
-  if (action === 'analyze_url') {
+  if (action === 'analyze_url' || action === 'resolve_map_profile') {
     try {
       const place = await placeFromGoogleMapsUrl(String(body.googleMapsUrl || '').trim(), apiKey);
       return NextResponse.json({ place });
