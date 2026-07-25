@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ExternalLink, Layers, Loader2, MapPin, RefreshCw, Search, Target, TrendingUp } from 'lucide-react';
+import { ExternalLink, Grid3X3, History, Layers, Loader2, MapPin, RefreshCw, Search, Target, TrendingUp } from 'lucide-react';
 import { useLeads } from '@/hooks/use-leads';
 import { Lead } from '@/lib/leads';
 import { supabase } from '@/lib/supabase';
@@ -23,10 +23,39 @@ type CircleInstance = {
   addListener: (eventName: string, callback: () => void) => void;
   setMap: (map: MapInstance | null) => void;
 };
+type MarkerInstance = {
+  setMap: (map: MapInstance | null) => void;
+};
 type MapsNamespace = {
   Map: new (element: HTMLElement, options: Record<string, unknown>) => MapInstance;
   LatLngBounds: new () => BoundsInstance;
   Circle: new (options: Record<string, unknown>) => CircleInstance;
+  Marker: new (options: Record<string, unknown>) => MarkerInstance;
+  SymbolPath: { CIRCLE: number };
+};
+type VisibilityPoint = {
+  row: number;
+  column: number;
+  latitude: number;
+  longitude: number;
+  position: number | null;
+  found: boolean;
+  top_place_ids: string[];
+};
+type VisibilityScan = {
+  id: string;
+  lead_id: string;
+  keyword: string;
+  grid_size: number;
+  radius_m: number;
+  center_latitude: number;
+  center_longitude: number;
+  visibility_percentage: number;
+  average_position: number | null;
+  best_position: number | null;
+  points: VisibilityPoint[];
+  source: string;
+  created_at: string;
 };
 
 declare global {
@@ -63,6 +92,13 @@ function colorForScore(score: number | null) {
   if ((score ?? 0) < 55) return '#e11d48';
   if ((score ?? 0) < 75) return '#f59e0b';
   return '#10b981';
+}
+
+function colorForPosition(position: number | null) {
+  if (position === null) return '#64748b';
+  if (position <= 3) return '#10b981';
+  if (position <= 10) return '#f59e0b';
+  return '#e11d48';
 }
 
 function MapCanvas({ leads, selectedId, mapsKey, onSelect, onError }: {
@@ -126,6 +162,74 @@ function MapCanvas({ leads, selectedId, mapsKey, onSelect, onError }: {
   return <div ref={node} className="w-full min-h-[520px] rounded-2xl bg-[#10142e]" />;
 }
 
+function GridMapCanvas({ scan, companyName, mapsKey, onError }: {
+  scan: VisibilityScan;
+  companyName: string;
+  mapsKey: string;
+  onError: (message: string) => void;
+}) {
+  const node = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!node.current || !mapsKey || !scan.points.length) return;
+    let active = true;
+    const markers: MarkerInstance[] = [];
+    void loadGoogleMaps(mapsKey).then(maps => {
+      if (!active || !node.current) return;
+      const map = new maps.Map(node.current, {
+        center: { lat: scan.center_latitude, lng: scan.center_longitude },
+        zoom: 13,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: true,
+        clickableIcons: false,
+      });
+      const bounds = new maps.LatLngBounds();
+      scan.points.forEach(point => {
+        const position = { lat: point.latitude, lng: point.longitude };
+        bounds.extend(position);
+        const marker = new maps.Marker({
+          map,
+          position,
+          title: point.position ? `Posição estimada: ${point.position}` : 'Empresa não encontrada entre as 20 primeiras',
+          label: {
+            text: point.position ? String(point.position) : '—',
+            color: '#ffffff',
+            fontSize: '11px',
+            fontWeight: '800',
+          },
+          icon: {
+            path: maps.SymbolPath.CIRCLE,
+            fillColor: colorForPosition(point.position),
+            fillOpacity: 0.95,
+            strokeColor: '#ffffff',
+            strokeOpacity: 1,
+            strokeWeight: 2,
+            scale: 18,
+          },
+        });
+        markers.push(marker);
+      });
+      const companyMarker = new maps.Marker({
+        map,
+        position: { lat: scan.center_latitude, lng: scan.center_longitude },
+        title: companyName,
+        zIndex: 100,
+      });
+      markers.push(companyMarker);
+      map.fitBounds(bounds);
+    }).catch(error => {
+      if (active) onError(error instanceof Error ? error.message : 'Erro ao abrir a grade.');
+    });
+    return () => {
+      active = false;
+      markers.forEach(marker => marker.setMap(null));
+    };
+  }, [companyName, mapsKey, onError, scan]);
+
+  return <div ref={node} className="w-full min-h-[560px] rounded-2xl bg-[#10142e]" />;
+}
+
 export function HeatmapView({ onShowToast }: HeatmapViewProps) {
   const { leads, loading, error, refresh } = useLeads();
   const [city, setCity] = useState('all');
@@ -133,19 +237,37 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState('');
   const [mapsKey, setMapsKey] = useState(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '');
+  const [keyword, setKeyword] = useState('');
+  const [radiusMeters, setRadiusMeters] = useState(2000);
+  const [generatingGrid, setGeneratingGrid] = useState(false);
+  const [scanHistory, setScanHistory] = useState<VisibilityScan[]>([]);
+  const [activeScan, setActiveScan] = useState<VisibilityScan | null>(null);
 
   useEffect(() => {
     let active = true;
     const loadConfiguration = async () => {
       if (!supabase) return;
       const { data } = await supabase.auth.getSession();
-      const response = await fetch('/api/places', {
-        headers: { Authorization: `Bearer ${data.session?.access_token || ''}` },
-        cache: 'no-store',
-      });
-      if (!response.ok) return;
-      const configuration = await response.json();
-      if (active && configuration.mapsBrowserKey) setMapsKey(configuration.mapsBrowserKey);
+      const [configurationResponse, scansRequest] = await Promise.all([
+        fetch('/api/places', {
+          headers: { Authorization: `Bearer ${data.session?.access_token || ''}` },
+          cache: 'no-store',
+        }),
+        supabase
+          .from('local_visibility_scans')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(20),
+      ]);
+      if (configurationResponse.ok) {
+        const configuration = await configurationResponse.json();
+        if (active && configuration.mapsBrowserKey) setMapsKey(configuration.mapsBrowserKey);
+      }
+      if (active && !scansRequest.error) {
+        const rows = (scansRequest.data || []) as VisibilityScan[];
+        setScanHistory(rows);
+        setActiveScan(rows[0] || null);
+      }
     };
     void loadConfiguration();
     return () => { active = false; };
@@ -168,40 +290,120 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
   const averageScore = filtered.length
     ? Math.round(filtered.reduce((total, lead) => total + (lead.health_score ?? 0), 0) / filtered.length)
     : 0;
+  const activeScanLead = activeScan ? leads.find(lead => lead.id === activeScan.lead_id) || null : null;
 
   const handleMapError = (message: string) => onShowToast(message, 'error');
   const handleSelect = (id: string) => setSelectedId(id);
+  const runVisibilityGrid = async () => {
+    if (!supabase || !selected) return;
+    if (!selected.google_place_id || typeof selected.latitude !== 'number' || typeof selected.longitude !== 'number') {
+      return onShowToast('Selecione uma empresa gerada pelo Google e com coordenadas válidas.', 'error');
+    }
+    if (keyword.trim().length < 2) return onShowToast('Digite a palavra-chave da pesquisa.', 'error');
+    setGeneratingGrid(true);
+    const { data } = await supabase.auth.getSession();
+    const response = await fetch('/api/places', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${data.session?.access_token || ''}`,
+      },
+      body: JSON.stringify({
+        action: 'grid',
+        leadId: selected.id,
+        placeId: selected.google_place_id,
+        keyword: keyword.trim(),
+        latitude: selected.latitude,
+        longitude: selected.longitude,
+        radiusMeters,
+      }),
+    });
+    const result = await response.json();
+    setGeneratingGrid(false);
+    if (!response.ok) return onShowToast(result.error || 'Não foi possível gerar a grade.', 'error');
+    const scan = result.scan as VisibilityScan;
+    setActiveScan(scan);
+    setScanHistory(current => [scan, ...current.filter(item => item.id !== scan.id)].slice(0, 20));
+    onShowToast('Grade 5×5 calculada e salva no histórico.');
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-[#141936] p-5 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-2xl bg-[#0066ff]/10 text-[#0066ff] flex items-center justify-center"><MapPin className="w-6 h-6" /></div>
-          <div><h2 className="text-xl font-bold">Mapa de Oportunidades</h2><p className="text-xs text-[#727687]">Intensidade geográfica calculada com os leads reais da prospecção.</p></div>
+          <div><h2 className="text-xl font-bold">Mapa de Visibilidade Local</h2><p className="text-xs text-[#727687]">Grade estimada por GPS e mapa de oportunidades dos leads.</p></div>
         </div>
         <button onClick={() => void refresh()} className="px-4 py-2.5 rounded-xl bg-[#0066ff] text-white text-xs font-bold flex items-center gap-2"><RefreshCw className="w-4 h-4" /> Atualizar dados</button>
       </div>
+
+      <section className="p-5 rounded-2xl bg-white dark:bg-[#141936] border space-y-4">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-[#0066ff]/10 text-[#0066ff] flex items-center justify-center"><Grid3X3 className="w-5 h-5"/></div>
+          <div>
+            <h3 className="font-bold text-sm">Gerar grade 5×5</h3>
+            <p className="text-[11px] text-[#727687]">São 25 pontos usando somente IDs do Google Places. O resultado representa visibilidade estimada, não a posição exata do celular.</p>
+          </div>
+        </div>
+        <div className="grid md:grid-cols-[1.4fr_1fr_150px_auto] gap-3">
+          <select value={selected?.id || ''} onChange={event => { const lead = located.find(item => item.id === event.target.value); setSelectedId(event.target.value); setKeyword(lead?.category || ''); setActiveScan(null); }} className="px-3 py-2.5 rounded-xl bg-[#f4f2fd] dark:bg-[#10142e] border text-xs">
+            <option value="">Selecione a empresa</option>
+            {located.map(lead => <option key={lead.id} value={lead.id}>{lead.company_name}</option>)}
+          </select>
+          <input value={keyword} onChange={event => setKeyword(event.target.value)} placeholder="Ex.: dentista, restaurante" className="px-3 py-2.5 rounded-xl bg-[#f4f2fd] dark:bg-[#10142e] border text-xs"/>
+          <select value={radiusMeters} onChange={event => setRadiusMeters(Number(event.target.value))} className="px-3 py-2.5 rounded-xl bg-[#f4f2fd] dark:bg-[#10142e] border text-xs">
+            <option value={1000}>Raio de 1 km</option>
+            <option value={2000}>Raio de 2 km</option>
+            <option value={3000}>Raio de 3 km</option>
+            <option value={5000}>Raio de 5 km</option>
+          </select>
+          <button disabled={generatingGrid || !selected} onClick={() => void runVisibilityGrid()} className="px-5 py-2.5 rounded-xl bg-[#0066ff] disabled:opacity-50 text-white text-xs font-bold flex justify-center items-center gap-2">
+            {generatingGrid ? <Loader2 className="w-4 h-4 animate-spin"/> : <Grid3X3 className="w-4 h-4"/>}{generatingGrid ? 'Consultando 25 pontos…' : 'Gerar grade'}
+          </button>
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#727687]" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar empresa" className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-white dark:bg-[#141936] border text-xs" /></div>
         <select value={city} onChange={event => setCity(event.target.value)} className="px-3 py-2.5 rounded-xl bg-white dark:bg-[#141936] border text-xs"><option value="all">Todas as cidades</option>{cities.map(item => <option key={item}>{item}</option>)}</select>
         <select value={category} onChange={event => setCategory(event.target.value)} className="px-3 py-2.5 rounded-xl bg-white dark:bg-[#141936] border text-xs"><option value="all">Todos os segmentos</option>{categories.map(item => <option key={item}>{item}</option>)}</select>
         <div className="flex gap-2 text-[10px] font-bold items-center justify-end">
-          <span className="px-2 py-1 rounded-lg bg-rose-50 text-rose-700">Vermelho: oportunidade alta</span>
-          <span className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700">Verde: perfil forte</span>
+          {activeScan ? <>
+            <span className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700">1–3</span>
+            <span className="px-2 py-1 rounded-lg bg-amber-50 text-amber-700">4–10</span>
+            <span className="px-2 py-1 rounded-lg bg-rose-50 text-rose-700">11–20</span>
+            <span className="px-2 py-1 rounded-lg bg-slate-100 text-slate-600">Não encontrado</span>
+          </> : <>
+            <span className="px-2 py-1 rounded-lg bg-rose-50 text-rose-700">Vermelho: oportunidade alta</span>
+            <span className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700">Verde: perfil forte</span>
+          </>}
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-6">
         <aside className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <Summary icon={<Target className="w-4 h-4" />} label="Leads no mapa" value={filtered.length} />
-            <Summary icon={<TrendingUp className="w-4 h-4" />} label="Oportunidades" value={opportunities} />
-          </div>
-          <div className="p-4 rounded-2xl bg-white dark:bg-[#141936] border">
-            <p className="text-[10px] text-[#727687] uppercase font-bold">Score médio da região</p>
-            <p className="text-3xl font-black mt-1">{averageScore}</p>
-          </div>
+          {activeScan ? <>
+            <div className="grid grid-cols-2 gap-3">
+              <Summary icon={<Target className="w-4 h-4" />} label="Presença estimada" value={`${Math.round(activeScan.visibility_percentage)}%`} />
+              <Summary icon={<TrendingUp className="w-4 h-4" />} label="Melhor posição" value={activeScan.best_position || '—'} />
+            </div>
+            <div className="p-4 rounded-2xl bg-white dark:bg-[#141936] border">
+              <p className="text-[10px] text-[#727687] uppercase font-bold">Posição média estimada</p>
+              <p className="text-3xl font-black mt-1">{activeScan.average_position?.toFixed(1) || '—'}</p>
+              <p className="text-[10px] text-[#727687] mt-2">Palavra-chave: <strong>{activeScan.keyword}</strong></p>
+              <p className="text-[10px] text-[#727687]">Raio: {(activeScan.radius_m / 1000).toFixed(0)} km • 25 pontos</p>
+            </div>
+            <button onClick={() => setActiveScan(null)} className="w-full py-2.5 rounded-xl border text-xs font-bold">Ver mapa de oportunidades</button>
+          </> : <>
+            <div className="grid grid-cols-2 gap-3">
+              <Summary icon={<Target className="w-4 h-4" />} label="Leads no mapa" value={filtered.length} />
+              <Summary icon={<TrendingUp className="w-4 h-4" />} label="Oportunidades" value={opportunities} />
+            </div>
+            <div className="p-4 rounded-2xl bg-white dark:bg-[#141936] border">
+              <p className="text-[10px] text-[#727687] uppercase font-bold">Score médio da região</p>
+              <p className="text-3xl font-black mt-1">{averageScore}</p>
+            </div>
+          </>}
           {selected && <div className="p-5 rounded-2xl bg-white dark:bg-[#141936] border space-y-3">
             <div className="flex items-start justify-between gap-2"><div><p className="font-bold text-sm">{selected.company_name}</p><p className="text-[11px] text-[#727687]">{selected.category || 'Sem segmento'}</p></div><span className="text-xs font-black" style={{ color: colorForScore(selected.health_score) }}>{selected.health_score ?? 0}</span></div>
             <p className="text-[11px] text-[#727687]">{selected.address}</p>
@@ -211,16 +413,34 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
         </aside>
 
         <section className="relative rounded-2xl overflow-hidden border bg-[#10142e] min-h-[520px]">
-          {loading && <div className="absolute inset-0 z-20 grid place-items-center bg-white/80"><Loader2 className="w-7 h-7 animate-spin text-[#0066ff]" /></div>}
-          {!mapsKey ? <EmptyMap title="Chave do mapa ainda não configurada" detail="O administrador pode colar a chave em Administração → Integrações." /> : !filtered.length ? <EmptyMap title="Nenhum lead com coordenadas" detail="Gere novos leads pelo Google Places ou atualize a análise dos leads antigos." /> : <MapCanvas leads={filtered} selectedId={selected?.id || ''} mapsKey={mapsKey} onSelect={handleSelect} onError={handleMapError} />}
+          {(loading || generatingGrid) && <div className="absolute inset-0 z-20 grid place-items-center bg-white/80"><div className="text-center"><Loader2 className="w-7 h-7 animate-spin text-[#0066ff] mx-auto" /><p className="text-xs font-bold mt-2">{generatingGrid ? 'Consultando os 25 pontos…' : 'Carregando mapa…'}</p></div></div>}
+          {!mapsKey
+            ? <EmptyMap title="Chave do mapa ainda não configurada" detail="O administrador pode colar a chave em Administração → Integrações." />
+            : activeScan
+              ? <GridMapCanvas scan={activeScan} companyName={activeScanLead?.company_name || 'Empresa analisada'} mapsKey={mapsKey} onError={handleMapError}/>
+              : !filtered.length
+                ? <EmptyMap title="Nenhum lead com coordenadas" detail="Gere novos leads pelo Google Places ou atualize a análise dos leads antigos." />
+                : <MapCanvas leads={filtered} selectedId={selected?.id || ''} mapsKey={mapsKey} onSelect={handleSelect} onError={handleMapError} />}
         </section>
       </div>
+      <section className="rounded-2xl bg-white dark:bg-[#141936] border overflow-hidden">
+        <div className="p-4 border-b flex items-center gap-2"><History className="w-4 h-4 text-[#0066ff]"/><div><h3 className="font-bold text-sm">Histórico de grades</h3><p className="text-[10px] text-[#727687]">Últimas análises salvas no Supabase.</p></div></div>
+        {!scanHistory.length ? <div className="p-8 text-center text-xs text-[#727687]">Nenhuma grade gerada ainda.</div> : <div className="divide-y">
+          {scanHistory.map(scan => {
+            const lead = leads.find(item => item.id === scan.lead_id);
+            return <button key={scan.id} onClick={() => { setActiveScan(scan); setSelectedId(scan.lead_id); setKeyword(scan.keyword); setRadiusMeters(scan.radius_m); }} className={`w-full p-4 text-left flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-[#f8f9ff] dark:hover:bg-[#10142e] ${activeScan?.id === scan.id ? 'bg-[#0066ff]/5' : ''}`}>
+              <div><p className="text-xs font-bold">{lead?.company_name || 'Empresa'} • {scan.keyword}</p><p className="text-[10px] text-[#727687]">{new Date(scan.created_at).toLocaleString('pt-BR')} • Grade {scan.grid_size}×{scan.grid_size} • Raio de {(scan.radius_m / 1000).toFixed(0)} km</p></div>
+              <div className="flex gap-2 text-[10px] font-bold"><span className="px-2 py-1 rounded-lg bg-blue-50 text-blue-700">Presença {Math.round(scan.visibility_percentage)}%</span><span className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700">Melhor {scan.best_position || '—'}</span></div>
+            </button>;
+          })}
+        </div>}
+      </section>
       {error && <div className="p-4 rounded-xl bg-rose-50 text-rose-700 text-xs">{error}</div>}
     </div>
   );
 }
 
-function Summary({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
+function Summary({ icon, label, value }: { icon: React.ReactNode; label: string; value: number | string }) {
   return <div className="p-4 rounded-2xl bg-white dark:bg-[#141936] border"><div className="text-[#0066ff]">{icon}</div><p className="text-2xl font-black mt-2">{value}</p><p className="text-[10px] text-[#727687]">{label}</p></div>;
 }
 

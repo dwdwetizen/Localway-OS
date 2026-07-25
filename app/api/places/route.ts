@@ -7,6 +7,15 @@ type AnalysisRecommendation = {
   detail: string;
   priority: 'alta' | 'media' | 'baixa';
 };
+type VisibilityPoint = {
+  row: number;
+  column: number;
+  latitude: number;
+  longitude: number;
+  position: number | null;
+  found: boolean;
+  top_place_ids: string[];
+};
 
 const searchFieldMask = [
   'places.id',
@@ -191,6 +200,27 @@ function mapPlace(place: PlaceRecord, fallbackCategory = '', fallbackCity = '') 
   };
 }
 
+function createGrid(centerLatitude: number, centerLongitude: number, radiusMeters: number, gridSize: number) {
+  const half = Math.floor(gridSize / 2);
+  const stepMeters = radiusMeters / half;
+  const longitudeScale = Math.max(Math.cos(centerLatitude * Math.PI / 180), 0.2);
+  const points: Array<Omit<VisibilityPoint, 'position' | 'found' | 'top_place_ids'>> = [];
+
+  for (let row = 0; row < gridSize; row += 1) {
+    for (let column = 0; column < gridSize; column += 1) {
+      const northMeters = (half - row) * stepMeters;
+      const eastMeters = (column - half) * stepMeters;
+      points.push({
+        row,
+        column,
+        latitude: centerLatitude + northMeters / 111_320,
+        longitude: centerLongitude + eastMeters / (111_320 * longitudeScale),
+      });
+    }
+  }
+  return { points, stepMeters };
+}
+
 async function loadGoogleConfiguration() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serverSecret = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -212,15 +242,23 @@ async function loadGoogleConfiguration() {
   };
 }
 
-async function authorize(request: NextRequest, required: 'prospeccao' | 'analises' | 'any') {
+async function authorize(request: NextRequest, required: 'prospeccao' | 'analises' | 'mapa' | 'any') {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const accessToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
   if (!supabaseUrl || !publishableKey) {
-    return { error: NextResponse.json({ error: 'Supabase não configurado no servidor.' }, { status: 500 }) };
+    return {
+      error: NextResponse.json({ error: 'Supabase não configurado no servidor.' }, { status: 500 }),
+      client: null,
+      userId: null,
+    };
   }
   if (!accessToken) {
-    return { error: NextResponse.json({ error: 'Sessão ausente.' }, { status: 401 }) };
+    return {
+      error: NextResponse.json({ error: 'Sessão ausente.' }, { status: 401 }),
+      client: null,
+      userId: null,
+    };
   }
 
   const client = createClient(supabaseUrl, publishableKey, {
@@ -229,7 +267,11 @@ async function authorize(request: NextRequest, required: 'prospeccao' | 'analise
   });
   const { data: current } = await client.auth.getUser(accessToken);
   if (!current.user) {
-    return { error: NextResponse.json({ error: 'Sessão expirada.' }, { status: 401 }) };
+    return {
+      error: NextResponse.json({ error: 'Sessão expirada.' }, { status: 401 }),
+      client: null,
+      userId: null,
+    };
   }
   const { data: profile } = await client
     .from('profiles')
@@ -241,16 +283,24 @@ async function authorize(request: NextRequest, required: 'prospeccao' | 'analise
   const allowed = required === 'any'
     || (required === 'prospeccao'
       ? permissions.some((item: string) => ['prospecção', 'prospeccao'].includes(item))
-      : permissions.some((item: string) => ['análises', 'analises'].includes(item)));
+      : required === 'analises'
+        ? permissions.some((item: string) => ['análises', 'analises'].includes(item))
+        : permissions.includes('mapa'));
   if (!profile?.is_active || (!isAdmin && !allowed)) {
     return {
       error: NextResponse.json(
-        { error: `Seu perfil não possui acesso a ${required === 'prospeccao' ? 'prospecção' : 'análises'}.` },
+        {
+          error: `Seu perfil não possui acesso a ${
+            required === 'prospeccao' ? 'prospecção' : required === 'analises' ? 'análises' : 'mapa'
+          }.`,
+        },
         { status: 403 },
       ),
+      client: null,
+      userId: null,
     };
   }
-  return { error: null };
+  return { error: null, client, userId: current.user.id };
 }
 
 export async function GET(request: NextRequest) {
@@ -268,14 +318,120 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const action = body.action === 'analyze' ? 'analyze' : 'search';
-  const authorization = await authorize(request, action === 'analyze' ? 'analises' : 'prospeccao');
+  const action = body.action === 'analyze' ? 'analyze' : body.action === 'grid' ? 'grid' : 'search';
+  const authorization = await authorize(
+    request,
+    action === 'analyze' ? 'analises' : action === 'grid' ? 'mapa' : 'prospeccao',
+  );
   if (authorization.error) return authorization.error;
 
   const configuration = await loadGoogleConfiguration();
   const apiKey = configuration.placesKey;
   if (!apiKey) {
     return NextResponse.json({ error: 'A chave do Google Places ainda não foi cadastrada em Administração → Integrações.' }, { status: 500 });
+  }
+
+  if (action === 'grid') {
+    const leadId = String(body.leadId || '').trim();
+    const targetPlaceId = String(body.placeId || '').trim();
+    const keyword = String(body.keyword || '').trim();
+    const centerLatitude = Number(body.latitude);
+    const centerLongitude = Number(body.longitude);
+    const gridSize = 5;
+    const radiusMeters = Math.min(Math.max(Number(body.radiusMeters) || 2000, 500), 5000);
+
+    if (!leadId || !targetPlaceId) {
+      return NextResponse.json({ error: 'Selecione uma empresa gerada pelo Google para criar a grade.' }, { status: 400 });
+    }
+    if (keyword.length < 2 || keyword.length > 120) {
+      return NextResponse.json({ error: 'Informe uma palavra-chave entre 2 e 120 caracteres.' }, { status: 400 });
+    }
+    if (!Number.isFinite(centerLatitude) || centerLatitude < -90 || centerLatitude > 90
+      || !Number.isFinite(centerLongitude) || centerLongitude < -180 || centerLongitude > 180) {
+      return NextResponse.json({ error: 'A empresa selecionada não possui coordenadas válidas.' }, { status: 400 });
+    }
+
+    const { points: gridPoints, stepMeters } = createGrid(
+      centerLatitude,
+      centerLongitude,
+      radiusMeters,
+      gridSize,
+    );
+    const searchRadius = Math.min(Math.max(Math.round(stepMeters * 0.8), 100), 5000);
+
+    const pointResults = await Promise.all(gridPoints.map(async point => {
+      const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask': 'places.id',
+        },
+        body: JSON.stringify({
+          textQuery: keyword,
+          languageCode: 'pt-BR',
+          regionCode: 'BR',
+          pageSize: 20,
+          includePureServiceAreaBusinesses: true,
+          locationBias: {
+            circle: {
+              center: { latitude: point.latitude, longitude: point.longitude },
+              radius: searchRadius,
+            },
+          },
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result?.error?.message || 'O Google não respondeu a um dos pontos da grade.');
+      }
+      const ids = (Array.isArray(result.places) ? result.places : [])
+        .map((place: PlaceRecord) => readText(place.id))
+        .filter((id: string | null): id is string => Boolean(id));
+      const index = ids.indexOf(targetPlaceId);
+      return {
+        ...point,
+        position: index >= 0 ? index + 1 : null,
+        found: index >= 0,
+        top_place_ids: ids.slice(0, 3),
+      } satisfies VisibilityPoint;
+    })).catch(error => ({ error: error instanceof Error ? error.message : 'Falha ao consultar a grade.' }));
+
+    if (!Array.isArray(pointResults)) {
+      return NextResponse.json({ error: pointResults.error }, { status: 502 });
+    }
+
+    const positions = pointResults
+      .map(point => point.position)
+      .filter((position): position is number => typeof position === 'number');
+    const visibilityPercentage = Number(((positions.length / pointResults.length) * 100).toFixed(2));
+    const averagePosition = positions.length
+      ? Number((positions.reduce((total, position) => total + position, 0) / positions.length).toFixed(2))
+      : null;
+    const bestPosition = positions.length ? Math.min(...positions) : null;
+
+    const { data: scan, error: saveError } = await authorization.client!
+      .from('local_visibility_scans')
+      .insert({
+        lead_id: leadId,
+        keyword,
+        grid_size: gridSize,
+        radius_m: radiusMeters,
+        center_latitude: centerLatitude,
+        center_longitude: centerLongitude,
+        visibility_percentage: visibilityPercentage,
+        average_position: averagePosition,
+        best_position: bestPosition,
+        points: pointResults,
+        created_by: authorization.userId,
+      })
+      .select()
+      .single();
+
+    if (saveError) {
+      return NextResponse.json({ error: `A grade foi calculada, mas o histórico não pôde ser salvo: ${saveError.message}` }, { status: 500 });
+    }
+    return NextResponse.json({ scan });
   }
 
   if (action === 'analyze') {
