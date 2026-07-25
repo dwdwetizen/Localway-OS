@@ -121,7 +121,9 @@ function AuthenticatedHome() {
       type,
       message,
     };
-    setToasts((prev) => [...prev, newToast]);
+    setToasts((prev) => prev.some(toast => toast.type === type && toast.message === message)
+      ? prev
+      : [...prev, newToast]);
   }, []);
 
   const dismissToast = (id: string) => {

@@ -263,6 +263,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
   const [keywordDrafts, setKeywordDrafts] = useState<string[]>([]);
   const [newKeyword, setNewKeyword] = useState('');
   const [savingKeywords, setSavingKeywords] = useState(false);
+  const resolvingProfileRef = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -392,9 +393,11 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
     onShowToast('Palavras-chave atualizadas.', 'success');
   };
   const resolveGoogleProfile = async () => {
+    if (resolvingProfileRef.current) return;
     if (!supabase || !googleMapsUrl.trim()) {
       return onShowToast('Cole o link do perfil da empresa no Google Maps.', 'error');
     }
+    resolvingProfileRef.current = true;
     setResolvingProfile(true);
     try {
       const { data } = await supabase.auth.getSession();
@@ -458,6 +461,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
     } catch (requestError) {
       onShowToast(requestError instanceof Error ? requestError.message : 'Erro ao carregar o perfil.', 'error');
     } finally {
+      resolvingProfileRef.current = false;
       setResolvingProfile(false);
     }
   };

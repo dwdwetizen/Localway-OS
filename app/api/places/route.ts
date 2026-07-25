@@ -222,14 +222,33 @@ function isGoogleMapsHost(hostname: string) {
 function extractPlaceReference(value: string) {
   const url = new URL(value);
   const directId = url.searchParams.get('query_place_id');
-  if (directId) return { placeId: directId, query: '' };
+  const decodedHref = decodeURIComponent(url.href);
+  const coordinateMatch = decodedHref.match(/@(-?\d{1,2}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)/);
+  const latitude = coordinateMatch ? Number(coordinateMatch[1]) : null;
+  const longitude = coordinateMatch ? Number(coordinateMatch[2]) : null;
+  if (directId) return { placeId: directId, query: '', latitude, longitude };
 
-  const dataPlaceId = decodeURIComponent(url.href).match(/!1s(ChI[^!/?&]+)/)?.[1] || '';
+  const dataPlaceId = decodedHref.match(/!1s(ChI[^!/?&]+)/)?.[1] || '';
   const placePath = decodeURIComponent(url.pathname).match(/\/place\/([^/]+)/)?.[1] || '';
-  const query = (url.searchParams.get('query') || placePath)
+  const query = (url.searchParams.get('query') || url.searchParams.get('q') || placePath)
     .replace(/\+/g, ' ')
     .trim();
-  return { placeId: dataPlaceId, query };
+  return { placeId: dataPlaceId, query, latitude, longitude };
+}
+
+function placeSearchQueries(value: string) {
+  const normalized = value
+    .replace(/\s+/g, ' ')
+    .replace(/\s*[-–—]\s*(?:como chegar|avaliações|fotos|site).*$/i, '')
+    .trim();
+  const beforeSeparator = normalized.split(/\s*[|•]\s*/)[0]?.trim() || '';
+  const withoutLocationSuffix = beforeSeparator
+    .replace(/\s+em\s+[A-ZÀ-Ú][\p{L}\s.-]+$/iu, '')
+    .trim();
+  return [normalized, beforeSeparator, withoutLocationSuffix]
+    .filter(query => query.length >= 2)
+    .filter((query, index, queries) =>
+      queries.findIndex(item => item.toLocaleLowerCase('pt-BR') === query.toLocaleLowerCase('pt-BR')) === index);
 }
 
 async function placeFromGoogleMapsUrl(rawUrl: string, apiKey: string) {
@@ -277,27 +296,39 @@ async function placeFromGoogleMapsUrl(rawUrl: string, apiKey: string) {
   if (!reference.query) {
     throw new Error('Não foi possível identificar a empresa nesse link. Abra a ficha da empresa no Google Maps e copie o link novamente.');
   }
-  const searchResponse = await fetch('https://places.googleapis.com/v1/places:searchText', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Goog-Api-Key': apiKey,
-      'X-Goog-FieldMask': searchFieldMask,
-    },
-    body: JSON.stringify({
-      textQuery: reference.query,
-      languageCode: 'pt-BR',
-      regionCode: 'BR',
-      pageSize: 1,
-    }),
-  });
-  const searchResult = await searchResponse.json();
-  if (!searchResponse.ok) {
-    throw new Error(searchResult?.error?.message || 'O Google não conseguiu localizar essa empresa.');
+  let lastSearchError = '';
+  for (const query of placeSearchQueries(reference.query)) {
+    const searchResponse = await fetch('https://places.googleapis.com/v1/places:searchText', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': searchFieldMask,
+      },
+      body: JSON.stringify({
+        textQuery: query,
+        languageCode: 'pt-BR',
+        regionCode: 'BR',
+        pageSize: 5,
+        ...(reference.latitude !== null && reference.longitude !== null ? {
+          locationBias: {
+            circle: {
+              center: { latitude: reference.latitude, longitude: reference.longitude },
+              radius: 1500,
+            },
+          },
+        } : {}),
+      }),
+    });
+    const searchResult = await searchResponse.json();
+    if (!searchResponse.ok) {
+      lastSearchError = searchResult?.error?.message || 'O Google não conseguiu localizar essa empresa.';
+      continue;
+    }
+    const place = Array.isArray(searchResult.places) ? searchResult.places[0] : null;
+    if (place) return mapPlace(place);
   }
-  const place = Array.isArray(searchResult.places) ? searchResult.places[0] : null;
-  if (!place) throw new Error('Nenhuma empresa foi encontrada para esse link.');
-  return mapPlace(place);
+  throw new Error(lastSearchError || 'Nenhuma empresa foi encontrada para esse link. Abra a ficha da empresa no Google Maps e use a opção “Compartilhar” para copiar o link.');
 }
 
 function createGrid(centerLatitude: number, centerLongitude: number, radiusMeters: number, gridSize: number) {
