@@ -4,7 +4,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import React, { useState } from 'react';
-import { Search, Bell, Moon, Sun, HelpCircle, Menu, Check } from 'lucide-react';
+import { Search, Bell, Moon, Sun, HelpCircle, Menu, Check, Repeat2 } from 'lucide-react';
 import { useAuthProfile } from '@/components/AuthGate';
 
 interface HeaderProps {
@@ -14,6 +14,8 @@ interface HeaderProps {
   searchTerm: string;
   setSearchTerm: (term: string) => void;
   onOpenSupport: () => void;
+  onSwitchAccount: () => void;
+  isSwitchingAccount: boolean;
 }
 
 export function Header({
@@ -23,6 +25,8 @@ export function Header({
   searchTerm,
   setSearchTerm,
   onOpenSupport,
+  onSwitchAccount,
+  isSwitchingAccount,
 }: HeaderProps) {
   const profile = useAuthProfile();
   const [showNotifications, setShowNotifications] = useState(false);
@@ -129,6 +133,16 @@ export function Header({
         >
           <HelpCircle className="w-4 h-4" />
           Suporte
+        </button>
+
+        <button
+          onClick={onSwitchAccount}
+          disabled={isSwitchingAccount}
+          className="flex items-center gap-1.5 text-xs font-semibold text-[#0050cb] dark:text-[#3b82f6] hover:bg-[#0066ff]/10 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+          title="Trocar de conta"
+        >
+          <Repeat2 className={`w-4 h-4 ${isSwitchingAccount ? 'animate-spin' : ''}`} />
+          <span className="hidden xl:inline">{isSwitchingAccount ? 'Trocando…' : 'Trocar conta'}</span>
         </button>
 
         {/* User Profile */}

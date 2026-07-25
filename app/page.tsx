@@ -174,6 +174,8 @@ function AuthenticatedHome() {
           searchTerm={searchTerm}
           setSearchTerm={setSearchTerm}
           onOpenSupport={() => setShowSupportModal(true)}
+          onSwitchAccount={() => void handleLogout()}
+          isSwitchingAccount={isLoggingOut}
         />
 
         {/* Content Body */}
