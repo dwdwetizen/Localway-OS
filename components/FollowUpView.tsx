@@ -3,13 +3,19 @@
 import React, { useMemo, useState } from 'react';
 import { CalendarPlus, CheckCircle2, ExternalLink, MessageCircle, PhoneCall, Plus, X } from 'lucide-react';
 import { useLeads } from '@/hooks/use-leads';
-import { Lead, LeadStatus, statusLabel, whatsappLink } from '@/lib/leads';
+import { contactCountdown, ContactUrgency, Lead, LeadStatus, statusLabel, whatsappLink } from '@/lib/leads';
 
 interface FollowUpViewProps {
   onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
 }
 
 const followUpStatuses: LeadStatus[] = ['ligar_depois', 'retornar_depois'];
+
+function countdownClass(urgency: ContactUrgency) {
+  if (urgency === 'red') return 'bg-rose-100 text-rose-700 border-rose-200';
+  if (urgency === 'yellow') return 'bg-amber-100 text-amber-700 border-amber-200';
+  return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+}
 
 export function FollowUpView({ onShowToast }: FollowUpViewProps) {
   const { leads, loading, error, updateLead } = useLeads();
@@ -18,7 +24,6 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
   const [outcomes, setOutcomes] = useState<Record<string, LeadStatus>>({});
   const [addOpen, setAddOpen] = useState(false);
   const [newFollowUp, setNewFollowUp] = useState({ leadId: '', status: 'retornar_depois' as LeadStatus, date: '', note: '' });
-  const [currentTime] = useState(() => Date.now());
 
   const list = useMemo(() => leads
     .filter(lead => followUpStatuses.includes(lead.status))
@@ -64,9 +69,11 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
     onShowToast('Follow-up adicionado.');
   };
 
-  const isDue = (lead: Lead) => Boolean(
-    lead.next_action_at && new Date(lead.next_action_at).getTime() <= currentTime
-  );
+  const isDue = (lead: Lead) => (contactCountdown(lead.next_action_at)?.days ?? 1) <= 0;
+  const isNear = (lead: Lead) => {
+    const days = contactCountdown(lead.next_action_at)?.days;
+    return typeof days === 'number' && days > 0 && days <= 2;
+  };
 
   return <div className="space-y-6 animate-in fade-in duration-300">
     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-[#141936] p-5 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
@@ -77,14 +84,14 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       <Metric label="Agendados" value={list.length} />
       <Metric label="Vencidos / hoje" value={list.filter(isDue).length} warning />
-      <Metric label="Reuniões" value={list.filter(lead => lead.status === 'reuniao_marcada').length} />
+      <Metric label="Próximos 2 dias" value={list.filter(isNear).length} />
     </div>
     <div className="space-y-4">
       {loading && <div className="p-8 text-center text-xs text-[#727687]">Carregando follow-ups…</div>}
       {!loading && !list.length && <div className="p-10 text-center text-xs text-[#727687] bg-white dark:bg-[#141936] rounded-2xl border border-[#c2c6d8]/30">Nenhum retorno pendente. Leads marcados como “ligar depois”, “retornar depois” ou “reunião marcada” aparecerão aqui.</div>}
-      {list.map(lead => <article key={lead.id} className="bg-white dark:bg-[#141936] rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] p-5 shadow-sm">
+      {list.map(lead => { const countdown = contactCountdown(lead.next_action_at); return <article key={lead.id} className="bg-white dark:bg-[#141936] rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] p-5 shadow-sm">
         <div className="flex flex-col lg:flex-row gap-5 justify-between">
-          <div className="space-y-1"><div className="flex items-center gap-2 flex-wrap"><h3 className="font-bold text-sm">{lead.company_name}</h3><span className={`text-[10px] font-bold px-2 py-0.5 rounded ${isDue(lead) ? 'bg-rose-100 text-rose-700' : 'bg-[#0066ff]/10 text-[#0066ff]'}`}>{isDue(lead) ? 'Ação pendente' : statusLabel[lead.status]}</span></div>
+          <div className="space-y-1"><div className="flex items-center gap-2 flex-wrap"><h3 className="font-bold text-sm">{lead.company_name}</h3><span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#0066ff]/10 text-[#0066ff]">{statusLabel[lead.status]}</span>{countdown && <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${countdownClass(countdown.urgency)}`}>{countdown.label}</span>}</div>
             <p className="text-xs text-[#727687]">{lead.decision_maker_name ? `Decisor: ${lead.decision_maker_name}` : 'Decisor não informado'}{lead.receptionist_name ? ` · Atendimento: ${lead.receptionist_name}` : ''}</p>
             <p className="text-[11px] text-[#727687]">⭐ {lead.rating ?? '—'} ({lead.review_count ?? 0} avaliações) · {lead.has_website ? 'Tem site' : 'Sem site'}</p>
             <p className="text-xs text-[#727687]">Próxima ação: {lead.next_action_at ? new Date(lead.next_action_at).toLocaleString('pt-BR') : 'não agendada'}</p>
@@ -97,7 +104,7 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
             <button onClick={() => void saveContact(lead)} className="sm:col-span-3 justify-center flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-[#0066ff] hover:bg-[#0050cb] rounded-xl"><CheckCircle2 className="w-4 h-4" /> Salvar contato</button>
           </div>
         </div>
-      </article>)}
+      </article>;})}
     </div>
     {addOpen && <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="w-full max-w-lg bg-white dark:bg-[#141936] rounded-2xl shadow-2xl border border-[#c2c6d8]/30 p-6 space-y-4">

@@ -1,9 +1,9 @@
 'use client';
 
 import React, { FormEvent, useMemo, useState } from 'react';
-import { Building2, CheckSquare, ExternalLink, Globe2, MessageCircle, PhoneCall, Plus, Search, Sparkles, Square, X } from 'lucide-react';
+import { Building2, CalendarDays, CheckSquare, ExternalLink, Globe2, MessageCircle, PhoneCall, Plus, Search, Sparkles, Square, X } from 'lucide-react';
 import { useLeads } from '@/hooks/use-leads';
-import { Lead, LeadStatus, statusLabel, whatsappLink } from '@/lib/leads';
+import { contactCountdown, ContactUrgency, Lead, LeadStatus, statusLabel, whatsappLink } from '@/lib/leads';
 import { supabase } from '@/lib/supabase';
 
 interface ProspectingViewProps {
@@ -14,6 +14,36 @@ interface ProspectingViewProps {
 const nextSteps: LeadStatus[] = ['novo', 'ligacao_realizada', 'nao_atendeu', 'contato_realizado', 'ligar_depois', 'retornar_depois', 'reuniao_marcada', 'qualificado', 'sem_interesse'];
 const scheduledStatuses: LeadStatus[] = ['ligar_depois', 'retornar_depois', 'reuniao_marcada'];
 const emptyManual = { companyName: '', category: '', city: '', address: '', phone: '', whatsapp: '', email: '', decisionMaker: '', receptionist: '', notes: '' };
+
+function countdownClass(urgency: ContactUrgency) {
+  if (urgency === 'red') return 'bg-rose-100 text-rose-700 border-rose-200';
+  if (urgency === 'yellow') return 'bg-amber-100 text-amber-700 border-amber-200';
+  return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+}
+
+function localDateTimeValue(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function returnDayOptions() {
+  const now = new Date();
+  return Array.from({ length: 14 }, (_, offset) => {
+    const date = new Date(now);
+    date.setDate(now.getDate() + offset);
+    if (offset === 0) {
+      date.setHours(Math.min(23, Math.max(9, now.getHours() + 1)), 0, 0, 0);
+    } else {
+      date.setHours(9, 0, 0, 0);
+    }
+    return {
+      value: localDateTimeValue(date),
+      day: date.getDate(),
+      label: offset === 0 ? 'Hoje' : offset === 1 ? 'Amanhã' : date.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', ''),
+      month: date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', ''),
+    };
+  });
+}
 
 export function ProspectingView({ onShowToast, onOpenAiPitchModal }: ProspectingViewProps) {
   const { leads, loading, error, createLead, updateLead } = useLeads();
@@ -142,10 +172,12 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
 function LeadRow({ lead, selected, toggle, updateStep, onPitch }: { lead: Lead; selected: boolean; toggle: (id: string) => void; updateStep: (lead: Lead, status: LeadStatus, nextActionAt: string | null, notes: string) => Promise<boolean>; onPitch: (name: string, lead?: Lead) => void }) {
   const wa = whatsappLink(lead.whatsapp || lead.phone);
   const profile = lead.health_score === null ? 'Sem análise' : lead.health_score <= 55 ? 'Boa oportunidade' : lead.health_score <= 75 ? 'Oportunidade média' : 'Perfil forte';
+  const savedCountdown = lead.status === 'retornar_depois' ? contactCountdown(lead.next_action_at) : null;
   const [status, setStatus] = useState<LeadStatus>(lead.status);
   const [nextActionAt, setNextActionAt] = useState(lead.next_action_at ? lead.next_action_at.slice(0, 16) : '');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [returnPickerOpen, setReturnPickerOpen] = useState(false);
   const register = async () => {
     setSaving(true);
     const saved = await updateStep(lead, status, nextActionAt ? new Date(nextActionAt).toISOString() : null, notes);
@@ -154,14 +186,25 @@ function LeadRow({ lead, selected, toggle, updateStep, onPitch }: { lead: Lead; 
   };
   return <div className={`p-4 space-y-3 ${selected ? 'bg-[#0066ff]/5' : 'hover:bg-gray-50 dark:hover:bg-gray-800/40'}`}>
     <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-      <div className="flex gap-3 min-w-0"><button onClick={() => toggle(lead.id)} className="mt-1 text-[#0066ff]">{selected ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5 text-gray-300" />}</button><div className="min-w-0 space-y-1"><div className="flex gap-2 items-center flex-wrap"><h4 className="font-bold text-sm">{lead.company_name}</h4><span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#0066ff]/10 text-[#0066ff]">{profile}</span></div><p className="text-xs text-[#727687]">{[lead.category, lead.address].filter(Boolean).join(' • ')}</p><p className="text-[11px] text-[#727687]">⭐ {lead.rating ?? '—'} ({lead.review_count ?? 0} avaliações) · {lead.has_website ? 'Tem site' : 'Sem site'} · {lead.photo_count ?? 0} fotos</p>{lead.opportunity && <p className="text-[11px] text-amber-700">{lead.opportunity}</p>}</div></div>
+      <div className="flex gap-3 min-w-0"><button onClick={() => toggle(lead.id)} className="mt-1 text-[#0066ff]">{selected ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5 text-gray-300" />}</button><div className="min-w-0 space-y-1"><div className="flex gap-2 items-center flex-wrap"><h4 className="font-bold text-sm">{lead.company_name}</h4><span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#0066ff]/10 text-[#0066ff]">{profile}</span>{savedCountdown && <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${countdownClass(savedCountdown.urgency)}`}>{savedCountdown.label}</span>}</div><p className="text-xs text-[#727687]">{[lead.category, lead.address].filter(Boolean).join(' • ')}</p><p className="text-[11px] text-[#727687]">⭐ {lead.rating ?? '—'} ({lead.review_count ?? 0} avaliações) · {lead.has_website ? 'Tem site' : 'Sem site'} · {lead.photo_count ?? 0} fotos</p>{lead.opportunity && <p className="text-[11px] text-amber-700">{lead.opportunity}</p>}</div></div>
       <div className="flex items-center gap-1 flex-wrap shrink-0">{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer" title="Abrir perfil no Google Maps" className="p-2 text-[#0066ff] hover:bg-[#0066ff]/10 rounded-lg"><ExternalLink className="w-4 h-4" /></a>}{wa && <a href={wa} target="_blank" rel="noreferrer" title="Abrir WhatsApp" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg"><MessageCircle className="w-4 h-4" /></a>}{lead.phone && <a href={`tel:${lead.phone.replace(/\D/g, '')}`} title="Ligar" className="p-2 text-[#0066ff] hover:bg-[#0066ff]/10 rounded-lg"><PhoneCall className="w-4 h-4" /></a>}<button onClick={() => onPitch(lead.company_name, lead)} className="px-3 py-2 bg-[#0066ff] hover:bg-[#0050cb] text-white text-xs font-bold rounded-xl flex items-center gap-1"><Sparkles className="w-3.5 h-3.5" /> IA</button></div>
     </div>
     <div className="grid grid-cols-1 md:grid-cols-[180px_1fr_auto] gap-2 items-end pl-8">
-      <label className="text-[10px] font-bold text-[#727687]">RESULTADO<select value={status} onChange={event => setStatus(event.target.value as LeadStatus)} className="mt-1 w-full px-2 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl">{nextSteps.map(item => <option key={item} value={item}>{statusLabel[item]}</option>)}</select></label>
+      <label className="text-[10px] font-bold text-[#727687]">RESULTADO<select value={status} onChange={event => { const nextStatus = event.target.value as LeadStatus; setStatus(nextStatus); setReturnPickerOpen(nextStatus === 'retornar_depois'); }} className="mt-1 w-full px-2 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl">{nextSteps.map(item => <option key={item} value={item}>{statusLabel[item]}</option>)}</select></label>
       <label className="text-[10px] font-bold text-[#727687]">ANOTAÇÃO<input value={notes} onChange={event => setNotes(event.target.value)} placeholder="Ex.: falou com o decisor, pediu retorno…" className="mt-1 w-full px-3 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl" /></label>
       <button disabled={saving} onClick={() => void register()} className="px-4 py-2.5 rounded-xl bg-[#0066ff] disabled:opacity-50 text-white text-xs font-bold">{saving ? 'Salvando…' : 'Registrar'}</button>
-      {scheduledStatuses.includes(status) && <label className="md:col-start-1 text-[10px] font-bold text-[#727687]">PRÓXIMO CONTATO<input type="datetime-local" value={nextActionAt} onChange={event => setNextActionAt(event.target.value)} className="mt-1 w-full px-3 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl" /></label>}
+      {status === 'retornar_depois' && <div className="md:col-start-1 md:col-span-2 relative">
+        <p className="text-[10px] font-bold text-[#727687]">DIA DO RETORNO</p>
+        <button type="button" onClick={() => setReturnPickerOpen(current => !current)} className="mt-1 w-full sm:w-auto min-w-52 px-3 py-2 text-xs font-bold flex items-center justify-between gap-3 bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl">
+          <span>{nextActionAt ? new Date(nextActionAt).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' }) : 'Escolher o dia'}</span>
+          <CalendarDays className="w-4 h-4 text-[#0066ff]" />
+        </button>
+        {returnPickerOpen && <div className="mt-2 p-3 rounded-2xl border border-[#c2c6d8]/40 bg-white dark:bg-[#141936] shadow-xl">
+          <p className="text-[10px] text-[#727687] mb-2">Mês e ano são definidos automaticamente. O retorno será marcado para o próximo horário útil.</p>
+          <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">{returnDayOptions().map(option => <button key={option.value} type="button" onClick={() => { setNextActionAt(option.value); setReturnPickerOpen(false); }} className={`p-2 rounded-xl border text-center hover:border-[#0066ff] hover:bg-[#0066ff]/5 ${nextActionAt === option.value ? 'border-[#0066ff] bg-[#0066ff]/10 text-[#0066ff]' : 'border-[#c2c6d8]/40'}`}><span className="block text-[9px] font-bold uppercase">{option.label}</span><strong className="block text-lg leading-5">{option.day}</strong><span className="block text-[9px] uppercase text-[#727687]">{option.month}</span></button>)}</div>
+        </div>}
+      </div>}
+      {scheduledStatuses.includes(status) && status !== 'retornar_depois' && <label className="md:col-start-1 text-[10px] font-bold text-[#727687]">PRÓXIMO CONTATO<input type="datetime-local" value={nextActionAt} onChange={event => setNextActionAt(event.target.value)} className="mt-1 w-full px-3 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl" /></label>}
     </div>
   </div>;
 }

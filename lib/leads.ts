@@ -105,6 +105,27 @@ export function whatsappLink(value: string | null) {
   return phone ? `https://wa.me/55${phone.replace(/^55/, '')}` : null;
 }
 
+export type ContactUrgency = 'green' | 'yellow' | 'red';
+
+export function contactCountdown(value: string | null) {
+  if (!value) return null;
+  const target = new Date(value);
+  if (Number.isNaN(target.getTime())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  target.setHours(0, 0, 0, 0);
+  const days = Math.round((target.getTime() - today.getTime()) / 86_400_000);
+  const urgency: ContactUrgency = days <= 0 ? 'red' : days <= 2 ? 'yellow' : 'green';
+  const label = days < 0
+    ? `${Math.abs(days)} ${Math.abs(days) === 1 ? 'dia atrasado' : 'dias atrasados'}`
+    : days === 0
+      ? 'Contato hoje'
+      : days === 1
+        ? 'Contato amanhã'
+        : `Contato em ${days} dias`;
+  return { days, urgency, label };
+}
+
 export function googleCalendarLink(lead: Lead, start: string) {
   const begins = new Date(start);
   const ends = new Date(begins.getTime() + 60 * 60 * 1000);
