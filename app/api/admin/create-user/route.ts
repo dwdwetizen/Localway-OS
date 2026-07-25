@@ -6,11 +6,17 @@ export async function POST(request: NextRequest) {
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const service = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const token = request.headers.get('authorization')?.replace('Bearer ', '');
-  if (!url || !anon || !service || !token) return NextResponse.json({ error: 'Configuração de criação de login incompleta. Confira as chaves seguras da Vercel.' }, { status: 500 });
-  const caller = createClient(url, anon, { global: { headers: { Authorization: `Bearer ${token}` } } });
-  const { data: current } = await caller.auth.getUser(token);
+  const missing = [
+    !url && 'NEXT_PUBLIC_SUPABASE_URL',
+    !anon && 'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+    !service && 'SUPABASE_SERVICE_ROLE_KEY',
+    !token && 'sessão de administrador',
+  ].filter(Boolean);
+  if (missing.length) return NextResponse.json({ error: `Falta: ${missing.join(', ')}.` }, { status: 500 });
+  const caller = createClient(url!, anon!, { global: { headers: { Authorization: `Bearer ${token}` } } });
+  const { data: current } = await caller.auth.getUser(token!);
   if (!current.user) return NextResponse.json({ error: 'Sessão inválida.' }, { status: 401 });
-  const admin = createClient(url, service);
+  const admin = createClient(url!, service!);
   const { data: profile } = await admin.from('profiles').select('role').eq('id', current.user.id).single();
   if (profile?.role !== 'Administrador') return NextResponse.json({ error: 'Apenas administradores podem criar usuários.' }, { status: 403 });
   const { email, password, nome, role, permissions } = await request.json();
