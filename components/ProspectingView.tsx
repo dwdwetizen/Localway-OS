@@ -3,7 +3,7 @@
 import React, { FormEvent, useMemo, useState } from 'react';
 import { CheckSquare, ExternalLink, MessageCircle, PhoneCall, Plus, Search, Sparkles, Square, X } from 'lucide-react';
 import { useLeads } from '@/hooks/use-leads';
-import { Lead, LeadStatus, statusLabel, whatsappLink } from '@/lib/leads';
+import { googleCalendarLink, Lead, LeadStatus, statusLabel, whatsappLink } from '@/lib/leads';
 import { supabase } from '@/lib/supabase';
 
 interface ProspectingViewProps {
@@ -72,6 +72,7 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
       lead.id,
       {
         status,
+        crm_stage: status === 'qualificado' ? (lead.crm_stage || 'qualificacao') : lead.crm_stage,
         next_action_at: scheduledStatuses.includes(status) ? nextActionAt : null,
         last_contact_at: status === 'novo' ? lead.last_contact_at : new Date().toISOString(),
       },
@@ -83,7 +84,12 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
       },
     );
     if (result.error) onShowToast(result.error, 'error');
-    else if (status === 'retornar_depois' || status === 'ligar_depois' || status === 'reuniao_marcada') onShowToast('Lead enviado para a lista de Follow-up.');
+    else if (status === 'reuniao_marcada' && nextActionAt) {
+      window.open(googleCalendarLink({ ...lead, status }, nextActionAt), '_blank', 'noopener,noreferrer');
+      onShowToast('Lead enviado ao Follow-up. O evento do Google Agenda foi preparado em outra aba.');
+    }
+    else if (status === 'retornar_depois' || status === 'ligar_depois') onShowToast('Lead enviado para a lista de Follow-up.');
+    else if (status === 'qualificado') onShowToast('Lead enviado para a primeira coluna do CRM.');
     else onShowToast('Contato registrado no histórico.');
     return !result.error;
   };
@@ -91,7 +97,7 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
   return <div className="space-y-6 animate-in fade-in duration-300">
     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-[#141936] p-5 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
       <div><h2 className="text-xl font-bold font-poppins text-[#1a1b22] dark:text-[#f8f7ff]">Prospecção Ativa & Auditoria em Lote</h2><p className="text-xs text-[#727687]">Gere empresas pelo Google Maps, analise oportunidades e inicie o contato.</p></div>
-      <button aria-label="Adicionar empresa presencial" title="Adicionar empresa presencial" onClick={() => setManualOpen(true)} className="w-10 h-10 grid place-items-center bg-[#0066ff] hover:bg-[#0050cb] text-white rounded-xl shadow"><Plus className="w-5 h-5" /></button>
+      <button aria-label="Adicionar empresa presencial" title="Adicionar empresa presencial" onClick={() => setManualOpen(true)} className="px-4 h-10 flex items-center gap-2 bg-[#0066ff] hover:bg-[#0050cb] text-white rounded-xl shadow text-xs font-bold"><Plus className="w-4 h-4" /> Adicionar presencial</button>
     </div>
 
     <div className="bg-white dark:bg-[#141936] p-4 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-4 items-end">

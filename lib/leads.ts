@@ -113,14 +113,18 @@ export function googleCalendarLink(lead: Lead, start: string) {
   const details = [
     `Empresa: ${lead.company_name}`,
     lead.decision_maker_name ? `Decisor: ${lead.decision_maker_name}` : '',
+    lead.receptionist_name ? `Atendimento: ${lead.receptionist_name}` : '',
     lead.phone ? `Telefone: ${lead.phone}` : '',
     lead.address ? `Endereço: ${lead.address}` : '',
+    lead.google_maps_url ? `Google Maps: ${lead.google_maps_url}` : '',
+    lead.notes ? `Observações: ${lead.notes}` : '',
   ].filter(Boolean).join('\n');
   const params = new URLSearchParams({
     action: 'TEMPLATE',
     text: `Reunião — ${lead.company_name}`,
     dates: `${stamp(begins)}/${stamp(ends)}`,
     details,
+    ...(lead.address ? { location: lead.address } : {}),
   });
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }

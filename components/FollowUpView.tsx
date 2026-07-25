@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { CalendarPlus, CheckCircle2, ExternalLink, MessageCircle, PhoneCall } from 'lucide-react';
+import { CalendarPlus, CheckCircle2, ExternalLink, MessageCircle, PhoneCall, Plus, X } from 'lucide-react';
 import { useLeads } from '@/hooks/use-leads';
 import { googleCalendarLink, Lead, LeadStatus, statusLabel, whatsappLink } from '@/lib/leads';
 
@@ -16,6 +16,8 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [dates, setDates] = useState<Record<string, string>>({});
   const [outcomes, setOutcomes] = useState<Record<string, LeadStatus>>({});
+  const [addOpen, setAddOpen] = useState(false);
+  const [newFollowUp, setNewFollowUp] = useState({ leadId: '', status: 'retornar_depois' as LeadStatus, date: '', note: '' });
   const [currentTime] = useState(() => Date.now());
 
   const list = useMemo(() => leads
@@ -29,13 +31,41 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
     const note = notes[lead.id] || '';
     const result = await updateLead(
       lead.id,
-      { status, next_action_at: nextActionAt, last_contact_at: new Date().toISOString(), notes: note ? `${lead.notes ? `${lead.notes}\n\n` : ''}${new Date().toLocaleString('pt-BR')}: ${note}` : lead.notes },
-      { outcome: statusLabel[status], notes: note || null, next_action_at: nextActionAt, event_type: 'follow_up' },
+      { status, crm_stage: status === 'qualificado' ? (lead.crm_stage || 'qualificacao') : lead.crm_stage, next_action_at: followUpStatuses.includes(status) ? nextActionAt : null, last_contact_at: new Date().toISOString(), notes: note ? `${lead.notes ? `${lead.notes}\n\n` : ''}${new Date().toLocaleString('pt-BR')}: ${note}` : lead.notes },
+      { outcome: statusLabel[status], notes: note || null, next_action_at: followUpStatuses.includes(status) ? nextActionAt : null, event_type: 'follow_up' },
     );
     if (result.error) return onShowToast(result.error, 'error');
     if (status === 'reuniao_marcada' && nextActionAt) window.open(googleCalendarLink({ ...lead, status }, nextActionAt), '_blank', 'noopener,noreferrer');
     setNotes(current => ({ ...current, [lead.id]: '' }));
     onShowToast(status === 'qualificado' ? 'Lead enviado para a etapa de CRM.' : 'Follow-up atualizado.');
+  };
+
+  const addFollowUp = async () => {
+    const lead = leads.find(item => item.id === newFollowUp.leadId);
+    if (!lead) return onShowToast('Selecione uma empresa.', 'error');
+    if (!newFollowUp.date) return onShowToast('Escolha a data e a hora do próximo contato.', 'error');
+    const nextActionAt = new Date(newFollowUp.date).toISOString();
+    const result = await updateLead(
+      lead.id,
+      {
+        status: newFollowUp.status,
+        next_action_at: nextActionAt,
+        notes: newFollowUp.note ? `${lead.notes ? `${lead.notes}\n\n` : ''}${new Date().toLocaleString('pt-BR')}: ${newFollowUp.note}` : lead.notes,
+      },
+      {
+        outcome: `Follow-up criado: ${statusLabel[newFollowUp.status]}`,
+        notes: newFollowUp.note || null,
+        next_action_at: nextActionAt,
+        event_type: 'follow_up_created',
+      },
+    );
+    if (result.error) return onShowToast(result.error, 'error');
+    if (newFollowUp.status === 'reuniao_marcada') {
+      window.open(googleCalendarLink({ ...lead, status: newFollowUp.status }, nextActionAt), '_blank', 'noopener,noreferrer');
+    }
+    setNewFollowUp({ leadId: '', status: 'retornar_depois', date: '', note: '' });
+    setAddOpen(false);
+    onShowToast(newFollowUp.status === 'reuniao_marcada' ? 'Follow-up salvo e evento preparado no Google Agenda.' : 'Follow-up adicionado.');
   };
 
   const isDue = (lead: Lead) => Boolean(
@@ -45,6 +75,7 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
   return <div className="space-y-6 animate-in fade-in duration-300">
     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-[#141936] p-5 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
       <div><h2 className="text-xl font-bold font-poppins">Follow-up</h2><p className="text-xs text-[#727687]">Leads com retorno, ligação ou reunião programada.</p></div>
+      <button onClick={() => setAddOpen(true)} className="h-10 px-4 flex items-center gap-2 rounded-xl bg-[#0066ff] text-white text-xs font-bold"><Plus className="w-4 h-4"/> Adicionar follow-up</button>
     </div>
     {error && <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800">{error}</div>}
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -72,6 +103,18 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
         </div>
       </article>)}
     </div>
+    {addOpen && <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="w-full max-w-lg bg-white dark:bg-[#141936] rounded-2xl shadow-2xl border border-[#c2c6d8]/30 p-6 space-y-4">
+        <div className="flex items-start justify-between"><div><h3 className="font-bold text-lg">Adicionar follow-up</h3><p className="text-xs text-[#727687]">Escolha uma empresa já cadastrada e programe o próximo contato.</p></div><button onClick={() => setAddOpen(false)}><X className="w-5 h-5"/></button></div>
+        <label className="text-xs font-bold block">Empresa<select value={newFollowUp.leadId} onChange={event => setNewFollowUp({ ...newFollowUp, leadId: event.target.value })} className="input mt-1"><option value="">Selecione uma empresa</option>{leads.filter(lead => lead.status !== 'perdido').map(lead => <option key={lead.id} value={lead.id}>{lead.company_name}</option>)}</select></label>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <label className="text-xs font-bold">Tipo<select value={newFollowUp.status} onChange={event => setNewFollowUp({ ...newFollowUp, status: event.target.value as LeadStatus })} className="input mt-1">{followUpStatuses.map(status => <option key={status} value={status}>{statusLabel[status]}</option>)}</select></label>
+          <label className="text-xs font-bold">Data e hora<input type="datetime-local" value={newFollowUp.date} onChange={event => setNewFollowUp({ ...newFollowUp, date: event.target.value })} className="input mt-1"/></label>
+        </div>
+        <label className="text-xs font-bold block">Anotação<textarea rows={3} value={newFollowUp.note} onChange={event => setNewFollowUp({ ...newFollowUp, note: event.target.value })} className="input mt-1" placeholder="Ex.: falou com o decisor e pediu retorno..."/></label>
+        <button onClick={() => void addFollowUp()} className="w-full h-11 flex items-center justify-center gap-2 rounded-xl bg-[#0066ff] text-white text-xs font-bold"><CalendarPlus className="w-4 h-4"/> Salvar follow-up</button>
+      </div>
+    </div>}
   </div>;
 }
 
