@@ -18,7 +18,8 @@ export async function POST(request: NextRequest) {
   if (!current.user) return NextResponse.json({ error: 'Sessão inválida.' }, { status: 401 });
   const admin = createClient(url!, service!);
   const { data: profile } = await admin.from('profiles').select('role').eq('id', current.user.id).single();
-  if (profile?.role !== 'Administrador') return NextResponse.json({ error: 'Apenas administradores podem criar usuários.' }, { status: 403 });
+  const normalizedRole = profile?.role?.trim().toLowerCase();
+  if (normalizedRole !== 'administrador' && normalizedRole !== 'admin') return NextResponse.json({ error: 'Apenas administradores podem criar usuários.' }, { status: 403 });
   const { email, password, nome, role, permissions } = await request.json();
   if (!email || !password || !nome || !role) return NextResponse.json({ error: 'Preencha nome, e-mail, senha e cargo.' }, { status: 400 });
   if (password.length < 8) return NextResponse.json({ error: 'A senha deve ter pelo menos 8 caracteres.' }, { status: 400 });
