@@ -40,6 +40,8 @@ interface SidebarProps {
   isOpenMobile: boolean;
   onCloseMobile: () => void;
   onOpenSupport: () => void;
+  onLogout: () => void;
+  isLoggingOut: boolean;
 }
 
 export function Sidebar({
@@ -48,6 +50,8 @@ export function Sidebar({
   isOpenMobile,
   onCloseMobile,
   onOpenSupport,
+  onLogout,
+  isLoggingOut,
 }: SidebarProps) {
   const navItems: Array<{
     id: TabType;
@@ -146,9 +150,12 @@ export function Sidebar({
             <p className="text-[#727687]">42 GBPs Ativos</p>
           </div>
           <button
-            onClick={() => alert('Sessão encerrada com segurança.')}
-            className="p-1.5 hover:bg-white/10 rounded-lg text-rose-400 hover:text-rose-300 transition-colors"
-            title="Sair"
+            type="button"
+            onClick={onLogout}
+            disabled={isLoggingOut}
+            className="p-1.5 hover:bg-white/10 rounded-lg text-rose-400 hover:text-rose-300 transition-colors disabled:cursor-wait disabled:opacity-50"
+            title={isLoggingOut ? 'Saindo…' : 'Sair'}
+            aria-label={isLoggingOut ? 'Saindo da conta' : 'Sair da conta'}
           >
             <LogOut className="w-4 h-4" />
           </button>

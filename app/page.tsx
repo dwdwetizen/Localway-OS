@@ -21,6 +21,7 @@ import { AiReviewModal } from '@/components/AiReviewModal';
 import { SupportModal } from '@/components/SupportModal';
 import { AuthGate } from '@/components/AuthGate';
 import { Lead } from '@/lib/leads';
+import { supabase, supabaseConfigurationError } from '@/lib/supabase';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
@@ -28,6 +29,7 @@ export default function Home() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   // Modals state
   const [aiPitchData, setAiPitchData] = useState<{ isOpen: boolean; companyName: string; lead?: Lead }>({
@@ -91,6 +93,20 @@ export default function Home() {
     setAiReviewData({ isOpen: true, companyName, reviewerName, reviewText });
   };
 
+  const handleLogout = async () => {
+    if (!supabase) {
+      showToast(supabaseConfigurationError(), 'error');
+      return;
+    }
+
+    setIsLoggingOut(true);
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
+    if (error) {
+      setIsLoggingOut(false);
+      showToast('Não foi possível sair da conta. Tente novamente.', 'error');
+    }
+  };
+
   return (
     <AuthGate><div className="min-h-screen bg-[#fbf8ff] dark:bg-[#0a0e27] text-[#1a1b22] dark:text-[#f8f7ff] transition-colors duration-300">
       {/* Fixed Sidebar */}
@@ -100,6 +116,8 @@ export default function Home() {
         isOpenMobile={isMobileSidebarOpen}
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
         onOpenSupport={() => setShowSupportModal(true)}
+        onLogout={() => void handleLogout()}
+        isLoggingOut={isLoggingOut}
       />
 
       {/* Main Layout Area */}
