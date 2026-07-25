@@ -34,6 +34,10 @@ export interface Lead {
   has_website: boolean | null;
   health_score: number | null;
   opportunity: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  analysis_data: LeadAnalysisData | null;
+  analysed_at: string | null;
   crm_stage: CrmStage | null;
   estimated_value: number | null;
   created_by: string | null;
@@ -43,6 +47,25 @@ export interface Lead {
   last_contact_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface LeadAnalysisData {
+  summary?: string;
+  strengths?: string[];
+  weaknesses?: string[];
+  recommendations?: Array<{
+    title: string;
+    detail: string;
+    priority: 'alta' | 'media' | 'baixa';
+  }>;
+  metrics?: {
+    reputation?: number;
+    visibility?: number;
+    completeness?: number;
+    conversion?: number;
+  };
+  business_status?: string;
+  opening_hours_count?: number;
 }
 
 export interface LeadInteraction {

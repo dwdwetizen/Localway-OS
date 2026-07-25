@@ -11,6 +11,7 @@ export type AuthProfile = {
   role: string | null;
   permissions: string[] | null;
   is_active: boolean;
+  photo_url: string | null;
 };
 
 const AuthProfileContext = createContext<AuthProfile | null>(null);
@@ -28,8 +29,9 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const client = supabase;
     if (!client) return;
-    const validate = async () => { const { data } = await client.auth.getSession(); if (!data.session) { setProfile(null); setAuthenticated(false); setReady(true); return; } const { data: currentProfile } = await client.from('profiles').select('id, email, nome, role, permissions, is_active').eq('id', data.session.user.id).maybeSingle(); if (!currentProfile?.is_active) { await client.auth.signOut(); setProfile(null); setMessage('Este e-mail não está autorizado a acessar o LocalWay OS.'); setAuthenticated(false); } else { setProfile(currentProfile as AuthProfile); setAuthenticated(true); } setReady(true); };
-    void validate(); const { data: subscription } = client.auth.onAuthStateChange((_event, session) => { if (!session) { setProfile(null); setAuthenticated(false); } else window.setTimeout(() => void validate(), 0); }); return () => subscription.subscription.unsubscribe();
+    const validate = async () => { const { data } = await client.auth.getSession(); if (!data.session) { setProfile(null); setAuthenticated(false); setReady(true); return; } const { data: currentProfile } = await client.from('profiles').select('id, email, nome, role, permissions, is_active, photo_url').eq('id', data.session.user.id).maybeSingle(); if (!currentProfile?.is_active) { await client.auth.signOut(); setProfile(null); setMessage('Este e-mail não está autorizado a acessar o LocalWay OS.'); setAuthenticated(false); } else { let photoUrl: string | null = null; if (currentProfile.photo_url) { const signed = await client.storage.from('profile-photos').createSignedUrl(currentProfile.photo_url, 3600); photoUrl = signed.data?.signedUrl || null; } setProfile({ ...currentProfile, photo_url: photoUrl } as AuthProfile); setAuthenticated(true); } setReady(true); };
+    const refreshOnFocus = () => void validate();
+    void validate(); window.addEventListener('focus', refreshOnFocus); const { data: subscription } = client.auth.onAuthStateChange((_event, session) => { if (!session) { setProfile(null); setAuthenticated(false); } else window.setTimeout(() => void validate(), 0); }); return () => { window.removeEventListener('focus', refreshOnFocus); subscription.subscription.unsubscribe(); };
   }, []);
   const submit = async (event: FormEvent) => { event.preventDefault(); if (!supabase) return setMessage(supabaseConfigurationError()); setSubmitting(true); setMessage(''); const { error } = await supabase.auth.signInWithPassword({ email, password }); setSubmitting(false); if (error) setMessage('Não foi possível entrar. Confira seu e-mail e senha.'); };
   const google = async () => { if (!supabase) return setMessage(supabaseConfigurationError()); setSubmitting(true); setMessage(''); const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } }); if (error) { setSubmitting(false); setMessage('Não foi possível abrir o login com Google.'); } };

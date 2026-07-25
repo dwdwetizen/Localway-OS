@@ -1,24 +1,24 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import Image from 'next/image';
+import React, { useMemo, useState } from 'react';
 import {
-  Search,
-  CheckCircle2,
-  Star,
-  Phone,
-  Navigation,
-  Globe,
-  Eye,
-  Sparkles,
-  TrendingUp,
   AlertCircle,
-  MessageSquare,
-  Image as ImageIcon,
-  ChevronRight,
+  CheckCircle2,
+  ExternalLink,
+  Globe,
+  Loader2,
+  MapPin,
+  Phone,
   RefreshCw,
+  ShieldCheck,
+  Sparkles,
+  Star,
+  TrendingUp,
   Zap,
 } from 'lucide-react';
+import { useAuthProfile } from '@/components/AuthGate';
+import { useLeads } from '@/hooks/use-leads';
+import { Lead, LeadAnalysisData } from '@/lib/leads';
 import { supabase } from '@/lib/supabase';
 
 interface AnalisesViewProps {
@@ -26,438 +26,229 @@ interface AnalisesViewProps {
   onOpenAiReviewModal: (companyName: string, reviewerName: string, reviewText: string) => void;
 }
 
-export function AnalisesView({
-  onShowToast,
-  onOpenAiReviewModal,
-}: AnalisesViewProps) {
-  const [selectedCompany, setSelectedCompany] = useState('padaria');
-  const [roiGrowth, setRoiGrowth] = useState(35);
-  const [canSeeSolutions, setCanSeeSolutions] = useState(false);
+const metricLabels: Record<string, string> = {
+  reputation: 'Reputação',
+  visibility: 'Visibilidade',
+  completeness: 'Completude',
+  conversion: 'Conversão',
+};
 
-  useEffect(() => {
-    const loadPermission = async () => {
-      if (!supabase) return;
-      const { data: session } = await supabase.auth.getSession();
-      const userId = session.session?.user.id;
-      if (!userId) return;
-      const { data } = await supabase.from('profiles').select('role, permissions').eq('id', userId).single();
-      setCanSeeSolutions(data?.role === 'Administrador' || (data?.permissions || []).includes('analises_solucoes'));
-    };
-    void loadPermission();
-  }, []);
+function scoreLabel(score: number) {
+  if (score >= 80) return 'FORTE';
+  if (score >= 60) return 'REGULAR';
+  return 'OPORTUNIDADE';
+}
 
-  const companiesData = {
-    padaria: {
-      name: 'Padaria & Confeitaria Silva',
-      category: 'Padaria e Cafetaria',
-      address: 'Rua das Flores, 450 - Centro, São Paulo - SP',
-      rating: 4.2,
-      totalReviews: 148,
-      score: 72,
-      scoreText: 'BOM',
-      verified: true,
-      calls: '842',
-      routes: '3.1k',
-      siteClicks: '1.2k',
-      views: '12.4k',
-      reviews: [
+function formatDate(value: string | null) {
+  return value ? new Date(value).toLocaleString('pt-BR') : 'Ainda não atualizada';
+}
+
+export function AnalisesView({ onShowToast }: AnalisesViewProps) {
+  const profile = useAuthProfile();
+  const { leads, loading, error, updateLead } = useLeads();
+  const analyzable = useMemo(
+    () => leads.filter(lead => Boolean(lead.google_place_id)),
+    [leads],
+  );
+  const [selectedId, setSelectedId] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [roiGrowth, setRoiGrowth] = useState(30);
+
+  const selected = analyzable.find(lead => lead.id === selectedId) || analyzable[0] || null;
+  const analysis = selected?.analysis_data || {};
+  const score = selected?.health_score ?? 0;
+  const canSeeSolutions = ['admin', 'administrador'].includes((profile.role || '').toLowerCase())
+    || (profile.permissions || []).includes('analises_solucoes');
+
+  const refreshAnalysis = async () => {
+    if (!selected || !supabase) return;
+    setRefreshing(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const response = await fetch('/api/places', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${sessionData.session?.access_token || ''}`,
+        },
+        body: JSON.stringify({ action: 'analyze', placeId: selected.google_place_id }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Não foi possível atualizar a análise.');
+      const place = result.place as Partial<Lead>;
+      const nextAnalysis = (place.analysis_data || {}) as LeadAnalysisData;
+      const updateResult = await updateLead(
+        selected.id,
         {
-          id: '1',
-          name: 'Juliana Costa',
-          rating: 2,
-          date: 'Ontem',
-          text: 'Pães deliciosos, porém o atendimento ao cliente no balcão pela manhã demorou mais de 20 minutos.',
-          responded: false,
+          company_name: place.company_name || selected.company_name,
+          category: place.category || selected.category,
+          address: place.address || selected.address,
+          phone: place.phone || selected.phone,
+          whatsapp: place.whatsapp || selected.whatsapp,
+          google_maps_url: place.google_maps_url || selected.google_maps_url,
+          website_url: place.website_url || selected.website_url,
+          latitude: place.latitude ?? selected.latitude,
+          longitude: place.longitude ?? selected.longitude,
+          rating: place.rating ?? selected.rating,
+          review_count: place.review_count ?? selected.review_count,
+          photo_count: place.photo_count ?? selected.photo_count,
+          has_website: place.has_website ?? selected.has_website,
+          health_score: place.health_score ?? selected.health_score,
+          opportunity: place.opportunity || selected.opportunity,
+          analysis_data: nextAnalysis,
+          analysed_at: place.analysed_at || new Date().toISOString(),
         },
         {
-          id: '2',
-          name: 'Marcos Vinicius',
-          rating: 5,
-          date: 'Há 3 dias',
-          text: 'Melhor croissant da região! Recomendo muito o café especial.',
-          responded: true,
+          outcome: 'Análise do perfil atualizada',
+          notes: `Score ${place.health_score ?? selected.health_score ?? 0}`,
+          event_type: 'profile_analysis',
         },
-      ],
-    },
-    clinica: {
-      name: 'Clínica OdontoSorriso',
-      category: 'Dentista & Estética Oral',
-      address: 'Av. Paulista, 1200 - Conjunto 42, São Paulo - SP',
-      rating: 4.8,
-      totalReviews: 312,
-      score: 88,
-      scoreText: 'EXCELENTE',
-      verified: true,
-      calls: '1.450',
-      routes: '5.2k',
-      siteClicks: '2.8k',
-      views: '24.1k',
-      reviews: [
-        {
-          id: '3',
-          name: 'Renata Lemos',
-          rating: 5,
-          date: 'Há 1 dia',
-          text: 'Atendimento impecável do Dr. Lucas. Pontual e muito atencioso!',
-          responded: false,
-        },
-      ],
-    },
+      );
+      if (updateResult.error) throw new Error(updateResult.error);
+
+      const { error: snapshotError } = await supabase.from('lead_analyses').insert({
+        lead_id: selected.id,
+        score: place.health_score ?? selected.health_score ?? 0,
+        summary: nextAnalysis.summary || place.opportunity || 'Análise atualizada',
+        strengths: nextAnalysis.strengths || [],
+        weaknesses: nextAnalysis.weaknesses || [],
+        recommendations: nextAnalysis.recommendations || [],
+        metrics: nextAnalysis.metrics || {},
+        source: 'google_places',
+      });
+      if (snapshotError) throw new Error(`Perfil atualizado, mas o histórico falhou: ${snapshotError.message}`);
+      onShowToast('Análise atualizada e salva no histórico.', 'success');
+    } catch (requestError) {
+      onShowToast(requestError instanceof Error ? requestError.message : 'Erro ao atualizar análise.', 'error');
+    } finally {
+      setRefreshing(false);
+    }
   };
 
-  const current = companiesData[selectedCompany as keyof typeof companiesData];
+  if (loading) {
+    return <div className="p-12 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-[#0066ff]" /></div>;
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      {/* Top Header & Search Company Dropdown */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-[#141936] p-5 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-[#0066ff]/10 text-[#0066ff] flex items-center justify-center font-bold">
-            <Zap className="w-6 h-6" />
-          </div>
+          <div className="w-12 h-12 rounded-2xl bg-[#0066ff]/10 text-[#0066ff] flex items-center justify-center"><Zap className="w-6 h-6" /></div>
           <div>
-            <h2 className="text-xl font-bold font-poppins text-[#1a1b22] dark:text-[#f8f7ff]">
-              Auditoria & Check-up GBP
-            </h2>
-            <p className="text-xs text-[#727687]">
-              Diagnóstico em tempo real da integridade do perfil no Google Maps
-            </p>
+            <h2 className="text-xl font-bold font-poppins">Auditoria de Perfil Google</h2>
+            <p className="text-xs text-[#727687]">Dados reais coletados pelo Google Places e salvos no histórico.</p>
           </div>
         </div>
-
-        <div className="flex items-center gap-3">
-          <label className="text-xs font-bold text-[#727687] whitespace-nowrap hidden sm:inline">
-            Empresa Selecionada:
-          </label>
-          <select
-            value={selectedCompany}
-            onChange={(e) => setSelectedCompany(e.target.value)}
-            className="bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 dark:border-[#2e366b] text-[#1a1b22] dark:text-[#f8f7ff] text-xs font-bold px-4 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0066ff]"
-          >
-            <option value="padaria">Padaria & Confeitaria Silva (Score: 72)</option>
-            <option value="clinica">Clínica OdontoSorriso (Score: 88)</option>
+        <div className="flex items-center gap-2">
+          <select value={selected?.id || ''} onChange={event => setSelectedId(event.target.value)} className="max-w-[290px] bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 text-xs font-bold px-4 py-2.5 rounded-xl">
+            {!analyzable.length && <option value="">Nenhuma empresa do Google</option>}
+            {analyzable.map(lead => <option key={lead.id} value={lead.id}>{lead.company_name} — Score {lead.health_score ?? '—'}</option>)}
           </select>
-          <button
-            onClick={() => onShowToast('Dados do Google Business Profile sincronizados em tempo real!')}
-            className="p-2.5 bg-[#0066ff]/10 text-[#0066ff] hover:bg-[#0066ff] hover:text-white rounded-xl transition-colors"
-            title="Sincronizar dados do Google"
-          >
-            <RefreshCw className="w-4 h-4" />
+          <button disabled={!selected || refreshing} onClick={() => void refreshAnalysis()} className="p-2.5 bg-[#0066ff] disabled:opacity-50 text-white rounded-xl" title="Atualizar pelo Google Places">
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
 
-      {/* Main Info Card & Health Score Gauge */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Company Overview (2 Cols) */}
-        <div className="lg:col-span-2 bg-white dark:bg-[#141936] p-6 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm flex flex-col justify-between">
-          <div>
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="flex gap-4 items-start">
-                <Image
-                  src="https://picsum.photos/seed/bakeryshop/160/160"
-                  alt={current.name}
-                  width={160}
-                  height={160}
-                  className="w-16 h-16 rounded-2xl object-cover border border-[#c2c6d8]/40 shadow-sm"
-                  referrerPolicy="no-referrer"
-                />
+      {error && <div className="p-4 rounded-xl bg-rose-50 text-rose-700 text-xs border border-rose-200">{error}</div>}
+      {!selected ? (
+        <div className="bg-white dark:bg-[#141936] p-10 rounded-2xl border text-center">
+          <MapPin className="w-8 h-8 mx-auto text-[#0066ff] mb-3" />
+          <h3 className="font-bold">Gere o primeiro lead pelo Google</h3>
+          <p className="text-xs text-[#727687] mt-1">As empresas geradas na Prospecção aparecerão aqui automaticamente.</p>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <section className="lg:col-span-2 bg-white dark:bg-[#141936] p-6 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-xl font-bold font-poppins text-[#1a1b22] dark:text-[#f8f7ff]">
-                      {current.name}
-                    </h3>
-                    {current.verified && (
-                      <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-md border border-emerald-500/20">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Verificado Google
-                      </span>
-                    )}
+                    <h3 className="text-xl font-bold">{selected.company_name}</h3>
+                    <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg"><ShieldCheck className="w-3.5 h-3.5" /> Fonte Google</span>
                   </div>
-                  <p className="text-xs text-[#727687] font-medium mt-1">{current.category} • {current.address}</p>
+                  <p className="text-xs text-[#727687] mt-1">{[selected.category, selected.address].filter(Boolean).join(' • ')}</p>
+                  <p className="text-[10px] text-[#727687] mt-2">Última análise: {formatDate(selected.analysed_at)}</p>
+                </div>
+                <div className="flex gap-1">
+                  {selected.google_maps_url && <a href={selected.google_maps_url} target="_blank" rel="noreferrer" className="p-2 text-[#0066ff]" title="Abrir no Google Maps"><ExternalLink className="w-4 h-4" /></a>}
+                  {selected.phone && <a href={`tel:${selected.phone.replace(/\D/g, '')}`} className="p-2 text-[#0066ff]" title="Ligar"><Phone className="w-4 h-4" /></a>}
+                  {selected.website_url && <a href={selected.website_url} target="_blank" rel="noreferrer" className="p-2 text-[#0066ff]" title="Abrir site"><Globe className="w-4 h-4" /></a>}
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5 bg-amber-50 dark:bg-amber-950/40 px-3 py-1.5 rounded-xl border border-amber-500/20">
-                <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
-                <span className="text-sm font-bold text-amber-700 dark:text-amber-300">{current.rating}</span>
-                <span className="text-xs text-[#727687]">({current.totalReviews} avaliações)</span>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
+                <MetricCard icon={<Star className="w-4 h-4 text-amber-500" />} label="Nota Google" value={selected.rating ? selected.rating.toFixed(1) : '—'} />
+                <MetricCard icon={<TrendingUp className="w-4 h-4 text-[#0066ff]" />} label="Avaliações" value={String(selected.review_count ?? 0)} />
+                <MetricCard icon={<Globe className="w-4 h-4 text-emerald-600" />} label="Site" value={selected.has_website ? 'Sim' : 'Não'} />
+                <MetricCard icon={<MapPin className="w-4 h-4 text-purple-600" />} label="Fotos retornadas" value={String(selected.photo_count ?? 0)} />
               </div>
-            </div>
+              <p className="mt-5 p-4 rounded-xl bg-[#f4f2fd] dark:bg-[#10142e] text-xs leading-relaxed">{analysis.summary || selected.opportunity || 'Atualize a análise para gerar o diagnóstico detalhado.'}</p>
+            </section>
 
-            {/* Performance Metrics Cards Row */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 pt-6 border-t border-[#c2c6d8]/20 dark:border-[#2e366b]">
-              <div className="bg-[#f4f2fd] dark:bg-[#10142e] p-3.5 rounded-xl border border-[#c2c6d8]/20 dark:border-[#2e366b]">
-                <div className="flex items-center gap-2 text-[#0066ff] text-xs font-semibold">
-                  <Phone className="w-4 h-4" /> Chamadas
-                </div>
-                <p className="text-lg font-bold font-poppins text-[#1a1b22] dark:text-[#f8f7ff] mt-1">
-                  {current.calls}
-                </p>
-                <span className="text-[10px] text-emerald-600 font-bold">+18% este mês</span>
+            <section className="bg-white dark:bg-[#141936] p-6 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm text-center">
+              <h3 className="font-bold">Health Score</h3>
+              <div className="relative my-5 inline-flex items-center justify-center">
+                <svg className="w-40 h-40 gauge-svg" viewBox="0 0 160 160">
+                  <circle cx="80" cy="80" r="68" className="gauge-circle-bg" />
+                  <circle cx="80" cy="80" r="68" className="gauge-circle-progress stroke-[#0066ff]" style={{ strokeDashoffset: 440 - (440 * score) / 100 }} />
+                </svg>
+                <div className="absolute"><p className="text-4xl font-black">{score}</p><p className="text-[10px] font-extrabold text-[#0066ff]">{scoreLabel(score)}</p></div>
               </div>
-
-              <div className="bg-[#f4f2fd] dark:bg-[#10142e] p-3.5 rounded-xl border border-[#c2c6d8]/20 dark:border-[#2e366b]">
-                <div className="flex items-center gap-2 text-purple-600 text-xs font-semibold">
-                  <Navigation className="w-4 h-4" /> Solicit. Rotas
-                </div>
-                <p className="text-lg font-bold font-poppins text-[#1a1b22] dark:text-[#f8f7ff] mt-1">
-                  {current.routes}
-                </p>
-                <span className="text-[10px] text-emerald-600 font-bold">+24% este mês</span>
+              <div className="space-y-3 text-left">
+                {Object.entries(analysis.metrics || {}).map(([key, value]) => <MetricBar key={key} label={metricLabels[key] || key} value={Number(value)} />)}
               </div>
-
-              <div className="bg-[#f4f2fd] dark:bg-[#10142e] p-3.5 rounded-xl border border-[#c2c6d8]/20 dark:border-[#2e366b]">
-                <div className="flex items-center gap-2 text-emerald-600 text-xs font-semibold">
-                  <Globe className="w-4 h-4" /> Clicks Website
-                </div>
-                <p className="text-lg font-bold font-poppins text-[#1a1b22] dark:text-[#f8f7ff] mt-1">
-                  {current.siteClicks}
-                </p>
-                <span className="text-[10px] text-emerald-600 font-bold">+12% este mês</span>
-              </div>
-
-              <div className="bg-[#f4f2fd] dark:bg-[#10142e] p-3.5 rounded-xl border border-[#c2c6d8]/20 dark:border-[#2e366b]">
-                <div className="flex items-center gap-2 text-amber-600 text-xs font-semibold">
-                  <Eye className="w-4 h-4" /> Views Maps
-                </div>
-                <p className="text-lg font-bold font-poppins text-[#1a1b22] dark:text-[#f8f7ff] mt-1">
-                  {current.views}
-                </p>
-                <span className="text-[10px] text-emerald-600 font-bold">+30% este mês</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Health Score Circular Gauge Card (1 Col) */}
-        <div className="bg-white dark:bg-[#141936] p-6 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm flex flex-col items-center justify-between text-center">
-          <h3 className="font-bold font-poppins text-base text-[#1a1b22] dark:text-[#f8f7ff]">
-            GBP Health Score
-          </h3>
-
-          <div className="relative my-4 flex items-center justify-center">
-            <svg className="w-40 h-40 gauge-svg" viewBox="0 0 160 160">
-              <circle cx="80" cy="80" r="68" className="gauge-circle-bg" />
-              <circle
-                cx="80"
-                cy="80"
-                r="68"
-                className="gauge-circle-progress stroke-[#0066ff]"
-                style={{
-                  strokeDashoffset: 440 - (440 * current.score) / 100,
-                }}
-              />
-            </svg>
-            <div className="absolute flex flex-col items-center justify-center">
-              <span className="text-3xl font-black font-poppins text-[#1a1b22] dark:text-[#f8f7ff]">
-                {current.score}
-              </span>
-              <span className="text-xs font-extrabold tracking-widest uppercase text-[#0066ff]">
-                {current.scoreText}
-              </span>
-            </div>
+            </section>
           </div>
 
-          {/* Breakdown progress bars */}
-          <div className="w-full space-y-2 text-xs text-left">
-            <div>
-              <div className="flex justify-between font-semibold mb-1">
-                <span className="text-[#424656] dark:text-[#b0b4ce]">Completude do Perfil</span>
-                <span className="text-[#1a1b22] dark:text-[#f8f7ff]">95%</span>
-              </div>
-              <div className="w-full h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                <div className="h-full bg-emerald-500 rounded-full" style={{ width: '95%' }} />
-              </div>
-            </div>
-
-            <div>
-              <div className="flex justify-between font-semibold mb-1">
-                <span className="text-[#424656] dark:text-[#b0b4ce]">Qualidade & Fotos</span>
-                <span className="text-[#1a1b22] dark:text-[#f8f7ff]">60%</span>
-              </div>
-              <div className="w-full h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                <div className="h-full bg-amber-500 rounded-full" style={{ width: '60%' }} />
-              </div>
-            </div>
-
-            <div>
-              <div className="flex justify-between font-semibold mb-1">
-                <span className="text-[#424656] dark:text-[#b0b4ce]">Resposta a Avaliações</span>
-                <span className="text-[#1a1b22] dark:text-[#f8f7ff]">45%</span>
-              </div>
-              <div className="w-full h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                <div className="h-full bg-rose-500 rounded-full" style={{ width: '45%' }} />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white dark:bg-[#141936] p-6 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
-        <h3 className="font-bold font-poppins text-lg text-[#1a1b22] dark:text-[#f8f7ff] mb-4">Diagnóstico detalhado do perfil</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-          <div className="p-4 rounded-xl bg-[#f4f2fd] dark:bg-[#10142e]"><p className="font-bold text-[#0066ff]">Reputação</p><p className="mt-2 text-[#424656] dark:text-[#b0b4ce]">Nota {current.rating}/5 com {current.totalReviews} avaliações. O score considera volume, nota e respostas recentes.</p></div>
-          <div className="p-4 rounded-xl bg-[#f4f2fd] dark:bg-[#10142e]"><p className="font-bold text-[#0066ff]">Visibilidade local</p><p className="mt-2 text-[#424656] dark:text-[#b0b4ce]">{current.views} visualizações, {current.routes} rotas e {current.calls} chamadas no período analisado.</p></div>
-          <div className="p-4 rounded-xl bg-[#f4f2fd] dark:bg-[#10142e]"><p className="font-bold text-[#0066ff]">Presença digital</p><p className="mt-2 text-[#424656] dark:text-[#b0b4ce]">{current.siteClicks} acessos ao site. O score mostra a saúde geral do perfil e não expõe as soluções comerciais.</p></div>
-        </div>
-      </div>
-
-      {/* ROI Simulator & Priority Recommendations */}
-      {canSeeSolutions ? <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* ROI Growth Projections */}
-        <div className="bg-gradient-to-br from-[#0050cb] to-[#0066ff] text-white p-6 rounded-2xl shadow-lg flex flex-col justify-between">
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-amber-300 animate-pulse" />
-              <h3 className="font-bold font-poppins text-lg">Simulador de ROI Otimizado por IA</h3>
-            </div>
-            <p className="text-xs text-white/80 leading-relaxed">
-              Arraste o slider para calcular o impacto previsto nas chamadas e conversões de clientes locais ao atingir um Score 95+ no Google Business Profile.
-            </p>
-
-            <div className="pt-4 space-y-2">
-              <div className="flex justify-between text-xs font-bold">
-                <span>Meta de Crescimento Local:</span>
-                <span className="text-amber-300 font-extrabold text-sm">+{roiGrowth}%</span>
-              </div>
-              <input
-                type="range"
-                min="10"
-                max="100"
-                value={roiGrowth}
-                onChange={(e) => setRoiGrowth(Number(e.target.value))}
-                className="w-full accent-amber-400 cursor-pointer h-2 bg-white/20 rounded-lg"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/20">
-              <div>
-                <span className="text-[10px] uppercase font-bold text-white/70">Novas Chamadas Est.</span>
-                <p className="text-xl font-bold font-poppins text-white">
-                  +{Math.round(842 * (roiGrowth / 100))} / mês
-                </p>
-              </div>
-              <div>
-                <span className="text-[10px] uppercase font-bold text-white/70">Receita Adicional Est.</span>
-                <p className="text-xl font-bold font-poppins text-amber-300">
-                  +R$ {(roiGrowth * 180).toLocaleString('pt-BR')}
-                </p>
-              </div>
-            </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <AnalysisList title="Pontos fortes" items={analysis.strengths || []} positive />
+            <AnalysisList title="Pontos de atenção" items={analysis.weaknesses || []} positive={false} />
           </div>
 
-          <button
-            onClick={() => onShowToast('Apresentação de ROI gerada para envio ao cliente!')}
-            className="mt-6 w-full py-2.5 bg-white text-[#0050cb] hover:bg-amber-300 hover:text-[#0050cb] font-bold text-xs rounded-xl shadow transition-all"
-          >
-            Gerar Apresentação de ROI para o Cliente
-          </button>
-        </div>
-
-        {/* Priority Optimizations List */}
-        <div className="bg-white dark:bg-[#141936] p-6 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm flex flex-col justify-between">
-          <div>
-            <h3 className="font-bold font-poppins text-lg text-[#1a1b22] dark:text-[#f8f7ff] mb-4">
-              Recomendações Prioritárias
-            </h3>
-
-            <div className="space-y-3">
-              <div className="p-3 bg-rose-50 dark:bg-rose-950/30 rounded-xl border border-rose-500/20 flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-                <div className="flex-1 text-xs">
-                  <div className="flex justify-between items-center font-bold text-rose-900 dark:text-rose-200">
-                    <span>Responder 3 Avaliações Sem Resposta</span>
-                    <span className="bg-rose-600 text-white text-[9px] px-1.5 py-0.5 rounded uppercase">Urgente</span>
-                  </div>
-                  <p className="text-rose-700 dark:text-rose-300 mt-1">
-                    Avaliações sem resposta reduzem em 30% a taxa de conversão nas buscas locais.
-                  </p>
+          {canSeeSolutions ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <section className="bg-white dark:bg-[#141936] p-6 rounded-2xl border">
+                <div className="flex items-center gap-2 mb-4"><Sparkles className="w-5 h-5 text-[#0066ff]" /><h3 className="font-bold">Recomendações comerciais</h3></div>
+                <div className="space-y-3">
+                  {(analysis.recommendations || []).map((item, index) => (
+                    <div key={`${item.title}-${index}`} className="p-4 rounded-xl bg-[#f4f2fd] dark:bg-[#10142e]">
+                      <div className="flex justify-between gap-2"><p className="text-xs font-bold">{item.title}</p><span className={`text-[9px] uppercase font-bold px-2 py-1 rounded ${item.priority === 'alta' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>{item.priority}</span></div>
+                      <p className="text-[11px] text-[#727687] mt-1">{item.detail}</p>
+                    </div>
+                  ))}
+                  {!analysis.recommendations?.length && <p className="text-xs text-[#727687]">Atualize a análise para gerar recomendações.</p>}
                 </div>
-              </div>
-
-              <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-500/20 flex items-start gap-3">
-                <ImageIcon className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                <div className="flex-1 text-xs">
-                  <div className="flex justify-between items-center font-bold text-amber-900 dark:text-amber-200">
-                    <span>Adicionar 5 Fotos de Alta Resolução</span>
-                    <span className="bg-amber-600 text-white text-[9px] px-1.5 py-0.5 rounded uppercase">Alta</span>
-                  </div>
-                  <p className="text-amber-700 dark:text-amber-300 mt-1">
-                    Perfis com fotos semanais recebem 42% mais pedidos de rota no Google Maps.
-                  </p>
+              </section>
+              <section className="bg-gradient-to-br from-[#0050cb] to-[#0066ff] text-white p-6 rounded-2xl">
+                <h3 className="font-bold flex items-center gap-2"><TrendingUp className="w-5 h-5" /> Cenário comercial</h3>
+                <p className="text-xs text-white/75 mt-2">Simulação interna para apoiar a apresentação. Não representa dados oficiais do Google Business Profile.</p>
+                <label className="block text-xs font-bold mt-6">Crescimento estimado: +{roiGrowth}%<input type="range" min="5" max="100" value={roiGrowth} onChange={event => setRoiGrowth(Number(event.target.value))} className="w-full mt-3 accent-amber-300" /></label>
+                <div className="mt-6 grid grid-cols-2 gap-3">
+                  <div className="p-4 rounded-xl bg-white/10"><p className="text-[10px] text-white/70">Score atual</p><p className="text-2xl font-bold">{score}</p></div>
+                  <div className="p-4 rounded-xl bg-white/10"><p className="text-[10px] text-white/70">Potencial projetado</p><p className="text-2xl font-bold">{Math.min(100, score + Math.round((100 - score) * roiGrowth / 100))}</p></div>
                 </div>
-              </div>
-
-              <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-xl border border-blue-500/20 flex items-start gap-3">
-                <Sparkles className="w-5 h-5 text-[#0066ff] shrink-0 mt-0.5" />
-                <div className="flex-1 text-xs">
-                  <div className="flex justify-between items-center font-bold text-blue-900 dark:text-blue-200">
-                    <span>Publicar Oferta da Semana GBP</span>
-                    <span className="bg-[#0066ff] text-white text-[9px] px-1.5 py-0.5 rounded uppercase">Recomendado</span>
-                  </div>
-                  <p className="text-blue-700 dark:text-blue-300 mt-1">
-                    Ative o botão de chamada para ação direto no card do Google.
-                  </p>
-                </div>
-              </div>
+              </section>
             </div>
-          </div>
-        </div>
-      </div> : <div className="p-4 bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/30 rounded-2xl text-xs text-[#727687]">Você está vendo o diagnóstico do perfil. As recomendações e simuladores comerciais foram reservados pelo administrador.</div>}
-
-      {/* Reviews Section with AI Auto-respond Modal trigger */}
-      <div className="bg-white dark:bg-[#141936] p-6 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <MessageSquare className="w-5 h-5 text-[#0066ff]" />
-            <h3 className="font-bold font-poppins text-lg text-[#1a1b22] dark:text-[#f8f7ff]">
-              Avaliações Recentes do Perfil
-            </h3>
-          </div>
-          <span className="text-xs text-[#727687]">Monitored via Google Business Profile API</span>
-        </div>
-
-        <div className="space-y-4">
-          {current.reviews.map((rev) => (
-            <div
-              key={rev.id}
-              className="p-4 rounded-xl border border-[#c2c6d8]/30 dark:border-[#2e366b] bg-[#f4f2fd]/50 dark:bg-[#10142e]/50 flex flex-col md:flex-row md:items-center justify-between gap-4"
-            >
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-xs text-[#1a1b22] dark:text-[#f8f7ff]">{rev.name}</span>
-                  <div className="flex text-amber-400">
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <Star
-                        key={i}
-                        className={`w-3.5 h-3.5 ${i < rev.rating ? 'fill-amber-400' : 'text-gray-300 dark:text-gray-600'}`}
-                      />
-                    ))}
-                  </div>
-                  <span className="text-[10px] text-[#727687]">{rev.date}</span>
-                </div>
-                <p className="text-xs text-[#424656] dark:text-[#b0b4ce]">&quot;{rev.text}&quot;</p>
-              </div>
-
-              <div>
-                {!rev.responded && canSeeSolutions ? (
-                  <button
-                    onClick={() => onOpenAiReviewModal(current.name, rev.name, rev.text)}
-                    className="flex items-center gap-1.5 px-3.5 py-2 bg-[#0066ff] hover:bg-[#0050cb] text-white font-bold text-xs rounded-xl shadow transition-all active:scale-95"
-                  >
-                    <Sparkles className="w-4 h-4" />
-                    Responder com IA
-                  </button>
-                ) : rev.responded ? (
-                  <span className="text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 rounded-xl border border-emerald-500/20 flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Respondida
-                  </span>
-                ) : <span className="text-[11px] text-[#727687]">Ação de resposta reservada</span>}
-              </div>
+          ) : (
+            <div className="p-4 rounded-2xl bg-[#f4f2fd] dark:bg-[#10142e] border text-xs text-[#727687]">
+              Você pode apresentar o diagnóstico e o score. Recomendações e simulações foram reservadas pelo administrador.
             </div>
-          ))}
-        </div>
-      </div>
+          )}
+        </>
+      )}
     </div>
   );
+}
+
+function MetricCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return <div className="p-3 rounded-xl bg-[#f4f2fd] dark:bg-[#10142e]"><div className="flex items-center gap-1.5 text-[10px] text-[#727687]">{icon}{label}</div><p className="font-bold text-lg mt-1">{value}</p></div>;
+}
+
+function MetricBar({ label, value }: { label: string; value: number }) {
+  return <div><div className="flex justify-between text-[10px] font-bold mb-1"><span>{label}</span><span>{value}%</span></div><div className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden"><div className="h-full bg-[#0066ff]" style={{ width: `${Math.max(0, Math.min(100, value))}%` }} /></div></div>;
+}
+
+function AnalysisList({ title, items, positive }: { title: string; items: string[]; positive: boolean }) {
+  return <section className="bg-white dark:bg-[#141936] p-6 rounded-2xl border"><h3 className="font-bold mb-4">{title}</h3><div className="space-y-2">{items.map((item, index) => <div key={`${item}-${index}`} className={`p-3 rounded-xl flex gap-2 text-xs ${positive ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-200' : 'bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200'}`}>{positive ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}<span>{item}</span></div>)}{!items.length && <p className="text-xs text-[#727687]">Atualize a análise para preencher esta seção.</p>}</div></section>;
 }

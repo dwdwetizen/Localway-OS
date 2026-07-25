@@ -1,8 +1,11 @@
 'use client';
 
+/* Signed Supabase avatar URLs expire, so the native image element is intentional. */
+/* eslint-disable @next/next/no-img-element */
+
 import React, { useState } from 'react';
-import Image from 'next/image';
-import { Search, Bell, Moon, Sun, HelpCircle, Menu, X, Check } from 'lucide-react';
+import { Search, Bell, Moon, Sun, HelpCircle, Menu, Check } from 'lucide-react';
+import { useAuthProfile } from '@/components/AuthGate';
 
 interface HeaderProps {
   darkMode: boolean;
@@ -21,6 +24,7 @@ export function Header({
   setSearchTerm,
   onOpenSupport,
 }: HeaderProps) {
+  const profile = useAuthProfile();
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState([
     { id: '1', title: 'Novo lead qualificado', time: 'Há 5 min', unread: true },
@@ -128,23 +132,18 @@ export function Header({
         </button>
 
         {/* User Profile */}
-        <div className="flex items-center gap-2 pl-1 cursor-pointer group">
+        <div className="flex items-center gap-2 pl-1 group">
           <div className="w-9 h-9 rounded-full bg-[#0066ff] text-white flex items-center justify-center font-bold text-sm overflow-hidden border border-[#0066ff]/30 shadow-sm">
-            <Image
-              src="https://picsum.photos/seed/ricardoprofile/100/100"
-              alt="Ricardo Silva"
-              width={100}
-              height={100}
-              className="w-full h-full object-cover"
-              referrerPolicy="no-referrer"
-            />
+            {profile.photo_url
+              ? <img src={profile.photo_url} alt={profile.nome || profile.email} className="w-full h-full object-cover" />
+              : <span>{(profile.nome || profile.email).slice(0, 1).toUpperCase()}</span>}
           </div>
           <div className="hidden lg:block text-left leading-tight">
             <p className="text-xs font-bold text-[#1a1b22] dark:text-[#f8f7ff]">
-              Ricardo Silva
+              {profile.nome || 'Usuário'}
             </p>
-            <p className="text-[10px] uppercase tracking-wider text-[#727687] font-semibold">
-              Diretor Comercial
+            <p className="text-[10px] text-[#727687] font-semibold max-w-40 truncate">
+              {profile.email}
             </p>
           </div>
         </div>

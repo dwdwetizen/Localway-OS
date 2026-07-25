@@ -57,6 +57,7 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
       phone: manual.phone || null, whatsapp: manual.whatsapp || manual.phone || null, email: manual.email || null, notes: manual.notes || null,
       decision_maker_name: manual.decisionMaker || null, receptionist_name: manual.receptionist || null, source: 'presencial', status: 'novo', next_action_at: null,
       google_place_id: null, google_maps_url: null, website_url: null, rating: null, review_count: null, photo_count: null, has_website: null, health_score: null, opportunity: null,
+      latitude: null, longitude: null, analysis_data: null, analysed_at: null,
     });
     if (result.error) return onShowToast(result.error, 'error');
     setManual(emptyManual); setManualOpen(false); onShowToast('Empresa adicionada à lista de prospecção.');

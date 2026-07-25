@@ -30,6 +30,7 @@ export function AdminView({ onShowToast }: AdminViewProps) {
   const [goalForm, setGoalForm] = useState(initialGoal);
   const [savingGoal, setSavingGoal] = useState(false);
   const [placesConfigured, setPlacesConfigured] = useState<boolean | null>(null);
+  const [mapsConfigured, setMapsConfigured] = useState<boolean | null>(null);
   const [history, setHistory] = useState<Activity[]>([]);
   const [historyUserId, setHistoryUserId] = useState('all');
   const load = useCallback(async () => {
@@ -40,7 +41,7 @@ export function AdminView({ onShowToast }: AdminViewProps) {
       client.from('profiles').select('id,email,nome,role,permissions,photo_url,is_active').eq('is_active', true).order('nome'),
       client.from('user_goals').select('id,user_id,period_start,period_end,target_leads,target_contacts,target_meetings').order('period_start', { ascending: false }),
       client.from('lead_interactions').select('id,created_by,actor_name,actor_email,outcome,notes,occurred_at,leads(company_name)').order('occurred_at', { ascending: false }).limit(100),
-      fetch('/api/places').then(response => response.json()).catch(() => ({ configured: false })),
+      fetch('/api/places').then(response => response.json()).catch(() => ({ placesConfigured: false, mapsConfigured: false })),
     ]);
     if (profilesRequest.error) onShowToast(profilesRequest.error.message, 'error');
     else {
@@ -56,7 +57,8 @@ export function AdminView({ onShowToast }: AdminViewProps) {
     else setGoals((goalsRequest.data || []) as Goal[]);
     if (historyRequest.error) onShowToast(historyRequest.error.message, 'error');
     else setHistory((historyRequest.data || []) as unknown as Activity[]);
-    setPlacesConfigured(Boolean(placesRequest.configured));
+    setPlacesConfigured(Boolean(placesRequest.placesConfigured));
+    setMapsConfigured(Boolean(placesRequest.mapsConfigured));
     setLoading(false);
   }, [onShowToast]);
   useEffect(() => { void load(); }, [load]);
@@ -165,9 +167,10 @@ export function AdminView({ onShowToast }: AdminViewProps) {
       })}</div>
     </section>}
     {activeTab === 'servicos' && <section className="bg-white dark:bg-[#141936] p-6 rounded-2xl border"><h3 className="font-bold">Cadastrar novo serviço</h3><p className="text-xs text-[#727687] mt-1">Esta área foi movida para Administração.</p></section>}
-    {activeTab === 'integracoes' && <section className="bg-white dark:bg-[#141936] p-6 rounded-2xl border"><Settings className="text-[#0066ff]"/><h3 className="font-bold mt-3">Integrações</h3><div className={`mt-4 p-4 rounded-xl border ${placesConfigured ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}><p className="text-xs font-bold">Google Places API (New): {placesConfigured ? 'configurada' : 'chave ausente'}</p><p className="text-[11px] mt-1">{placesConfigured ? 'A geração de leads está pronta para consultar empresas.' : 'Adicione GOOGLE_PLACES_API_KEY nas variáveis da Vercel e faça um novo deploy.'}</p></div></section>}
+    {activeTab === 'integracoes' && <section className="bg-white dark:bg-[#141936] p-6 rounded-2xl border"><Settings className="text-[#0066ff]"/><h3 className="font-bold mt-3">Integrações</h3><div className="mt-4 grid gap-3 md:grid-cols-2"><IntegrationStatus configured={placesConfigured} title="Google Places API (New)" ready="Geração de leads e análise de perfis prontas." missing="Adicione GOOGLE_PLACES_API_KEY na Vercel."/><IntegrationStatus configured={mapsConfigured} title="Google Maps JavaScript API" ready="Mapa geográfico de oportunidades pronto." missing="Adicione NEXT_PUBLIC_GOOGLE_MAPS_API_KEY na Vercel."/></div></section>}
   </div>;
   function Tab({ id, label }: { id: typeof activeTab; label: string }) { return <button onClick={() => setActiveTab(id)} className={`px-4 py-2 rounded-xl text-xs font-bold ${activeTab === id ? 'bg-[#0066ff] text-white' : 'text-[#727687]'}`}>{label}</button>; }
 }
 
 function GoalNumber({ label, value }: { label: string; value: number }) { return <div className="rounded-xl bg-[#f4f2fd] dark:bg-[#10142e] p-2"><p className="text-[10px] text-[#727687]">{label}</p><p className="font-bold text-sm">{value}</p></div>; }
+function IntegrationStatus({ configured, title, ready, missing }: { configured: boolean | null; title: string; ready: string; missing: string }) { return <div className={`p-4 rounded-xl border ${configured ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}><p className="text-xs font-bold">{title}: {configured ? 'configurada' : 'chave ausente'}</p><p className="text-[11px] mt-1">{configured ? ready : missing}</p></div>; }
