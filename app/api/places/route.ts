@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 
 const fieldMask = [
   'places.id',
@@ -31,10 +32,42 @@ function analysePlace(place: Record<string, unknown>) {
     : gaps >= 2
       ? 'Perfil com sinais de baixa otimização no Google.'
       : 'Perfil consistente; oportunidade de melhoria e diferenciação local.';
-  return { hasWebsite, rating, reviews, photos, healthScore, opportunity };
+  return {
+    has_website: hasWebsite,
+    rating,
+    review_count: reviews,
+    photo_count: photos,
+    health_score: healthScore,
+    opportunity,
+  };
+}
+
+export async function GET() {
+  return NextResponse.json({ configured: Boolean(process.env.GOOGLE_PLACES_API_KEY) });
 }
 
 export async function POST(request: NextRequest) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const authorization = request.headers.get('Authorization') || '';
+  const accessToken = authorization.replace(/^Bearer\s+/i, '');
+  if (!supabaseUrl || !publishableKey) return NextResponse.json({ error: 'Supabase não configurado no servidor.' }, { status: 500 });
+  if (!accessToken) return NextResponse.json({ error: 'Sessão ausente.' }, { status: 401 });
+  const client = createClient(supabaseUrl, publishableKey, {
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data: current } = await client.auth.getUser(accessToken);
+  if (!current.user) return NextResponse.json({ error: 'Sessão expirada.' }, { status: 401 });
+  const { data: profile } = await client.from('profiles').select('role,permissions,is_active').eq('id', current.user.id).maybeSingle();
+  const permissions = profile?.permissions || [];
+  const canProspect = profile?.is_active && (
+    ['admin', 'administrador'].includes((profile.role || '').toLowerCase())
+    || permissions.includes('Prospecção')
+    || permissions.includes('prospeccao')
+  );
+  if (!canProspect) return NextResponse.json({ error: 'Seu perfil não possui acesso à prospecção.' }, { status: 403 });
+
   const apiKey = process.env.GOOGLE_PLACES_API_KEY;
   if (!apiKey) return NextResponse.json({ error: 'GOOGLE_PLACES_API_KEY não configurada na Vercel.' }, { status: 500 });
 
@@ -47,7 +80,7 @@ export async function POST(request: NextRequest) {
   const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': apiKey, 'X-Goog-FieldMask': fieldMask },
-    body: JSON.stringify({ textQuery: `${category} em ${city}`, languageCode: 'pt-BR', regionCode: 'BR', maxResultCount: maxResults }),
+    body: JSON.stringify({ textQuery: `${category} em ${city}`, languageCode: 'pt-BR', regionCode: 'BR', pageSize: maxResults }),
   });
   const data = await response.json();
   if (!response.ok) return NextResponse.json({ error: data?.error?.message || 'Não foi possível consultar o Google Places.' }, { status: response.status });

@@ -12,7 +12,7 @@ interface FollowUpViewProps {
 const followUpStatuses: LeadStatus[] = ['ligar_depois', 'retornar_depois', 'reuniao_marcada'];
 
 export function FollowUpView({ onShowToast }: FollowUpViewProps) {
-  const { leads, loading, error, updateLead, addInteraction } = useLeads();
+  const { leads, loading, error, updateLead } = useLeads();
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [dates, setDates] = useState<Record<string, string>>({});
   const [outcomes, setOutcomes] = useState<Record<string, LeadStatus>>({});
@@ -27,9 +27,12 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
     const nextActionAt = dates[lead.id] ? new Date(dates[lead.id]).toISOString() : lead.next_action_at;
     if (followUpStatuses.includes(status) && !nextActionAt) return onShowToast('Escolha a próxima data antes de salvar.', 'error');
     const note = notes[lead.id] || '';
-    const result = await updateLead(lead.id, { status, next_action_at: nextActionAt, last_contact_at: new Date().toISOString(), notes: note ? `${lead.notes ? `${lead.notes}\n\n` : ''}${new Date().toLocaleString('pt-BR')}: ${note}` : lead.notes });
+    const result = await updateLead(
+      lead.id,
+      { status, next_action_at: nextActionAt, last_contact_at: new Date().toISOString(), notes: note ? `${lead.notes ? `${lead.notes}\n\n` : ''}${new Date().toLocaleString('pt-BR')}: ${note}` : lead.notes },
+      { outcome: statusLabel[status], notes: note || null, next_action_at: nextActionAt, event_type: 'follow_up' },
+    );
     if (result.error) return onShowToast(result.error, 'error');
-    await addInteraction({ lead_id: lead.id, outcome: statusLabel[status], notes: note || null, next_action_at: nextActionAt });
     if (status === 'reuniao_marcada' && nextActionAt) window.open(googleCalendarLink({ ...lead, status }, nextActionAt), '_blank', 'noopener,noreferrer');
     setNotes(current => ({ ...current, [lead.id]: '' }));
     onShowToast(status === 'qualificado' ? 'Lead enviado para a etapa de CRM.' : 'Follow-up atualizado.');

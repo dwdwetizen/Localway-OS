@@ -1,5 +1,8 @@
 export type LeadStatus =
   | 'novo'
+  | 'ligacao_realizada'
+  | 'contato_realizado'
+  | 'nao_atendeu'
   | 'ligar_depois'
   | 'retornar_depois'
   | 'reuniao_marcada'
@@ -33,6 +36,7 @@ export interface Lead {
   opportunity: string | null;
   crm_stage: CrmStage | null;
   estimated_value: number | null;
+  created_by: string | null;
   source: LeadSource;
   status: LeadStatus;
   next_action_at: string | null;
@@ -48,10 +52,19 @@ export interface LeadInteraction {
   notes: string | null;
   occurred_at: string;
   next_action_at: string | null;
+  created_by: string | null;
+  event_type: string;
+  previous_status: string | null;
+  new_status: string | null;
+  actor_name: string | null;
+  actor_email: string | null;
 }
 
 export const statusLabel: Record<LeadStatus, string> = {
   novo: 'Não contatado',
+  ligacao_realizada: 'Ligação realizada',
+  contato_realizado: 'Contato realizado',
+  nao_atendeu: 'Não atendeu',
   ligar_depois: 'Ligar depois',
   retornar_depois: 'Retornar depois',
   reuniao_marcada: 'Reunião marcada',

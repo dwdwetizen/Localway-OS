@@ -6,8 +6,11 @@ import { supabase, supabaseConfigurationError } from '@/lib/supabase';
 
 export type AuthProfile = {
   id: string;
+  email: string;
+  nome: string | null;
   role: string | null;
   permissions: string[] | null;
+  is_active: boolean;
 };
 
 const AuthProfileContext = createContext<AuthProfile | null>(null);
@@ -25,7 +28,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const client = supabase;
     if (!client) return;
-    const validate = async () => { const { data } = await client.auth.getSession(); if (!data.session) { setProfile(null); setAuthenticated(false); setReady(true); return; } const { data: currentProfile } = await client.from('profiles').select('id, role, permissions').eq('id', data.session.user.id).maybeSingle(); if (!currentProfile) { await client.auth.signOut(); setProfile(null); setMessage('Este e-mail não está autorizado a acessar o LocalWay OS.'); setAuthenticated(false); } else { setProfile(currentProfile as AuthProfile); setAuthenticated(true); } setReady(true); };
+    const validate = async () => { const { data } = await client.auth.getSession(); if (!data.session) { setProfile(null); setAuthenticated(false); setReady(true); return; } const { data: currentProfile } = await client.from('profiles').select('id, email, nome, role, permissions, is_active').eq('id', data.session.user.id).maybeSingle(); if (!currentProfile?.is_active) { await client.auth.signOut(); setProfile(null); setMessage('Este e-mail não está autorizado a acessar o LocalWay OS.'); setAuthenticated(false); } else { setProfile(currentProfile as AuthProfile); setAuthenticated(true); } setReady(true); };
     void validate(); const { data: subscription } = client.auth.onAuthStateChange((_event, session) => { if (!session) { setProfile(null); setAuthenticated(false); } else window.setTimeout(() => void validate(), 0); }); return () => subscription.subscription.unsubscribe();
   }, []);
   const submit = async (event: FormEvent) => { event.preventDefault(); if (!supabase) return setMessage(supabaseConfigurationError()); setSubmitting(true); setMessage(''); const { error } = await supabase.auth.signInWithPassword({ email, password }); setSubmitting(false); if (error) setMessage('Não foi possível entrar. Confira seu e-mail e senha.'); };

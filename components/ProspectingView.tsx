@@ -4,14 +4,16 @@ import React, { FormEvent, useMemo, useState } from 'react';
 import { CheckSquare, ExternalLink, MessageCircle, PhoneCall, Plus, Search, Sparkles, Square, X } from 'lucide-react';
 import { useLeads } from '@/hooks/use-leads';
 import { Lead, LeadStatus, statusLabel, whatsappLink } from '@/lib/leads';
+import { supabase } from '@/lib/supabase';
 
 interface ProspectingViewProps {
   onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
   onOpenAiPitchModal: (companyName: string, lead?: Lead) => void;
 }
 
-const nextSteps: LeadStatus[] = ['novo', 'ligar_depois', 'retornar_depois', 'reuniao_marcada', 'qualificado', 'sem_interesse'];
-const emptyManual = { companyName: '', category: '', city: '', address: '', phone: '', whatsapp: '', notes: '' };
+const nextSteps: LeadStatus[] = ['novo', 'ligacao_realizada', 'nao_atendeu', 'contato_realizado', 'ligar_depois', 'retornar_depois', 'reuniao_marcada', 'qualificado', 'sem_interesse'];
+const scheduledStatuses: LeadStatus[] = ['ligar_depois', 'retornar_depois', 'reuniao_marcada'];
+const emptyManual = { companyName: '', category: '', city: '', address: '', phone: '', whatsapp: '', email: '', decisionMaker: '', receptionist: '', notes: '' };
 
 export function ProspectingView({ onShowToast, onOpenAiPitchModal }: ProspectingViewProps) {
   const { leads, loading, error, createLead, updateLead } = useLeads();
@@ -31,7 +33,8 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
     if (!category.trim() || !city.trim()) return onShowToast('Informe o segmento e a cidade/região.', 'error');
     setSearching(true);
     try {
-      const response = await fetch('/api/places', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ category, city, maxResults: limit }) });
+      const { data: sessionData } = await supabase!.auth.getSession();
+      const response = await fetch('/api/places', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionData.session?.access_token || ''}` }, body: JSON.stringify({ category, city, maxResults: limit }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Erro ao gerar leads.');
       let added = 0;
@@ -51,18 +54,37 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
     if (!manual.companyName.trim()) return onShowToast('Informe o nome da empresa.', 'error');
     const result = await createLead({
       company_name: manual.companyName.trim(), category: manual.category || null, city: manual.city || null, address: manual.address || null,
-      phone: manual.phone || null, whatsapp: manual.whatsapp || manual.phone || null, email: null, notes: manual.notes || null,
-      decision_maker_name: null, receptionist_name: null, source: 'presencial', status: 'novo', next_action_at: null,
+      phone: manual.phone || null, whatsapp: manual.whatsapp || manual.phone || null, email: manual.email || null, notes: manual.notes || null,
+      decision_maker_name: manual.decisionMaker || null, receptionist_name: manual.receptionist || null, source: 'presencial', status: 'novo', next_action_at: null,
       google_place_id: null, google_maps_url: null, website_url: null, rating: null, review_count: null, photo_count: null, has_website: null, health_score: null, opportunity: null,
     });
     if (result.error) return onShowToast(result.error, 'error');
     setManual(emptyManual); setManualOpen(false); onShowToast('Empresa adicionada à lista de prospecção.');
   };
 
-  const updateStep = async (lead: Lead, status: LeadStatus) => {
-    const result = await updateLead(lead.id, { status, last_contact_at: status === 'novo' ? lead.last_contact_at : new Date().toISOString() });
+  const updateStep = async (lead: Lead, status: LeadStatus, nextActionAt: string | null, notes: string) => {
+    if (scheduledStatuses.includes(status) && !nextActionAt) {
+      onShowToast('Escolha a data do próximo contato.', 'error');
+      return false;
+    }
+    const result = await updateLead(
+      lead.id,
+      {
+        status,
+        next_action_at: scheduledStatuses.includes(status) ? nextActionAt : null,
+        last_contact_at: status === 'novo' ? lead.last_contact_at : new Date().toISOString(),
+      },
+      {
+        outcome: statusLabel[status],
+        notes: notes || null,
+        next_action_at: nextActionAt,
+        event_type: 'prospecting_contact',
+      },
+    );
     if (result.error) onShowToast(result.error, 'error');
     else if (status === 'retornar_depois' || status === 'ligar_depois' || status === 'reuniao_marcada') onShowToast('Lead enviado para a lista de Follow-up.');
+    else onShowToast('Contato registrado no histórico.');
+    return !result.error;
   };
 
   return <div className="space-y-6 animate-in fade-in duration-300">
@@ -88,14 +110,35 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
       </div>
     </div>
 
-    {manualOpen && <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"><form onSubmit={saveManual} className="w-full max-w-xl bg-white dark:bg-[#141936] rounded-2xl shadow-2xl border border-[#c2c6d8]/30 p-6 space-y-4"><div className="flex justify-between items-center"><div><h3 className="font-bold text-lg">Adicionar empresa</h3><p className="text-xs text-[#727687]">Para uma visita presencial ou indicação.</p></div><button type="button" onClick={() => setManualOpen(false)}><X className="w-5 h-5" /></button></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><Field label="Empresa *" value={manual.companyName} onChange={value => setManual({ ...manual, companyName: value })} /><Field label="Segmento" value={manual.category} onChange={value => setManual({ ...manual, category: value })} /><Field label="Cidade" value={manual.city} onChange={value => setManual({ ...manual, city: value })} /><Field label="Telefone / WhatsApp" value={manual.phone} onChange={value => setManual({ ...manual, phone: value, whatsapp: value })} /></div><Field label="Endereço" value={manual.address} onChange={value => setManual({ ...manual, address: value })} /><label className="text-xs font-semibold block">Observações<textarea value={manual.notes} onChange={event => setManual({ ...manual, notes: event.target.value })} className="mt-1 w-full p-2 rounded-xl border border-[#c2c6d8]/40 bg-[#f4f2fd]" rows={3} /></label><button className="w-full py-2.5 rounded-xl bg-[#0066ff] text-white text-xs font-bold">Adicionar à prospecção</button></form></div>}
+    {manualOpen && <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"><form onSubmit={saveManual} className="w-full max-w-2xl bg-white dark:bg-[#141936] rounded-2xl shadow-2xl border border-[#c2c6d8]/30 p-6 space-y-4"><div className="flex justify-between items-center"><div><h3 className="font-bold text-lg">Adicionar empresa</h3><p className="text-xs text-[#727687]">Para uma visita presencial ou indicação.</p></div><button type="button" onClick={() => setManualOpen(false)}><X className="w-5 h-5" /></button></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><Field label="Empresa *" value={manual.companyName} onChange={value => setManual({ ...manual, companyName: value })} /><Field label="Segmento" value={manual.category} onChange={value => setManual({ ...manual, category: value })} /><Field label="Cidade" value={manual.city} onChange={value => setManual({ ...manual, city: value })} /><Field label="Telefone / WhatsApp" value={manual.phone} onChange={value => setManual({ ...manual, phone: value, whatsapp: value })} /><Field label="Nome do decisor" value={manual.decisionMaker} onChange={value => setManual({ ...manual, decisionMaker: value })} /><Field label="Nome da atendente" value={manual.receptionist} onChange={value => setManual({ ...manual, receptionist: value })} /><Field label="E-mail" value={manual.email} onChange={value => setManual({ ...manual, email: value })} /><Field label="Endereço" value={manual.address} onChange={value => setManual({ ...manual, address: value })} /></div><label className="text-xs font-semibold block">Observações<textarea value={manual.notes} onChange={event => setManual({ ...manual, notes: event.target.value })} className="mt-1 w-full p-2 rounded-xl border border-[#c2c6d8]/40 bg-[#f4f2fd]" rows={3} /></label><button className="w-full py-2.5 rounded-xl bg-[#0066ff] text-white text-xs font-bold">Adicionar à prospecção</button></form></div>}
   </div>;
 }
 
-function LeadRow({ lead, selected, toggle, updateStep, onPitch }: { lead: Lead; selected: boolean; toggle: (id: string) => void; updateStep: (lead: Lead, status: LeadStatus) => void; onPitch: (name: string, lead?: Lead) => void }) {
+function LeadRow({ lead, selected, toggle, updateStep, onPitch }: { lead: Lead; selected: boolean; toggle: (id: string) => void; updateStep: (lead: Lead, status: LeadStatus, nextActionAt: string | null, notes: string) => Promise<boolean>; onPitch: (name: string, lead?: Lead) => void }) {
   const wa = whatsappLink(lead.whatsapp || lead.phone);
   const profile = lead.health_score === null ? 'Sem análise' : lead.health_score <= 55 ? 'Boa oportunidade' : lead.health_score <= 75 ? 'Oportunidade média' : 'Perfil forte';
-  return <div className={`p-4 flex flex-col xl:flex-row xl:items-center justify-between gap-4 ${selected ? 'bg-[#0066ff]/5' : 'hover:bg-gray-50 dark:hover:bg-gray-800/40'}`}><div className="flex gap-3 min-w-0"><button onClick={() => toggle(lead.id)} className="mt-1 text-[#0066ff]">{selected ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5 text-gray-300" />}</button><div className="min-w-0 space-y-1"><div className="flex gap-2 items-center flex-wrap"><h4 className="font-bold text-sm">{lead.company_name}</h4><span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#0066ff]/10 text-[#0066ff]">{profile}</span></div><p className="text-xs text-[#727687]">{[lead.category, lead.address].filter(Boolean).join(' • ')}</p><p className="text-[11px] text-[#727687]">⭐ {lead.rating ?? '—'} ({lead.review_count ?? 0} avaliações) · {lead.has_website ? 'Tem site' : 'Sem site'} · {lead.photo_count ?? 0} fotos</p>{lead.opportunity && <p className="text-[11px] text-amber-700">{lead.opportunity}</p>}</div></div><div className="flex items-center gap-1 flex-wrap shrink-0">{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer" title="Abrir perfil no Google Maps" className="p-2 text-[#0066ff] hover:bg-[#0066ff]/10 rounded-lg"><ExternalLink className="w-4 h-4" /></a>}{wa && <a href={wa} target="_blank" rel="noreferrer" title="Abrir WhatsApp" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg"><MessageCircle className="w-4 h-4" /></a>}{lead.phone && <a href={`tel:${lead.phone.replace(/\D/g, '')}`} title="Ligar" className="p-2 text-[#0066ff] hover:bg-[#0066ff]/10 rounded-lg"><PhoneCall className="w-4 h-4" /></a>}<select value={lead.status} onChange={event => updateStep(lead, event.target.value as LeadStatus)} className="px-2 py-2 text-xs bg-[#f4f2fd] border border-[#c2c6d8]/40 rounded-xl">{nextSteps.map(status => <option key={status} value={status}>{statusLabel[status]}</option>)}</select><button onClick={() => onPitch(lead.company_name, lead)} className="px-3 py-2 bg-[#0066ff] hover:bg-[#0050cb] text-white text-xs font-bold rounded-xl flex items-center gap-1"><Sparkles className="w-3.5 h-3.5" /> IA</button></div></div>;
+  const [status, setStatus] = useState<LeadStatus>(lead.status);
+  const [nextActionAt, setNextActionAt] = useState(lead.next_action_at ? lead.next_action_at.slice(0, 16) : '');
+  const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+  const register = async () => {
+    setSaving(true);
+    const saved = await updateStep(lead, status, nextActionAt ? new Date(nextActionAt).toISOString() : null, notes);
+    setSaving(false);
+    if (saved) setNotes('');
+  };
+  return <div className={`p-4 space-y-3 ${selected ? 'bg-[#0066ff]/5' : 'hover:bg-gray-50 dark:hover:bg-gray-800/40'}`}>
+    <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+      <div className="flex gap-3 min-w-0"><button onClick={() => toggle(lead.id)} className="mt-1 text-[#0066ff]">{selected ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5 text-gray-300" />}</button><div className="min-w-0 space-y-1"><div className="flex gap-2 items-center flex-wrap"><h4 className="font-bold text-sm">{lead.company_name}</h4><span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#0066ff]/10 text-[#0066ff]">{profile}</span></div><p className="text-xs text-[#727687]">{[lead.category, lead.address].filter(Boolean).join(' • ')}</p><p className="text-[11px] text-[#727687]">⭐ {lead.rating ?? '—'} ({lead.review_count ?? 0} avaliações) · {lead.has_website ? 'Tem site' : 'Sem site'} · {lead.photo_count ?? 0} fotos</p>{lead.opportunity && <p className="text-[11px] text-amber-700">{lead.opportunity}</p>}</div></div>
+      <div className="flex items-center gap-1 flex-wrap shrink-0">{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer" title="Abrir perfil no Google Maps" className="p-2 text-[#0066ff] hover:bg-[#0066ff]/10 rounded-lg"><ExternalLink className="w-4 h-4" /></a>}{wa && <a href={wa} target="_blank" rel="noreferrer" title="Abrir WhatsApp" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg"><MessageCircle className="w-4 h-4" /></a>}{lead.phone && <a href={`tel:${lead.phone.replace(/\D/g, '')}`} title="Ligar" className="p-2 text-[#0066ff] hover:bg-[#0066ff]/10 rounded-lg"><PhoneCall className="w-4 h-4" /></a>}<button onClick={() => onPitch(lead.company_name, lead)} className="px-3 py-2 bg-[#0066ff] hover:bg-[#0050cb] text-white text-xs font-bold rounded-xl flex items-center gap-1"><Sparkles className="w-3.5 h-3.5" /> IA</button></div>
+    </div>
+    <div className="grid grid-cols-1 md:grid-cols-[180px_1fr_auto] gap-2 items-end pl-8">
+      <label className="text-[10px] font-bold text-[#727687]">RESULTADO<select value={status} onChange={event => setStatus(event.target.value as LeadStatus)} className="mt-1 w-full px-2 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl">{nextSteps.map(item => <option key={item} value={item}>{statusLabel[item]}</option>)}</select></label>
+      <label className="text-[10px] font-bold text-[#727687]">ANOTAÇÃO<input value={notes} onChange={event => setNotes(event.target.value)} placeholder="Ex.: falou com o decisor, pediu retorno…" className="mt-1 w-full px-3 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl" /></label>
+      <button disabled={saving} onClick={() => void register()} className="px-4 py-2.5 rounded-xl bg-[#0066ff] disabled:opacity-50 text-white text-xs font-bold">{saving ? 'Salvando…' : 'Registrar'}</button>
+      {scheduledStatuses.includes(status) && <label className="md:col-start-1 text-[10px] font-bold text-[#727687]">PRÓXIMO CONTATO<input type="datetime-local" value={nextActionAt} onChange={event => setNextActionAt(event.target.value)} className="mt-1 w-full px-3 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl" /></label>}
+    </div>
+  </div>;
 }
 
 function Field({ label, value, onChange, placeholder = '' }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string }) { return <label className="text-[10px] font-bold uppercase text-[#727687]">{label}<input value={value} onChange={event => onChange(event.target.value)} placeholder={placeholder} className="mt-1 w-full px-3 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl" /></label>; }

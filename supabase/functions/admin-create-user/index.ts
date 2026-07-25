@@ -56,7 +56,7 @@ Deno.serve(async (request: Request) => {
 
   const { data: profile, error: profileLookupError } = await admin
     .from("profiles")
-    .select("role")
+    .select("role, is_active")
     .eq("id", current.user.id)
     .maybeSingle();
 
@@ -65,7 +65,7 @@ Deno.serve(async (request: Request) => {
   }
 
   const normalizedRole = profile?.role?.trim().toLowerCase();
-  if (normalizedRole !== "admin" && normalizedRole !== "administrador") {
+  if (!profile?.is_active || (normalizedRole !== "admin" && normalizedRole !== "administrador")) {
     return reply(403, { error: "Apenas administradores podem gerenciar usuários." });
   }
 
@@ -99,13 +99,13 @@ Deno.serve(async (request: Request) => {
       return reply(404, { error: "Usuário não encontrado." });
     }
 
-    const { error: removeProfileError } = await admin
+    const { error: archiveProfileError } = await admin
       .from("profiles")
-      .delete()
+      .update({ is_active: false, deleted_at: new Date().toISOString() })
       .eq("id", userId);
 
-    if (removeProfileError) {
-      return reply(500, { error: "Não foi possível remover o perfil do usuário." });
+    if (archiveProfileError) {
+      return reply(500, { error: "Não foi possível arquivar o perfil do usuário." });
     }
 
     // Avoid Supabase Auth's DELETE endpoint, which rejects this project's
@@ -166,6 +166,8 @@ Deno.serve(async (request: Request) => {
     nome,
     role: "funcionario",
     permissions,
+    is_active: true,
+    deleted_at: null,
   });
 
   if (saveProfileError) {

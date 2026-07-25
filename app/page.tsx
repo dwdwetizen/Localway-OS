@@ -89,7 +89,7 @@ function AuthenticatedHome() {
     if (isAdmin) return allTabs;
     const permissions = profile.permissions || [];
     return allTabs.filter((tab): tab is Exclude<TabType, 'admin'> =>
-      tab !== 'admin' && permissionByTab[tab].some(permission => permissions.includes(permission))
+      tab !== 'admin' && (tab === 'dashboard' || permissionByTab[tab].some(permission => permissions.includes(permission)))
     );
   }, [isAdmin, profile.permissions]);
   const visibleTab = allowedTabs.includes(activeTab) ? activeTab : allowedTabs[0] || null;
@@ -188,7 +188,6 @@ function AuthenticatedHome() {
             <DashboardView
               setActiveTab={setActiveTab}
               onShowToast={showToast}
-              onOpenAiPitchModal={handleOpenAiPitchModal}
             />
           )}
 
