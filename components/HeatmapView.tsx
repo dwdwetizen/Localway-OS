@@ -16,6 +16,7 @@ type MapInstance = {
   fitBounds: (bounds: BoundsInstance) => void;
   setCenter: (center: LatLng) => void;
   setZoom: (zoom: number) => void;
+  addListener?: (eventName: string, handler: () => void) => { remove?: () => void };
 };
 type BoundsInstance = {
   extend: (position: LatLng) => void;
@@ -164,12 +165,18 @@ function GridMapCanvas({ scan, mapsKey, onError }: {
   onError: (message: string) => void;
 }) {
   const node = useRef<HTMLDivElement>(null);
+  const [mapError, setMapError] = useState('');
+  const [mapReady, setMapReady] = useState(false);
 
   useEffect(() => {
     if (!node.current || !mapsKey || !scan.points.length) return;
     let active = true;
+    let loadTimer: number | null = null;
+    let tilesListener: { remove?: () => void } | null = null;
     const markers: MarkerInstance[] = [];
     const circles: CircleInstance[] = [];
+    setMapError('');
+    setMapReady(false);
     void loadGoogleMaps(mapsKey).then(maps => {
       if (!active || !node.current) return;
       const map = new maps.Map(node.current, {
@@ -194,6 +201,17 @@ function GridMapCanvas({ scan, mapsKey, onError }: {
           { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#dcecf5' }] },
         ],
       });
+      tilesListener = map.addListener?.('tilesloaded', () => {
+        if (!active) return;
+        if (loadTimer !== null) window.clearTimeout(loadTimer);
+        setMapReady(true);
+      }) || null;
+      loadTimer = window.setTimeout(() => {
+        if (!active) return;
+        const message = 'O mapa-base não carregou. Verifique se a chave de navegador permite este domínio na Maps JavaScript API.';
+        setMapError(message);
+        onError(message);
+      }, 12_000);
       const bounds = new maps.LatLngBounds();
       const gridStep = scan.radius_m / Math.max((scanGridSize(scan) - 1) / 2, 1);
       const pointRadius = Math.max(180, gridStep * 0.42);
@@ -236,16 +254,29 @@ function GridMapCanvas({ scan, mapsKey, onError }: {
       });
       map.fitBounds(bounds);
     }).catch(error => {
-      if (active) onError(error instanceof Error ? error.message : 'Erro ao abrir a grade.');
+      if (!active) return;
+      const message = error instanceof Error ? error.message : 'Erro ao abrir a grade.';
+      setMapError(message);
+      onError(message);
     });
     return () => {
       active = false;
+      if (loadTimer !== null) window.clearTimeout(loadTimer);
+      tilesListener?.remove?.();
       markers.forEach(marker => marker.setMap(null));
       circles.forEach(circle => circle.setMap(null));
     };
   }, [mapsKey, onError, scan]);
 
-  return <div ref={node} className="w-full min-h-[680px] bg-[#eef2f6]" />;
+  return <div className="relative w-full h-[680px] bg-[#eef2f6]">
+    <div ref={node} className="absolute inset-0 w-full h-full" />
+    {!mapReady && !mapError && <div className="absolute inset-0 z-10 grid place-items-center bg-[#eef2f6]">
+      <div className="text-center"><Loader2 className="w-7 h-7 animate-spin text-[#0066ff] mx-auto" /><p className="text-xs font-semibold mt-2">Carregando mapa…</p></div>
+    </div>}
+    {mapError && <div className="absolute inset-0 z-10 grid place-items-center bg-gradient-to-br from-[#f8fafc] to-[#eef2f6] p-8 text-center">
+      <div><MapPin className="w-10 h-10 mx-auto text-rose-500" /><p className="font-semibold mt-3">Não foi possível exibir o mapa</p><p className="text-xs text-[#727687] mt-1 max-w-md">{mapError}</p></div>
+    </div>}
+  </div>;
 }
 
 export function HeatmapView({ onShowToast }: HeatmapViewProps) {
