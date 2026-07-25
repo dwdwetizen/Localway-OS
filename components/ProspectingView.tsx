@@ -11,7 +11,7 @@ interface ProspectingViewProps {
   onOpenAiPitchModal: (companyName: string, lead?: Lead) => void;
 }
 
-const nextSteps: LeadStatus[] = ['novo', 'ligacao_realizada', 'nao_atendeu', 'contato_realizado', 'ligar_depois', 'retornar_depois', 'reuniao_marcada', 'qualificado', 'sem_interesse'];
+const nextSteps: LeadStatus[] = ['nao_atendeu', 'retornar_depois', 'reuniao_marcada', 'qualificado', 'sem_interesse'];
 const scheduledStatuses: LeadStatus[] = ['ligar_depois', 'retornar_depois', 'reuniao_marcada'];
 const emptyManual = { companyName: '', category: '', city: '', address: '', phone: '', whatsapp: '', email: '', decisionMaker: '', receptionist: '', notes: '' };
 
@@ -62,6 +62,7 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
         && !lead.crm_stage
         && lead.status !== 'qualificado'
         && lead.status !== 'reuniao_marcada'
+        && lead.status !== 'sem_interesse'
         && lead.status !== 'perdido';
       const matchesMode = prospectingMode === 'online'
         ? lead.source === 'google_places'
@@ -190,9 +191,9 @@ function LeadRow({ lead, selected, toggle, updateStep, onPitch }: { lead: Lead; 
       <div className="flex items-center gap-1 flex-wrap shrink-0">{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer" title="Abrir perfil no Google Maps" className="p-2 text-[#0066ff] hover:bg-[#0066ff]/10 rounded-lg"><ExternalLink className="w-4 h-4" /></a>}{wa && <a href={wa} target="_blank" rel="noreferrer" title="Abrir WhatsApp" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg"><MessageCircle className="w-4 h-4" /></a>}{lead.phone && <a href={`tel:${lead.phone.replace(/\D/g, '')}`} title="Ligar" className="p-2 text-[#0066ff] hover:bg-[#0066ff]/10 rounded-lg"><PhoneCall className="w-4 h-4" /></a>}<button onClick={() => onPitch(lead.company_name, lead)} className="px-3 py-2 bg-[#0066ff] hover:bg-[#0050cb] text-white text-xs font-bold rounded-xl flex items-center gap-1"><Sparkles className="w-3.5 h-3.5" /> IA</button></div>
     </div>
     <div className="grid grid-cols-1 md:grid-cols-[180px_1fr_auto] gap-2 items-end pl-8">
-      <label className="text-[10px] font-bold text-[#727687]">RESULTADO<select value={status} onChange={event => { const nextStatus = event.target.value as LeadStatus; setStatus(nextStatus); setReturnPickerOpen(nextStatus === 'retornar_depois'); }} className="mt-1 w-full px-2 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl">{nextSteps.map(item => <option key={item} value={item}>{statusLabel[item]}</option>)}</select></label>
+      <label className="text-[10px] font-bold text-[#727687]">RESULTADO<select value={nextSteps.includes(status) ? status : ''} onChange={event => { const nextStatus = event.target.value as LeadStatus; setStatus(nextStatus); setReturnPickerOpen(nextStatus === 'retornar_depois'); }} className="mt-1 w-full px-2 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl"><option value="" disabled>Escolha o resultado</option>{nextSteps.map(item => <option key={item} value={item}>{statusLabel[item]}</option>)}</select></label>
       <label className="text-[10px] font-bold text-[#727687]">ANOTAÇÃO<input value={notes} onChange={event => setNotes(event.target.value)} placeholder="Ex.: falou com o decisor, pediu retorno…" className="mt-1 w-full px-3 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl" /></label>
-      <button disabled={saving} onClick={() => void register()} className="px-4 py-2.5 rounded-xl bg-[#0066ff] disabled:opacity-50 text-white text-xs font-bold">{saving ? 'Salvando…' : 'Registrar'}</button>
+      <button disabled={saving || !nextSteps.includes(status)} onClick={() => void register()} className="px-4 py-2.5 rounded-xl bg-[#0066ff] disabled:opacity-50 text-white text-xs font-bold">{saving ? 'Salvando…' : 'Registrar'}</button>
       {status === 'retornar_depois' && <div className="md:col-start-1 md:col-span-2 relative">
         <p className="text-[10px] font-bold text-[#727687]">DIA DO RETORNO</p>
         <button type="button" onClick={() => setReturnPickerOpen(current => !current)} className="mt-1 w-full sm:w-auto min-w-52 px-3 py-2 text-xs font-bold flex items-center justify-between gap-3 bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl">

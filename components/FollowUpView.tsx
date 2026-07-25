@@ -10,6 +10,7 @@ interface FollowUpViewProps {
 }
 
 const followUpStatuses: LeadStatus[] = ['ligar_depois', 'retornar_depois'];
+const followUpOutcomeOptions: LeadStatus[] = ['nao_atendeu', 'retornar_depois', 'reuniao_marcada', 'qualificado', 'sem_interesse'];
 
 function countdownClass(urgency: ContactUrgency) {
   if (urgency === 'red') return 'bg-rose-100 text-rose-700 border-rose-200';
@@ -31,6 +32,7 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
 
   const saveContact = async (lead: Lead) => {
     const status = outcomes[lead.id] || lead.status;
+    if (!followUpOutcomeOptions.includes(status)) return onShowToast('Escolha o resultado do contato.', 'error');
     const nextActionAt = dates[lead.id] ? new Date(dates[lead.id]).toISOString() : lead.next_action_at;
     if (followUpStatuses.includes(status) && !nextActionAt) return onShowToast('Escolha a próxima data antes de salvar.', 'error');
     const note = notes[lead.id] || '';
@@ -98,10 +100,10 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
             <div className="flex gap-1 pt-1">{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer" className="p-2 rounded-lg text-[#0066ff] hover:bg-[#0066ff]/10" title="Abrir perfil no Google Maps"><ExternalLink className="w-4 h-4" /></a>}{whatsappLink(lead.whatsapp || lead.phone) && <a href={whatsappLink(lead.whatsapp || lead.phone) as string} target="_blank" rel="noreferrer" className="p-2 rounded-lg text-emerald-600 hover:bg-emerald-50" title="WhatsApp"><MessageCircle className="w-4 h-4" /></a>}{lead.phone && <a href={`tel:${lead.phone.replace(/\D/g, '')}`} className="p-2 rounded-lg text-[#0066ff] hover:bg-[#0066ff]/10" title="Ligar"><PhoneCall className="w-4 h-4" /></a>}</div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1 max-w-3xl">
-            <label className="text-[11px] font-semibold">Resultado<select value={outcomes[lead.id] || lead.status} onChange={event => setOutcomes({ ...outcomes, [lead.id]: event.target.value as LeadStatus })} className="mt-1 w-full p-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl">{Object.entries(statusLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+            <label className="text-[11px] font-semibold">Resultado<select value={followUpOutcomeOptions.includes(outcomes[lead.id] || lead.status) ? (outcomes[lead.id] || lead.status) : ''} onChange={event => setOutcomes({ ...outcomes, [lead.id]: event.target.value as LeadStatus })} className="mt-1 w-full p-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl"><option value="" disabled>Escolha o resultado</option>{followUpOutcomeOptions.map(value => <option key={value} value={value}>{statusLabel[value]}</option>)}</select></label>
             <label className="text-[11px] font-semibold">Próximo retorno<input type="datetime-local" value={dates[lead.id] || ''} onChange={event => setDates({ ...dates, [lead.id]: event.target.value })} className="mt-1 w-full p-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl" /></label>
             <label className="text-[11px] font-semibold sm:col-span-3">Resumo do último contato<textarea rows={2} value={notes[lead.id] || ''} onChange={event => setNotes({ ...notes, [lead.id]: event.target.value })} className="mt-1 w-full p-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl" placeholder="Ex.: falou com o decisor, pediu retorno na quinta…" /></label>
-            <button onClick={() => void saveContact(lead)} className="sm:col-span-3 justify-center flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-[#0066ff] hover:bg-[#0050cb] rounded-xl"><CheckCircle2 className="w-4 h-4" /> Salvar contato</button>
+            <button disabled={!followUpOutcomeOptions.includes(outcomes[lead.id] || lead.status)} onClick={() => void saveContact(lead)} className="sm:col-span-3 justify-center flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-[#0066ff] hover:bg-[#0050cb] disabled:opacity-50 rounded-xl"><CheckCircle2 className="w-4 h-4" /> Salvar contato</button>
           </div>
         </div>
       </article>;})}
