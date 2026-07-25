@@ -16,6 +16,7 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [dates, setDates] = useState<Record<string, string>>({});
   const [outcomes, setOutcomes] = useState<Record<string, LeadStatus>>({});
+  const [currentTime] = useState(() => Date.now());
 
   const list = useMemo(() => leads
     .filter(lead => followUpStatuses.includes(lead.status))
@@ -34,7 +35,9 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
     onShowToast(status === 'qualificado' ? 'Lead enviado para a etapa de CRM.' : 'Follow-up atualizado.');
   };
 
-  const isDue = (lead: Lead) => lead.next_action_at && new Date(lead.next_action_at).getTime() <= Date.now();
+  const isDue = (lead: Lead) => Boolean(
+    lead.next_action_at && new Date(lead.next_action_at).getTime() <= currentTime
+  );
 
   return <div className="space-y-6 animate-in fade-in duration-300">
     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-[#141936] p-5 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">

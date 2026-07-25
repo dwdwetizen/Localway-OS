@@ -1,6 +1,9 @@
 'use client';
 
-import React, { ChangeEvent, useEffect, useState } from 'react';
+/* Signed Supabase avatar URLs expire, so the native image element is intentional here. */
+/* eslint-disable @next/next/no-img-element */
+
+import React, { ChangeEvent, useCallback, useEffect, useState } from 'react';
 import { Plus, Settings, Upload, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -12,8 +15,8 @@ const initialForm = { nome: '', email: '', password: '', role: 'SDR', permission
 export function AdminView({ onShowToast }: AdminViewProps) {
   const [activeTab, setActiveTab] = useState<'usuarios' | 'servicos' | 'integracoes'>('usuarios');
   const [profiles, setProfiles] = useState<Profile[]>([]); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [form, setForm] = useState(initialForm);
-  const load = async () => { const client = supabase; if (!client) return; setLoading(true); const { data, error } = await client.from('profiles').select('id,email,nome,role,permissions,photo_url').order('nome'); if (error) onShowToast(error.message, 'error'); else { const rows = await Promise.all((data || []).map(async row => { if (!row.photo_url) return row; const signed = await client.storage.from('profile-photos').createSignedUrl(row.photo_url, 3600); return { ...row, photo_url: signed.data?.signedUrl || null }; })); setProfiles(rows as Profile[]); } setLoading(false); };
-  useEffect(() => { void load(); }, []);
+  const load = useCallback(async () => { const client = supabase; if (!client) return; setLoading(true); const { data, error } = await client.from('profiles').select('id,email,nome,role,permissions,photo_url').order('nome'); if (error) onShowToast(error.message, 'error'); else { const rows = await Promise.all((data || []).map(async row => { if (!row.photo_url) return row; const signed = await client.storage.from('profile-photos').createSignedUrl(row.photo_url, 3600); return { ...row, photo_url: signed.data?.signedUrl || null }; })); setProfiles(rows as Profile[]); } setLoading(false); }, [onShowToast]);
+  useEffect(() => { void load(); }, [load]);
   const toggle = (item: string) => setForm(current => ({ ...current, permissions: current.permissions.includes(item) ? current.permissions.filter(value => value !== item) : [...current.permissions, item] }));
   const toggleSolutions = (profile: Profile) => { const current = profile.permissions || []; const permissions = current.includes('analises_solucoes') ? current.filter(item => item !== 'analises_solucoes') : [...current, 'analises_solucoes']; if (!supabase) return; void supabase.from('profiles').update({ permissions }).eq('id', profile.id).then(({ error }) => { if (error) onShowToast(error.message, 'error'); else { onShowToast('Acesso às soluções atualizado.'); void load(); } }); };
   const createLogin = async () => { if (!supabase) return; setSaving(true); const { data } = await supabase.auth.getSession(); const response = await fetch('/api/admin/create-user', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token || ''}` }, body: JSON.stringify(form) }); const result = await response.json(); setSaving(false); if (!response.ok) return onShowToast(result.error || 'Não foi possível criar o login.', 'error'); onShowToast('Login criado. Passe o e-mail e a senha ao usuário por um canal seguro.'); setForm(initialForm); void load(); };

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { Sidebar, TabType } from '@/components/Sidebar';
 import { Header } from '@/components/Header';
 import { DashboardView } from '@/components/DashboardView';
@@ -60,21 +60,24 @@ export default function Home() {
 
   useEffect(() => {
     const savedTheme = window.localStorage.getItem('localway-theme');
-    if (savedTheme === 'dark') setDarkMode(true);
+    const frame = window.requestAnimationFrame(() => {
+      if (savedTheme === 'dark') setDarkMode(true);
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   useEffect(() => {
     window.localStorage.setItem('localway-theme', darkMode ? 'dark' : 'light');
   }, [darkMode]);
 
-  const showToast = (message: string, type: 'success' | 'info' | 'error' = 'success') => {
+  const showToast = useCallback((message: string, type: 'success' | 'info' | 'error' = 'success') => {
     const newToast: ToastMessage = {
       id: String(Date.now()),
       type,
       message,
     };
     setToasts((prev) => [...prev, newToast]);
-  };
+  }, []);
 
   const dismissToast = (id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));

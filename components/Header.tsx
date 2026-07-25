@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { Search, Bell, Moon, Sun, HelpCircle, Menu, X, Check } from 'lucide-react';
 
 interface HeaderProps {
@@ -129,9 +130,11 @@ export function Header({
         {/* User Profile */}
         <div className="flex items-center gap-2 pl-1 cursor-pointer group">
           <div className="w-9 h-9 rounded-full bg-[#0066ff] text-white flex items-center justify-center font-bold text-sm overflow-hidden border border-[#0066ff]/30 shadow-sm">
-            <img
+            <Image
               src="https://picsum.photos/seed/ricardoprofile/100/100"
               alt="Ricardo Silva"
+              width={100}
+              height={100}
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
             />

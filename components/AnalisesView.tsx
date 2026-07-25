@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Image from 'next/image';
 import {
   Search,
   CheckCircle2,
@@ -153,9 +154,11 @@ export function AnalisesView({
           <div>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex gap-4 items-start">
-                <img
+                <Image
                   src="https://picsum.photos/seed/bakeryshop/160/160"
                   alt={current.name}
+                  width={160}
+                  height={160}
                   className="w-16 h-16 rounded-2xl object-cover border border-[#c2c6d8]/40 shadow-sm"
                   referrerPolicy="no-referrer"
                 />

@@ -34,7 +34,10 @@ export function useLeads() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => void refresh(), 0);
+    return () => window.clearTimeout(timer);
+  }, [refresh]);
 
   const createLead = useCallback(async (input: NewLead) => {
     if (!supabase) return { error: supabaseConfigurationError() };

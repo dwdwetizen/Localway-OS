@@ -5,11 +5,11 @@ import { LockKeyhole, Sparkles } from 'lucide-react';
 import { supabase, supabaseConfigurationError } from '@/lib/supabase';
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
-  const [ready, setReady] = useState(false); const [authenticated, setAuthenticated] = useState(false);
+  const [ready, setReady] = useState(() => !supabase); const [authenticated, setAuthenticated] = useState(false);
   const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [message, setMessage] = useState(''); const [submitting, setSubmitting] = useState(false);
   useEffect(() => {
     const client = supabase;
-    if (!client) { setReady(true); return; }
+    if (!client) return;
     const validate = async () => { const { data } = await client.auth.getSession(); if (!data.session) { setAuthenticated(false); setReady(true); return; } const { data: profile } = await client.from('profiles').select('id').eq('id', data.session.user.id).maybeSingle(); if (!profile) { await client.auth.signOut(); setMessage('Este e-mail não está autorizado a acessar o LocalWay OS.'); setAuthenticated(false); } else setAuthenticated(true); setReady(true); };
     void validate(); const { data: subscription } = client.auth.onAuthStateChange((_event, session) => { if (!session) setAuthenticated(false); else void validate(); }); return () => subscription.subscription.unsubscribe();
   }, []);
