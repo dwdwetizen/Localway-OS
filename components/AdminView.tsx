@@ -185,7 +185,7 @@ export function AdminView({ onShowToast }: AdminViewProps) {
                 </div>
                 <div className="flex items-center gap-2">
                   {!isAdmin && <button onClick={() => isEditing ? setEditingPermissionsId(null) : startEditingPermissions(profile)} className="px-2 py-2 rounded-lg text-[#0066ff] hover:bg-blue-50 text-xs font-bold flex items-center gap-1" aria-label={`Editar acessos de ${profile.nome || profile.email}`} title="Editar acessos">
-                    {isEditing ? <X className="w-4 h-4"/> : <Pencil className="w-4 h-4"/>}<span className="hidden xl:inline">{isEditing ? 'Fechar' : 'Acessos'}</span>
+                    {isEditing ? <X className="w-4 h-4"/> : <Pencil className="w-4 h-4"/>}<span>{isEditing ? 'Fechar' : 'Acessos'}</span>
                   </button>}
                   <label className="text-xs text-[#0066ff] font-bold cursor-pointer"><Upload className="w-4 h-4 inline mr-1"/>Foto<input className="hidden" type="file" accept="image/*" onChange={e => void uploadPhoto(profile,e)}/></label>
                   <button disabled={deletingId === profile.id} onClick={() => void deleteUser(profile)} className="p-2 rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-50" aria-label={`Excluir ${profile.nome || profile.email}`} title="Excluir usuário">
