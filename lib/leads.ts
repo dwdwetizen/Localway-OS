@@ -66,6 +66,7 @@ export interface LeadAnalysisData {
   };
   business_status?: string;
   opening_hours_count?: number;
+  visibility_keywords?: string[];
 }
 
 export interface LeadInteraction {

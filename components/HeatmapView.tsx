@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Clock3, Grid3X3, History, Layers, Link2, Loader2, MapPin, Star } from 'lucide-react';
+import Image from 'next/image';
+import { Clock3, Grid3X3, History, Layers, Link2, Loader2, MapPin, Pencil, Plus, Star, Trash2, X } from 'lucide-react';
 import { useLeads } from '@/hooks/use-leads';
 import { Lead } from '@/lib/leads';
 import { supabase } from '@/lib/supabase';
@@ -40,6 +41,7 @@ type RankedPlace = {
   category: string | null;
   rating: number | null;
   review_count: number;
+  photo_name: string | null;
 };
 type VisibilityPoint = {
   row: number;
@@ -152,6 +154,10 @@ function scanGridSize(scan: VisibilityScan) {
   return Number.isInteger(sizeFromPoints) ? sizeFromPoints : scan.grid_size;
 }
 
+function keywordKey(value: string) {
+  return value.trim().toLocaleLowerCase('pt-BR');
+}
+
 function GridMapCanvas({ scan, mapsKey, onError }: {
   scan: VisibilityScan;
   mapsKey: string;
@@ -243,7 +249,7 @@ function GridMapCanvas({ scan, mapsKey, onError }: {
 }
 
 export function HeatmapView({ onShowToast }: HeatmapViewProps) {
-  const { leads, loading, error, createLead } = useLeads();
+  const { leads, loading, error, createLead, updateLead } = useLeads();
   const [selectedId, setSelectedId] = useState('');
   const [mapsKey, setMapsKey] = useState(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '');
   const [gridSize, setGridSize] = useState(5);
@@ -252,6 +258,11 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
   const [generatingGrid, setGeneratingGrid] = useState(false);
   const [scanHistory, setScanHistory] = useState<VisibilityScan[]>([]);
   const [activeScan, setActiveScan] = useState<VisibilityScan | null>(null);
+  const [activeKeyword, setActiveKeyword] = useState('');
+  const [keywordManagerOpen, setKeywordManagerOpen] = useState(false);
+  const [keywordDrafts, setKeywordDrafts] = useState<string[]>([]);
+  const [newKeyword, setNewKeyword] = useState('');
+  const [savingKeywords, setSavingKeywords] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -277,6 +288,8 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
         const rows = (scansRequest.data || []) as VisibilityScan[];
         setScanHistory(rows);
         setActiveScan(rows[0] || null);
+        setSelectedId(rows[0]?.lead_id || '');
+        setActiveKeyword(rows[0]?.keyword || '');
       }
     };
     void loadConfiguration();
@@ -289,6 +302,13 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
   );
   const selected = located.find(lead => lead.id === selectedId) || null;
   const activeScanLead = activeScan ? leads.find(lead => lead.id === activeScan.lead_id) || null : null;
+  const keywordTabs = useMemo(() => {
+    if (!selected) return [];
+    const stored = selected.analysis_data?.visibility_keywords || [];
+    const scanned = scanHistory.filter(scan => scan.lead_id === selected.id).map(scan => scan.keyword);
+    const values = (stored.length ? stored : [selected.category || '', ...scanned]).map(value => value.trim()).filter(Boolean);
+    return values.filter((value, index) => values.findIndex(item => keywordKey(item) === keywordKey(value)) === index);
+  }, [scanHistory, selected]);
   const competitors = useMemo(() => {
     if (!activeScan) return [];
     const targetPlaceId = activeScanLead?.google_place_id;
@@ -329,6 +349,48 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
         : 'Baixa';
 
   const handleMapError = useCallback((message: string) => onShowToast(message, 'error'), [onShowToast]);
+  const selectKeyword = (keyword: string) => {
+    if (!selected) return;
+    setActiveKeyword(keyword);
+    const scan = scanHistory.find(item => item.lead_id === selected.id && keywordKey(item.keyword) === keywordKey(keyword));
+    setActiveScan(scan || null);
+  };
+  const openKeywordManager = () => {
+    if (!selected) return;
+    setKeywordDrafts(keywordTabs.length ? keywordTabs : [selected.category || selected.company_name]);
+    setNewKeyword('');
+    setKeywordManagerOpen(true);
+  };
+  const addKeywordDraft = () => {
+    const value = newKeyword.trim();
+    if (value.length < 2) return onShowToast('Digite uma palavra-chave válida.', 'error');
+    if (keywordDrafts.some(item => keywordKey(item) === keywordKey(value))) return onShowToast('Essa palavra-chave já está na lista.', 'info');
+    if (keywordDrafts.length >= 10) return onShowToast('Use no máximo 10 palavras-chave por empresa.', 'error');
+    setKeywordDrafts(current => [...current, value]);
+    setNewKeyword('');
+  };
+  const saveKeywords = async () => {
+    if (!selected) return;
+    const cleaned = keywordDrafts
+      .map(value => value.trim())
+      .filter(value => value.length >= 2)
+      .filter((value, index, values) => values.findIndex(item => keywordKey(item) === keywordKey(value)) === index);
+    if (!cleaned.length) return onShowToast('Mantenha pelo menos uma palavra-chave.', 'error');
+    setSavingKeywords(true);
+    const result = await updateLead(selected.id, {
+      analysis_data: {
+        ...(selected.analysis_data || {}),
+        visibility_keywords: cleaned,
+      },
+    });
+    setSavingKeywords(false);
+    if (result.error) return onShowToast(result.error, 'error');
+    const nextKeyword = cleaned.some(item => keywordKey(item) === keywordKey(activeKeyword)) ? activeKeyword : cleaned[0];
+    setActiveKeyword(nextKeyword);
+    setActiveScan(scanHistory.find(item => item.lead_id === selected.id && keywordKey(item.keyword) === keywordKey(nextKeyword)) || null);
+    setKeywordManagerOpen(false);
+    onShowToast('Palavras-chave atualizadas.', 'success');
+  };
   const resolveGoogleProfile = async () => {
     if (!supabase || !googleMapsUrl.trim()) {
       return onShowToast('Cole o link do perfil da empresa no Google Maps.', 'error');
@@ -357,6 +419,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
       const existing = leads.find(lead => lead.google_place_id === place.google_place_id);
       if (existing) {
         setSelectedId(existing.id);
+        setActiveKeyword(existing.analysis_data?.visibility_keywords?.[0] || existing.category || existing.company_name);
       } else {
         const created = await createLead({
           company_name: place.company_name || 'Empresa do Google',
@@ -388,6 +451,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
         });
         if (created.error || !created.data) throw new Error(created.error || 'Não foi possível salvar a empresa.');
         setSelectedId(created.data.id);
+        setActiveKeyword(created.data.category || created.data.company_name);
       }
       setActiveScan(null);
       onShowToast('Perfil carregado. O segmento foi identificado automaticamente.', 'success');
@@ -403,8 +467,8 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
     if (!selected.google_place_id || typeof selected.latitude !== 'number' || typeof selected.longitude !== 'number') {
       return onShowToast('Selecione uma empresa gerada pelo Google e com coordenadas válidas.', 'error');
     }
-    const automaticKeyword = selected.category?.trim() || selected.company_name.trim();
-    if (automaticKeyword.length < 2) return onShowToast('O Google não retornou um segmento válido para essa empresa.', 'error');
+    const searchKeyword = activeKeyword.trim() || selected.category?.trim() || selected.company_name.trim();
+    if (searchKeyword.length < 2) return onShowToast('Selecione ou cadastre uma palavra-chave válida.', 'error');
     setGeneratingGrid(true);
     const { data } = await supabase.auth.getSession();
     const response = await fetch('/api/places', {
@@ -417,7 +481,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
         action: 'grid',
         leadId: selected.id,
         placeId: selected.google_place_id,
-        keyword: automaticKeyword,
+        keyword: searchKeyword,
         latitude: selected.latitude,
         longitude: selected.longitude,
         radiusMeters: 2000,
@@ -428,6 +492,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
     setGeneratingGrid(false);
     if (!response.ok) return onShowToast(result.error || 'Não foi possível gerar a grade.', 'error');
     const scan = result.scan as VisibilityScan;
+    setActiveKeyword(scan.keyword);
     setActiveScan(scan);
     setScanHistory(current => [scan, ...current.filter(item => item.id !== scan.id)].slice(0, 20));
     onShowToast(`Grade ${gridSize}×${gridSize} calculada e salva no histórico.`);
@@ -463,6 +528,12 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
             {resolvingProfile ? 'Identificando...' : 'Carregar perfil'}
           </button>
         </div>
+
+        {selected && <div className="flex flex-wrap items-center gap-2">
+          <span className="mr-1 text-[10px] uppercase tracking-[0.12em] font-semibold text-[#727687]">Palavras-chave</span>
+          {keywordTabs.map(keyword => <button key={keyword} type="button" onClick={() => selectKeyword(keyword)} className={`px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors ${keywordKey(activeKeyword) === keywordKey(keyword) ? 'bg-[#0066ff] border-[#0066ff] text-white shadow-sm' : 'bg-white dark:bg-[#10142e] border-[#c2c6d8]/45 hover:border-[#0066ff] text-[#424656] dark:text-[#dfe3f4]'}`}>{keyword}</button>)}
+          <button type="button" onClick={openKeywordManager} className="ml-auto px-3 py-1.5 rounded-full border border-[#c2c6d8]/45 text-xs font-semibold text-[#0066ff] hover:bg-[#0066ff]/5 flex items-center gap-1.5"><Pencil className="w-3 h-3" /> Gerenciar</button>
+        </div>}
 
         {selected && <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-4 rounded-xl bg-[#f8f9fc] dark:bg-[#10142e] border border-[#c2c6d8]/30">
           <div>
@@ -519,7 +590,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
             {competitors.map(competitor => {
               const displayPosition = Math.max(1, Math.round(competitor.average_position));
               return <article key={competitor.id} className="p-4 flex gap-3">
-                <div className="shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-[#e9efff] to-[#dce6ff] text-[#0066ff] grid place-items-center font-semibold text-sm">{competitor.name.slice(0, 2).toUpperCase()}</div>
+                <CompetitorPhoto photoName={competitor.photo_name} companyName={competitor.name} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2"><p className="text-xs font-semibold leading-tight line-clamp-2">{competitor.name}</p><span className={`shrink-0 px-2 py-0.5 rounded-full text-[9px] font-bold ${displayPosition <= 3 ? 'bg-emerald-50 text-emerald-700' : displayPosition <= 10 ? 'bg-amber-50 text-amber-700' : 'bg-rose-50 text-rose-700'}`}>Pos. {displayPosition}</span></div>
                   <p className="text-[10px] text-[#727687] mt-1 truncate">{competitor.address || 'Endereço não informado'}</p>
@@ -557,7 +628,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
           {scanHistory.map(scan => {
             const lead = leads.find(item => item.id === scan.lead_id);
             const historyGridSize = scanGridSize(scan);
-            return <button key={scan.id} onClick={() => { setActiveScan(scan); setSelectedId(scan.lead_id); setGridSize(historyGridSize); }} className={`w-full p-4 text-left flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-[#f8f9fc] dark:hover:bg-[#10142e] ${activeScan?.id === scan.id ? 'bg-[#0066ff]/5' : ''}`}>
+            return <button key={scan.id} onClick={() => { setActiveScan(scan); setSelectedId(scan.lead_id); setActiveKeyword(scan.keyword); setGridSize(historyGridSize); }} className={`w-full p-4 text-left flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-[#f8f9fc] dark:hover:bg-[#10142e] ${activeScan?.id === scan.id ? 'bg-[#0066ff]/5' : ''}`}>
               <div>
                 <p className="text-xs font-semibold">{lead?.company_name || 'Empresa'} <span className="font-normal text-[#727687]">• {scan.keyword}</span></p>
                 <p className="text-[10px] text-[#727687] mt-0.5">{new Date(scan.created_at).toLocaleString('pt-BR')} • Grade {historyGridSize}×{historyGridSize} • Raio de 2 km</p>
@@ -567,9 +638,64 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
           })}
         </div>}
       </section>
+      {keywordManagerOpen && selected && <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-[#10142e]/55 backdrop-blur-sm">
+        <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-[#141936] border border-[#c2c6d8]/35 shadow-2xl overflow-hidden">
+          <div className="p-5 flex items-start justify-between border-b border-[#c2c6d8]/30">
+            <div><h3 className="text-base font-semibold" style={{ fontFamily: "'Inter', sans-serif" }}>Gerenciar palavras-chave</h3><p className="text-xs text-[#727687] mt-1">Cada palavra-chave terá sua própria grade e histórico.</p></div>
+            <button type="button" onClick={() => setKeywordManagerOpen(false)} className="p-2 rounded-lg hover:bg-[#f4f2fd] dark:hover:bg-[#10142e]" aria-label="Fechar"><X className="w-4 h-4" /></button>
+          </div>
+          <div className="p-5 space-y-3 max-h-[55vh] overflow-y-auto">
+            {keywordDrafts.map((keyword, index) => <div key={index} className="flex items-center gap-2">
+              <input aria-label={`Palavra-chave ${index + 1}`} value={keyword} onChange={event => setKeywordDrafts(current => current.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} className="flex-1 px-3 py-2.5 rounded-xl bg-[#f8f9fc] dark:bg-[#10142e] border border-[#c2c6d8]/45 text-sm outline-none focus:border-[#0066ff]" />
+              <button type="button" disabled={keywordDrafts.length === 1} onClick={() => setKeywordDrafts(current => current.filter((_, itemIndex) => itemIndex !== index))} className="p-2.5 rounded-xl border border-[#c2c6d8]/45 text-rose-600 disabled:opacity-30 hover:bg-rose-50" aria-label={`Remover ${keyword}`}><Trash2 className="w-4 h-4" /></button>
+            </div>)}
+            <div className="flex items-center gap-2 pt-2">
+              <input value={newKeyword} onChange={event => setNewKeyword(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') addKeywordDraft(); }} placeholder="Nova palavra-chave" className="flex-1 px-3 py-2.5 rounded-xl bg-white dark:bg-[#10142e] border border-dashed border-[#0066ff]/50 text-sm outline-none focus:border-[#0066ff]" />
+              <button type="button" onClick={addKeywordDraft} className="px-3 py-2.5 rounded-xl bg-[#0066ff]/10 text-[#0066ff] text-xs font-semibold flex items-center gap-1"><Plus className="w-4 h-4" /> Adicionar</button>
+            </div>
+          </div>
+          <div className="p-5 border-t border-[#c2c6d8]/30 flex justify-end gap-2">
+            <button type="button" onClick={() => setKeywordManagerOpen(false)} className="px-4 py-2.5 rounded-xl border border-[#c2c6d8]/45 text-xs font-semibold">Cancelar</button>
+            <button type="button" disabled={savingKeywords} onClick={() => void saveKeywords()} className="px-5 py-2.5 rounded-xl bg-[#0066ff] disabled:opacity-50 text-white text-xs font-semibold">{savingKeywords ? 'Salvando…' : 'Salvar palavras-chave'}</button>
+          </div>
+        </div>
+      </div>}
       {error && <div className="p-4 rounded-xl bg-rose-50 text-rose-700 text-xs">{error}</div>}
     </div>
   );
+}
+
+function CompetitorPhoto({ photoName, companyName }: { photoName: string | null; companyName: string }) {
+  const [photoUrl, setPhotoUrl] = useState('');
+
+  useEffect(() => {
+    if (!photoName || !supabase) return;
+    let active = true;
+    let objectUrl = '';
+    const load = async () => {
+      const { data } = await supabase!.auth.getSession();
+      const response = await fetch('/api/places', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${data.session?.access_token || ''}`,
+        },
+        body: JSON.stringify({ action: 'photo', photoName }),
+      });
+      if (!response.ok || !active) return;
+      objectUrl = URL.createObjectURL(await response.blob());
+      if (active) setPhotoUrl(objectUrl);
+    };
+    void load();
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [photoName]);
+
+  return photoUrl
+    ? <Image src={photoUrl} alt="" width={48} height={48} unoptimized className="shrink-0 w-12 h-12 rounded-xl object-cover bg-[#eef2f6]" />
+    : <div className="shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-[#e9efff] to-[#dce6ff] text-[#0066ff] grid place-items-center font-semibold text-sm">{companyName.slice(0, 2).toUpperCase()}</div>;
 }
 
 function EmptyMap({ title, detail }: { title: string; detail: string }) {

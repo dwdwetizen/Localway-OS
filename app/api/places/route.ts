@@ -22,6 +22,7 @@ type VisibilityPoint = {
     category: string | null;
     rating: number | null;
     review_count: number;
+    photo_name: string | null;
   }>;
 };
 
@@ -435,7 +436,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const action = body.action === 'analyze' || body.action === 'analyze_url' || body.action === 'resolve_map_profile'
+  const action = body.action === 'analyze' || body.action === 'analyze_url' || body.action === 'resolve_map_profile' || body.action === 'photo'
     ? body.action
     : body.action === 'grid'
       ? 'grid'
@@ -444,7 +445,7 @@ export async function POST(request: NextRequest) {
     request,
     action === 'analyze' || action === 'analyze_url'
       ? 'analises'
-      : action === 'grid' || action === 'resolve_map_profile'
+      : action === 'grid' || action === 'resolve_map_profile' || action === 'photo'
         ? 'mapa'
         : 'prospeccao',
   );
@@ -454,6 +455,29 @@ export async function POST(request: NextRequest) {
   const apiKey = configuration.placesKey;
   if (!apiKey) {
     return NextResponse.json({ error: 'A chave do Google Places ainda não foi cadastrada em Administração → Integrações.' }, { status: 500 });
+  }
+
+  if (action === 'photo') {
+    const photoName = String(body.photoName || '').trim();
+    if (!/^places\/[^/]+\/photos\/[^/]+$/.test(photoName)) {
+      return NextResponse.json({ error: 'Referência de foto inválida.' }, { status: 400 });
+    }
+    const photoResponse = await fetch(
+      `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=180&maxHeightPx=180`,
+      {
+        headers: { 'X-Goog-Api-Key': apiKey },
+        redirect: 'follow',
+      },
+    );
+    if (!photoResponse.ok) {
+      return NextResponse.json({ error: 'A foto não está disponível.' }, { status: photoResponse.status });
+    }
+    return new NextResponse(await photoResponse.arrayBuffer(), {
+      headers: {
+        'Content-Type': photoResponse.headers.get('Content-Type') || 'image/jpeg',
+        'Cache-Control': 'private, max-age=86400',
+      },
+    });
   }
 
   if (action === 'grid') {
@@ -498,6 +522,7 @@ export async function POST(request: NextRequest) {
             'places.primaryTypeDisplayName',
             'places.rating',
             'places.userRatingCount',
+            'places.photos',
           ].join(','),
         },
         body: JSON.stringify({
@@ -538,6 +563,9 @@ export async function POST(request: NextRequest) {
             category: readDisplayName(place.primaryTypeDisplayName),
             rating: typeof place.rating === 'number' ? place.rating : null,
             review_count: typeof place.userRatingCount === 'number' ? place.userRatingCount : 0,
+            photo_name: Array.isArray(place.photos)
+              ? readText((place.photos[0] as PlaceRecord | undefined)?.name)
+              : null,
           }];
         }),
       } satisfies VisibilityPoint;
