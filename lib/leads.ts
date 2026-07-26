@@ -43,6 +43,8 @@ export interface Lead {
   created_by: string | null;
   archived_at: string | null;
   archived_by: string | null;
+  calendar_event_id: string | null;
+  calendar_event_url: string | null;
   source: LeadSource;
   status: LeadStatus;
   next_action_at: string | null;
@@ -91,10 +93,10 @@ export const statusLabel: Record<LeadStatus, string> = {
   ligacao_realizada: 'Ligação realizada',
   contato_realizado: 'Contato realizado',
   nao_atendeu: 'Não atendeu',
-  ligar_depois: 'Ligar depois',
-  retornar_depois: 'Aguardando retorno',
+  ligar_depois: 'Retornar depois — funcionário',
+  retornar_depois: 'Retornar depois — decisor',
   reuniao_marcada: 'Reunião marcada',
-  qualificado: 'Enviar para CRM',
+  qualificado: 'Enviar para o CRM',
   sem_interesse: 'Sem interesse',
   perdido: 'Perdido',
 };

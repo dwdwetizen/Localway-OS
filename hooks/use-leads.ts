@@ -5,7 +5,7 @@ import { Lead, LeadInteraction } from '@/lib/leads';
 import { supabase, supabaseConfigurationError } from '@/lib/supabase';
 import { useAuthProfile } from '@/components/AuthGate';
 
-type NewLead = Omit<Lead, 'id' | 'created_at' | 'updated_at' | 'last_contact_at' | 'crm_stage' | 'estimated_value' | 'created_by' | 'archived_at' | 'archived_by'> & {
+type NewLead = Omit<Lead, 'id' | 'created_at' | 'updated_at' | 'last_contact_at' | 'crm_stage' | 'estimated_value' | 'created_by' | 'archived_at' | 'archived_by' | 'calendar_event_id' | 'calendar_event_url'> & {
   last_contact_at?: string | null;
   crm_stage?: Lead['crm_stage'];
   estimated_value?: Lead['estimated_value'];

@@ -4,7 +4,7 @@ import React, { FormEvent, useMemo, useState } from 'react';
 import { Archive, Building2, CalendarDays, CheckSquare, ExternalLink, Globe2, MessageCircle, PhoneCall, Plus, RotateCcw, Search, Sparkles, Square, Trash2, X } from 'lucide-react';
 import { useAuthProfile } from '@/components/AuthGate';
 import { useLeads } from '@/hooks/use-leads';
-import { contactCountdown, ContactUrgency, Lead, LeadStatus, statusLabel, whatsappLink } from '@/lib/leads';
+import { contactCountdown, ContactUrgency, googleCalendarLink, Lead, LeadStatus, statusLabel, whatsappLink } from '@/lib/leads';
 import { supabase } from '@/lib/supabase';
 
 interface ProspectingViewProps {
@@ -12,8 +12,8 @@ interface ProspectingViewProps {
   onOpenAiPitchModal: (companyName: string, lead?: Lead) => void;
 }
 
-const nextSteps: LeadStatus[] = ['nao_atendeu', 'retornar_depois', 'reuniao_marcada', 'qualificado', 'sem_interesse'];
-const scheduledStatuses: LeadStatus[] = ['ligar_depois', 'retornar_depois', 'reuniao_marcada'];
+const nextSteps: LeadStatus[] = ['nao_atendeu', 'retornar_depois', 'ligar_depois', 'reuniao_marcada', 'sem_interesse'];
+const scheduledStatuses: LeadStatus[] = ['nao_atendeu', 'ligar_depois', 'retornar_depois', 'reuniao_marcada'];
 const emptyManual = { companyName: '', category: '', city: '', address: '', phone: '', whatsapp: '', email: '', decisionMaker: '', receptionist: '', notes: '' };
 
 function countdownClass(urgency: ContactUrgency) {
@@ -62,6 +62,13 @@ function returnDayOptions() {
   });
 }
 
+function tomorrowReturnValue() {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(9, 0, 0, 0);
+  return localDateTimeValue(tomorrow);
+}
+
 export function ProspectingView({ onShowToast, onOpenAiPitchModal }: ProspectingViewProps) {
   const authProfile = useAuthProfile();
   const { leads, archivedLeads, loading, error, createLead, updateLead, deleteLead } = useLeads();
@@ -72,7 +79,7 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
   const [manualOpen, setManualOpen] = useState(false);
   const [manual, setManual] = useState(emptyManual);
   const [selected, setSelected] = useState<string[]>([]);
-  const [prospectingMode, setProspectingMode] = useState<'presencial' | 'online' | 'arquivados'>('online');
+  const [prospectingMode, setProspectingMode] = useState<'presencial' | 'online' | 'arquivados'>('presencial');
 
   const prospects = useMemo(
     () => leads.filter(lead => {
@@ -80,6 +87,7 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
         && !lead.crm_stage
         && lead.status !== 'qualificado'
         && lead.status !== 'reuniao_marcada'
+        && lead.status !== 'retornar_depois'
         && lead.status !== 'sem_interesse'
         && lead.status !== 'perdido';
       const matchesMode = prospectingMode === 'online'
@@ -157,11 +165,13 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
       lead.id,
       {
         status,
-        crm_stage: status === 'qualificado' || status === 'reuniao_marcada'
+        crm_stage: status === 'reuniao_marcada'
           ? (lead.crm_stage || 'qualificacao')
           : lead.crm_stage,
         next_action_at: scheduledStatuses.includes(status) ? nextActionAt : null,
         last_contact_at: status === 'novo' ? lead.last_contact_at : new Date().toISOString(),
+        archived_at: status === 'sem_interesse' ? new Date().toISOString() : lead.archived_at,
+        archived_by: status === 'sem_interesse' ? authProfile.id : lead.archived_by,
       },
       {
         outcome: statusLabel[status],
@@ -171,11 +181,49 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
       },
     );
     if (result.error) onShowToast(result.error, 'error');
-    else if (status === 'reuniao_marcada') onShowToast('Reunião marcada e empresa enviada para a primeira coluna do CRM.');
-    else if (status === 'retornar_depois' || status === 'ligar_depois') onShowToast('Lead enviado para a lista de Follow-up.');
-    else if (status === 'qualificado') onShowToast('Lead enviado para a primeira coluna do CRM.');
+    if (result.error) return false;
+
+    if (status === 'reuniao_marcada' && nextActionAt && supabase) {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const calendarResponse = await fetch('/api/google-calendar/events', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${sessionData.session?.access_token || ''}`,
+        },
+        body: JSON.stringify({
+          companyName: lead.company_name,
+          decisionMakerName: lead.decision_maker_name,
+          receptionistName: lead.receptionist_name,
+          phone: lead.phone,
+          whatsapp: lead.whatsapp,
+          address: lead.address,
+          googleMapsUrl: lead.google_maps_url,
+          notes,
+          start: nextActionAt,
+        }),
+      });
+      const calendarResult = await calendarResponse.json();
+      if (calendarResponse.ok) {
+        await updateLead(lead.id, {
+          calendar_event_id: calendarResult.eventId || null,
+          calendar_event_url: calendarResult.eventUrl || null,
+        }, {
+          outcome: 'Reunião criada no Google Agenda',
+          notes: calendarResult.calendarEmail ? `Agenda: ${calendarResult.calendarEmail}` : null,
+          event_type: 'calendar_event_created',
+        });
+        onShowToast('Reunião enviada ao CRM e criada no Google Agenda.', 'success');
+      } else {
+        window.open(googleCalendarLink(lead, nextActionAt), '_blank', 'noopener,noreferrer');
+        onShowToast(`${calendarResult.error || 'Agenda central não conectado.'} Abrimos o evento preenchido para salvar manualmente.`, 'info');
+      }
+    } else if (status === 'retornar_depois') onShowToast('Lead enviado ao Follow-up para retorno com o decisor.');
+    else if (status === 'ligar_depois') onShowToast('Retorno com o funcionário mantido na prospecção.');
+    else if (status === 'nao_atendeu') onShowToast('Nova tentativa programada automaticamente para amanhã.');
+    else if (status === 'sem_interesse') onShowToast('Lead arquivado como sem interesse. Ele pode ser restaurado depois.');
     else onShowToast('Contato registrado no histórico.');
-    return !result.error;
+    return true;
   };
 
   return <div className="space-y-6 animate-in fade-in duration-300">
@@ -221,7 +269,7 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
 function LeadRow({ lead, selected, toggle, updateStep, archiveLead, onPitch }: { lead: Lead; selected: boolean; toggle: (id: string) => void; updateStep: (lead: Lead, status: LeadStatus, nextActionAt: string | null, notes: string) => Promise<boolean>; archiveLead: (lead: Lead) => Promise<boolean>; onPitch: (name: string, lead?: Lead) => void }) {
   const wa = whatsappLink(lead.whatsapp || lead.phone);
   const profile = lead.health_score === null ? 'Sem análise' : lead.health_score <= 55 ? 'Boa oportunidade' : lead.health_score <= 75 ? 'Oportunidade média' : 'Perfil forte';
-  const savedCountdown = lead.status === 'retornar_depois' ? contactCountdown(lead.next_action_at) : null;
+  const savedCountdown = ['nao_atendeu', 'ligar_depois', 'retornar_depois'].includes(lead.status) ? contactCountdown(lead.next_action_at) : null;
   const [status, setStatus] = useState<LeadStatus>(lead.status);
   const [nextActionAt, setNextActionAt] = useState(lead.next_action_at ? lead.next_action_at.slice(0, 16) : '');
   const [notes, setNotes] = useState('');
@@ -247,10 +295,10 @@ function LeadRow({ lead, selected, toggle, updateStep, archiveLead, onPitch }: {
       <div className="flex items-center gap-1 flex-wrap shrink-0">{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer" title="Abrir perfil no Google Maps" className="p-2 text-[#0066ff] hover:bg-[#0066ff]/10 rounded-lg"><ExternalLink className="w-4 h-4" /></a>}{wa && <a href={wa} target="_blank" rel="noreferrer" title="Abrir WhatsApp" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg"><MessageCircle className="w-4 h-4" /></a>}{lead.phone && <a href={`tel:${lead.phone.replace(/\D/g, '')}`} title="Ligar" className="p-2 text-[#0066ff] hover:bg-[#0066ff]/10 rounded-lg"><PhoneCall className="w-4 h-4" /></a>}<button onClick={() => onPitch(lead.company_name, lead)} className="px-3 py-2 bg-[#0066ff] hover:bg-[#0050cb] text-white text-xs font-bold rounded-xl flex items-center gap-1"><Sparkles className="w-3.5 h-3.5" /> IA</button><button type="button" disabled={archiving} onClick={() => void archive()} title="Arquivar lead" aria-label={`Arquivar ${lead.company_name}`} className="p-2 text-[#727687] hover:text-[#1a1b22] hover:bg-[#f4f2fd] disabled:opacity-50 rounded-lg">{archiving ? <span className="text-[10px] font-bold">...</span> : <Archive className="w-4 h-4" />}</button></div>
     </div>
     <div className="grid grid-cols-1 md:grid-cols-[180px_1fr_auto] gap-2 items-end pl-8">
-      <label className="text-[10px] font-bold text-[#727687]">RESULTADO<select value={nextSteps.includes(status) ? status : ''} onChange={event => { const nextStatus = event.target.value as LeadStatus; setStatus(nextStatus); setReturnPickerOpen(nextStatus === 'retornar_depois'); }} className="mt-1 w-full px-2 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl"><option value="" disabled>Escolha o resultado</option>{nextSteps.map(item => <option key={item} value={item}>{statusLabel[item]}</option>)}</select></label>
+      <label className="text-[10px] font-bold text-[#727687]">RESULTADO<select value={nextSteps.includes(status) ? status : ''} onChange={event => { const nextStatus = event.target.value as LeadStatus; setStatus(nextStatus); if (nextStatus === 'nao_atendeu') setNextActionAt(tomorrowReturnValue()); if (nextStatus === 'reuniao_marcada') setNextActionAt(''); setReturnPickerOpen(nextStatus === 'retornar_depois' || nextStatus === 'ligar_depois'); }} className="mt-1 w-full px-2 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl"><option value="" disabled>Escolha o resultado</option>{nextSteps.map(item => <option key={item} value={item}>{statusLabel[item]}</option>)}</select></label>
       <label className="text-[10px] font-bold text-[#727687]">ANOTAÇÃO<input value={notes} onChange={event => setNotes(event.target.value)} placeholder="Ex.: falou com o decisor, pediu retorno…" className="mt-1 w-full px-3 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl" /></label>
       <button disabled={saving || !nextSteps.includes(status)} onClick={() => void register()} className="px-4 py-2.5 rounded-xl bg-[#0066ff] disabled:opacity-50 text-white text-xs font-bold">{saving ? 'Salvando…' : 'Registrar'}</button>
-      {status === 'retornar_depois' && <div className="md:col-start-1 md:col-span-2 relative">
+      {(status === 'retornar_depois' || status === 'ligar_depois') && <div className="md:col-start-1 md:col-span-2 relative">
         <p className="text-[10px] font-bold text-[#727687]">DIA DO RETORNO</p>
         <button type="button" onClick={() => setReturnPickerOpen(current => !current)} className="mt-1 w-full sm:w-auto min-w-52 px-3 py-2 text-xs font-bold flex items-center justify-between gap-3 bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl">
           <span>{nextActionAt ? new Date(nextActionAt).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' }) : 'Escolher o dia'}</span>
@@ -283,7 +331,7 @@ function LeadRow({ lead, selected, toggle, updateStep, archiveLead, onPitch }: {
           </div>
         </div>}
       </div>}
-      {scheduledStatuses.includes(status) && status !== 'retornar_depois' && <label className="md:col-start-1 text-[10px] font-bold text-[#727687]">PRÓXIMO CONTATO<input type="datetime-local" value={nextActionAt} onChange={event => setNextActionAt(event.target.value)} className="mt-1 w-full px-3 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl" /></label>}
+      {scheduledStatuses.includes(status) && status !== 'retornar_depois' && status !== 'ligar_depois' && <label className="md:col-start-1 text-[10px] font-bold text-[#727687]">{status === 'reuniao_marcada' ? 'DATA E HORA DA REUNIÃO' : 'PRÓXIMA TENTATIVA'}<input type="datetime-local" value={nextActionAt} onChange={event => setNextActionAt(event.target.value)} className="mt-1 w-full px-3 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl" /></label>}
     </div>
   </div>;
 }
