@@ -13,7 +13,7 @@ type Goal = { id: string; user_id: string; period_start: string; period_end: str
 type ActivityLead = { company_name?: string; source?: string };
 type Activity = { id: string; created_by: string | null; actor_name: string | null; actor_email: string | null; outcome: string; notes: string | null; occurred_at: string; leads: ActivityLead | ActivityLead[] | null; };
 const pages = ['Análises', 'Mapa', 'Raio-X', 'Prospecção', 'Follow-up', 'CRM', 'Propostas', 'Meus Serviços', 'Equipe', 'Avaliações'];
-const initialForm = { nome: '', email: '', password: '', jobTitle: 'SDR', permissions: ['Prospecção', 'Follow-up'] };
+const initialForm = { nome: '', email: '', password: '', jobTitle: 'SDR', permissions: ['Prospecção', 'Follow-up', 'CRM', 'Equipe'] };
 const now = new Date();
 const initialGoal = {
   userId: '',
@@ -191,6 +191,9 @@ export function AdminView({ onShowToast }: AdminViewProps) {
           <label className="mt-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 flex gap-2 text-xs font-bold">
             <input type="checkbox" checked={form.permissions.includes('analises_solucoes')} onChange={() => toggle('analises_solucoes')}/> Pode ver soluções e ROI na análise
           </label>
+          <label className="mt-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 flex gap-2 text-xs font-bold">
+            <input type="checkbox" checked={form.permissions.includes('crm_gestao')} onChange={() => toggle('crm_gestao')}/> Pode administrar e movimentar o CRM da equipe
+          </label>
         </div>
         <button disabled={saving} onClick={() => void createLogin()} className="w-full py-2.5 bg-[#0066ff] text-white rounded-xl text-xs font-bold flex justify-center gap-2">
           {saving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Plus className="w-4 h-4"/>} Criar login
@@ -235,6 +238,9 @@ export function AdminView({ onShowToast }: AdminViewProps) {
                 </div>
                 <label className="mt-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 flex gap-2 text-xs font-bold">
                   <input type="checkbox" checked={permissionsDraft.includes('analises_solucoes')} onChange={() => togglePermissionDraft('analises_solucoes')}/> Pode ver soluções e ROI na análise
+                </label>
+                <label className="mt-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 flex gap-2 text-xs font-bold">
+                  <input type="checkbox" checked={permissionsDraft.includes('crm_gestao')} onChange={() => togglePermissionDraft('crm_gestao')}/> Pode administrar e movimentar o CRM da equipe
                 </label>
                 <div className="mt-3 flex justify-end gap-2">
                   <button onClick={() => { setEditingPermissionsId(null); setPermissionsDraft([]); setJobTitleDraft(''); }} className="px-3 py-2 rounded-xl border text-xs font-bold">Cancelar</button>

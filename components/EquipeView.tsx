@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Award, CalendarCheck, Loader2, PhoneCall, Users } from 'lucide-react';
+import { Award, BadgeDollarSign, CalendarCheck, Loader2, PhoneCall, Users } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface EquipeViewProps {
@@ -16,6 +16,7 @@ type TeamMember = {
   role: string | null;
   leads_approached: number;
   meetings_scheduled: number;
+  sales_converted: number;
 };
 
 export function EquipeView({ onShowToast }: EquipeViewProps) {
@@ -37,6 +38,7 @@ export function EquipeView({ onShowToast }: EquipeViewProps) {
       ...member,
       leads_approached: Number(member.leads_approached || 0),
       meetings_scheduled: Number(member.meetings_scheduled || 0),
+      sales_converted: Number(member.sales_converted || 0),
     })));
   }, [onShowToast]);
 
@@ -48,6 +50,7 @@ export function EquipeView({ onShowToast }: EquipeViewProps) {
   const totals = useMemo(() => ({
     leads: teamMembers.reduce((total, member) => total + member.leads_approached, 0),
     meetings: teamMembers.reduce((total, member) => total + member.meetings_scheduled, 0),
+    sales: teamMembers.reduce((total, member) => total + member.sales_converted, 0),
   }), [teamMembers]);
 
   return (
@@ -58,7 +61,7 @@ export function EquipeView({ onShowToast }: EquipeViewProps) {
             Visão da Equipe
           </h2>
           <p className="text-xs text-[#727687]">
-            Ranking real dos usuários ativos, calculado pelo histórico individual de prospecção e reuniões.
+            Ranking real dos usuários ativos, calculado pelo histórico individual de prospecção, reuniões e vendas pagas.
           </p>
         </div>
         <button type="button" onClick={() => void loadTeam()} disabled={loading} className="px-4 py-2.5 rounded-xl border border-[#0066ff]/35 text-[#0066ff] text-xs font-bold disabled:opacity-50">
@@ -66,10 +69,11 @@ export function EquipeView({ onShowToast }: EquipeViewProps) {
         </button>
       </header>
 
-      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <Metric icon={Users} label="Usuários ativos" value={teamMembers.length} />
         <Metric icon={PhoneCall} label="Leads abordados" value={totals.leads} />
         <Metric icon={CalendarCheck} label="Reuniões marcadas" value={totals.meetings} />
+        <Metric icon={BadgeDollarSign} label="Vendas convertidas" value={totals.sales} />
       </section>
 
       <section className="bg-white dark:bg-[#141936] rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] overflow-hidden shadow-sm">
@@ -91,6 +95,7 @@ export function EquipeView({ onShowToast }: EquipeViewProps) {
                   <th className="p-4">Cargo</th>
                   <th className="p-4">Leads abordados</th>
                   <th className="p-4">Reuniões marcadas</th>
+                  <th className="p-4">Vendas convertidas</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#c2c6d8]/20 dark:divide-[#2e366b]">
@@ -125,6 +130,7 @@ export function EquipeView({ onShowToast }: EquipeViewProps) {
                       <td className="p-4 text-[#727687]">{member.job_title}</td>
                       <td className="p-4 font-bold">{member.leads_approached}</td>
                       <td className="p-4 font-bold text-purple-600">{member.meetings_scheduled}</td>
+                      <td className="p-4 font-bold text-emerald-600">{member.sales_converted}</td>
                     </tr>
                   );
                 })}
