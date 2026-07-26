@@ -101,19 +101,21 @@ function AuthenticatedHome() {
     } else {
       document.documentElement.classList.remove('dark');
     }
+    return () => document.documentElement.classList.remove('dark');
   }, [darkMode]);
 
   useEffect(() => {
-    const savedTheme = window.localStorage.getItem('localway-theme');
+    const savedTheme = window.localStorage.getItem(`localway-theme:${profile.id}`);
     const frame = window.requestAnimationFrame(() => {
       if (savedTheme === 'dark') setDarkMode(true);
+      else setDarkMode(false);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, []);
+  }, [profile.id]);
 
   useEffect(() => {
-    window.localStorage.setItem('localway-theme', darkMode ? 'dark' : 'light');
-  }, [darkMode]);
+    window.localStorage.setItem(`localway-theme:${profile.id}`, darkMode ? 'dark' : 'light');
+  }, [darkMode, profile.id]);
 
   const showToast = useCallback((message: string, type: 'success' | 'info' | 'error' = 'success') => {
     const newToast: ToastMessage = {
