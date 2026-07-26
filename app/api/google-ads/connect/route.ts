@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     response_type: 'code',
     scope: 'https://www.googleapis.com/auth/adwords openid email',
     access_type: 'offline',
-    prompt: 'consent',
+    prompt: 'consent select_account',
     state,
   }).toString();
   // Validate that the stored secret can be decrypted before opening Google.
