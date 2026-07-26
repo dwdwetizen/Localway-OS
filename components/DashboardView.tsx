@@ -119,7 +119,7 @@ export function DashboardView({ setActiveTab, onShowToast }: DashboardViewProps)
     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
       <div>
         <h2 className="text-2xl md:text-3xl font-bold font-poppins">Visão Geral</h2>
-        <p className="text-sm text-[#727687] mt-1">Olá, {profile.nome || profile.email}. Este painel usa seus resultados reais.</p>
+        <p className="text-sm text-[#727687] mt-1">Olá, {profile.nome || profile.username}. Este painel usa seus resultados reais.</p>
       </div>
       <button onClick={() => void loadDashboard()} className="px-4 py-2 rounded-xl border border-[#c2c6d8]/40 text-xs font-bold hover:bg-[#f4f2fd]">Atualizar dados</button>
     </div>

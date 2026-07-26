@@ -149,15 +149,15 @@ export function Header({
         <div className="flex items-center gap-2 pl-1 group">
           <div className="w-9 h-9 rounded-full bg-[#0066ff] text-white flex items-center justify-center font-bold text-sm overflow-hidden border border-[#0066ff]/30 shadow-sm">
             {profile.photo_url
-              ? <img src={profile.photo_url} alt={profile.nome || profile.email} className="w-full h-full object-cover" />
-              : <span>{(profile.nome || profile.email).slice(0, 1).toUpperCase()}</span>}
+              ? <img src={profile.photo_url} alt={profile.nome || profile.username} className="w-full h-full object-cover" />
+              : <span>{(profile.nome || profile.username).slice(0, 1).toUpperCase()}</span>}
           </div>
           <div className="hidden lg:block text-left leading-tight">
             <p className="text-xs font-bold text-[#1a1b22] dark:text-[#f8f7ff]">
               {profile.nome || 'Usuário'}
             </p>
             <p className="text-[10px] text-[#727687] font-semibold max-w-40 truncate">
-              {profile.email}
+              @{profile.username}
             </p>
           </div>
         </div>

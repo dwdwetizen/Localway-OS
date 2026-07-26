@@ -11,7 +11,7 @@ interface EquipeViewProps {
 type TeamMember = {
   user_id: string;
   name: string;
-  email: string;
+  username: string;
   job_title: string;
   role: string | null;
   leads_approached: number;
@@ -123,7 +123,7 @@ export function EquipeView({ onShowToast }: EquipeViewProps) {
                           </span>
                           <div>
                             <p className="font-bold text-[#1a1b22] dark:text-[#f8f7ff]">{member.name}</p>
-                            <p className="text-[10px] text-[#727687]">{member.email}</p>
+                            <p className="text-[10px] text-[#727687]">@{member.username}</p>
                           </div>
                         </div>
                       </td>

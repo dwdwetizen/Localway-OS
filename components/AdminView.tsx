@@ -8,12 +8,12 @@ import { Eye, EyeOff, KeyRound, Plus, Settings, Upload, Loader2, Trash2, Target,
 import { supabase } from '@/lib/supabase';
 
 interface AdminViewProps { onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void; }
-type Profile = { id: string; email: string; nome: string | null; role: string | null; job_title: string | null; permissions: string[] | null; photo_url: string | null; is_active: boolean; };
+type Profile = { id: string; username: string; nome: string | null; role: string | null; job_title: string | null; permissions: string[] | null; photo_url: string | null; is_active: boolean; };
 type Goal = { id: string; user_id: string; period_start: string; period_end: string; target_leads: number; target_contacts: number; target_meetings: number; };
 type ActivityLead = { company_name?: string; source?: string };
 type Activity = { id: string; created_by: string | null; actor_name: string | null; actor_email: string | null; outcome: string; notes: string | null; occurred_at: string; leads: ActivityLead | ActivityLead[] | null; };
 const pages = ['Análises', 'Mapa', 'Raio-X', 'Prospecção', 'Follow-up', 'CRM', 'Propostas', 'Meus Serviços', 'Equipe', 'Avaliações'];
-const initialForm = { nome: '', email: '', password: '', jobTitle: 'SDR', permissions: ['Prospecção', 'Follow-up', 'CRM', 'Equipe'] };
+const initialForm = { nome: '', username: '', password: '', jobTitle: 'SDR', permissions: ['Prospecção', 'Follow-up', 'CRM', 'Equipe'] };
 const now = new Date();
 const initialGoal = {
   userId: '',
@@ -55,6 +55,7 @@ export function AdminView({ onShowToast }: AdminViewProps) {
   const [savingPermissionsId, setSavingPermissionsId] = useState<string | null>(null);
   const [passwordUserId, setPasswordUserId] = useState<string | null>(null);
   const [passwordDraft, setPasswordDraft] = useState('');
+  const [usernameDraft, setUsernameDraft] = useState('');
   const [showPasswordDraft, setShowPasswordDraft] = useState(false);
   const [resettingPasswordId, setResettingPasswordId] = useState<string | null>(null);
   const load = useCallback(async () => {
@@ -64,7 +65,7 @@ export function AdminView({ onShowToast }: AdminViewProps) {
     const { data: sessionData } = await client.auth.getSession();
     const accessToken = sessionData.session?.access_token || '';
     const [profilesRequest, goalsRequest, historyRequest, placesRequest] = await Promise.all([
-      client.from('profiles').select('id,email,nome,role,job_title,permissions,photo_url,is_active').eq('is_active', true).order('nome'),
+      client.from('profiles').select('id,username,nome,role,job_title,permissions,photo_url,is_active').eq('is_active', true).order('nome'),
       client.from('user_goals').select('id,user_id,period_start,period_end,target_leads,target_contacts,target_meetings').order('period_start', { ascending: false }),
       client.from('lead_interactions').select('id,created_by,actor_name,actor_email,outcome,notes,occurred_at,leads(company_name,source)').order('occurred_at', { ascending: false }),
       fetch('/api/places', { headers: { Authorization: `Bearer ${accessToken}` }, cache: 'no-store' }).then(response => response.json()).catch(() => ({ placesConfigured: false, mapsConfigured: false })),
@@ -112,12 +113,13 @@ export function AdminView({ onShowToast }: AdminViewProps) {
     setEditingPermissionsId(null);
     setPermissionsDraft([]);
     setJobTitleDraft('');
-    onShowToast(`Acessos de ${profile.nome || profile.email} atualizados.`);
+    onShowToast(`Acessos de ${profile.nome || profile.username} atualizados.`);
   };
-  const createLogin = async () => { if (!supabase) return; setSaving(true); const { data } = await supabase.auth.getSession(); const response = await fetch('/api/admin/create-user', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token || ''}` }, body: JSON.stringify(form) }); const result = await response.json(); setSaving(false); if (!response.ok) return onShowToast(result.error || 'Não foi possível criar o login.', 'error'); onShowToast('Login criado. Passe o e-mail e a senha ao usuário por um canal seguro.'); setForm(initialForm); void load(); };
+  const createLogin = async () => { if (!supabase) return; setSaving(true); const { data } = await supabase.auth.getSession(); const response = await fetch('/api/admin/create-user', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token || ''}` }, body: JSON.stringify(form) }); const result = await response.json(); setSaving(false); if (!response.ok) return onShowToast(result.error || 'Não foi possível criar o login.', 'error'); onShowToast('Login criado. Passe o nome de usuário e a senha por um canal seguro.'); setForm(initialForm); void load(); };
   const resetPassword = async (profile: Profile) => {
     if (!supabase) return;
-    if (passwordDraft.length < 8) return onShowToast('A nova senha deve ter pelo menos 8 caracteres.', 'error');
+    if (!/^[a-z0-9][a-z0-9._-]{2,31}$/.test(usernameDraft)) return onShowToast('Use um nome de usuário válido, com 3 a 32 caracteres.', 'error');
+    if (passwordDraft && passwordDraft.length < 8) return onShowToast('A nova senha deve ter pelo menos 8 caracteres.', 'error');
     setResettingPasswordId(profile.id);
     const { data } = await supabase.auth.getSession();
     const response = await fetch('/api/admin/create-user', {
@@ -126,17 +128,19 @@ export function AdminView({ onShowToast }: AdminViewProps) {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${data.session?.access_token || ''}`,
       },
-      body: JSON.stringify({ userId: profile.id, password: passwordDraft }),
+      body: JSON.stringify({ userId: profile.id, username: usernameDraft, password: passwordDraft }),
     });
     const result = await response.json();
     setResettingPasswordId(null);
-    if (!response.ok) return onShowToast(result.error || 'Não foi possível redefinir a senha.', 'error');
+    if (!response.ok) return onShowToast(result.error || 'Não foi possível atualizar o login.', 'error');
+    setProfiles(current => current.map(item => item.id === profile.id ? { ...item, username: result.username } : item));
     setPasswordUserId(null);
     setPasswordDraft('');
+    setUsernameDraft('');
     setShowPasswordDraft(false);
-    onShowToast(`Nova senha de ${profile.nome || profile.email} salva com segurança.`);
+    onShowToast(`Login de ${profile.nome || profile.username} atualizado.`);
   };
-  const deleteUser = async (profile: Profile) => { if (!supabase || !window.confirm(`Excluir o login de ${profile.nome || profile.email}? O histórico de leads será preservado.`)) return; setDeletingId(profile.id); const { data } = await supabase.auth.getSession(); const response = await fetch('/api/admin/create-user', { method: 'DELETE', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token || ''}` }, body: JSON.stringify({ userId: profile.id }) }); const result = await response.json(); setDeletingId(null); if (!response.ok) return onShowToast(result.error || 'Não foi possível excluir o usuário.', 'error'); onShowToast('Usuário excluído e login desativado.'); void load(); };
+  const deleteUser = async (profile: Profile) => { if (!supabase || !window.confirm(`Excluir o login de ${profile.nome || profile.username}? O histórico de leads será preservado.`)) return; setDeletingId(profile.id); const { data } = await supabase.auth.getSession(); const response = await fetch('/api/admin/create-user', { method: 'DELETE', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token || ''}` }, body: JSON.stringify({ userId: profile.id }) }); const result = await response.json(); setDeletingId(null); if (!response.ok) return onShowToast(result.error || 'Não foi possível excluir o usuário.', 'error'); onShowToast('Usuário excluído e login desativado.'); void load(); };
   const uploadPhoto = async (profile: Profile, event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file || !supabase) return; const path = `${profile.id}/avatar.${file.name.split('.').pop() || 'jpg'}`; const { error } = await supabase.storage.from('profile-photos').upload(path, file, { upsert: true, contentType: file.type }); if (error) return onShowToast(error.message, 'error'); const { error: updateError } = await supabase.from('profiles').update({ photo_url: path }).eq('id', profile.id); if (updateError) return onShowToast(updateError.message, 'error'); onShowToast('Foto atualizada.'); void load(); };
   const saveGoal = async () => {
     if (!supabase || !goalForm.userId) return onShowToast('Selecione um colaborador.', 'error');
@@ -177,7 +181,7 @@ export function AdminView({ onShowToast }: AdminViewProps) {
   };
   const historyOwners = useMemo(() => {
     const owners = new Map<string, string>();
-    profiles.forEach(profile => owners.set(`id:${profile.id}`, profile.nome || profile.email));
+    profiles.forEach(profile => owners.set(`id:${profile.id}`, profile.nome || profile.username));
     history.forEach(item => {
       const key = activityOwnerKey(item);
       owners.set(key, item.actor_name || item.actor_email || 'Usuário removido');
@@ -205,9 +209,9 @@ export function AdminView({ onShowToast }: AdminViewProps) {
       <section className="bg-white dark:bg-[#141936] p-5 rounded-2xl border space-y-4">
         <h3 className="font-bold text-sm">Criar login e permissões</h3>
         <input placeholder="Nome completo" value={form.nome} onChange={e => setForm({...form,nome:e.target.value})} className="input"/>
-        <input type="email" placeholder="E-mail" value={form.email} onChange={e => setForm({...form,email:e.target.value})} className="input"/>
+        <input placeholder="Nome de usuário" autoComplete="off" value={form.username} onChange={e => setForm({...form,username:e.target.value.toLowerCase()})} className="input"/>
         <input placeholder="Cargo (ex.: SDR, Vendedor, Closer)" value={form.jobTitle} onChange={e => setForm({...form,jobTitle:e.target.value})} className="input"/>
-        <input type="password" placeholder="Senha inicial (mínimo 8 caracteres)" value={form.password} onChange={e => setForm({...form,password:e.target.value})} className="input"/>
+        <input type="password" autoComplete="new-password" placeholder="Senha inicial (mínimo 8 caracteres)" value={form.password} onChange={e => setForm({...form,password:e.target.value})} className="input"/>
         <div>
           <p className="text-xs font-bold mb-2">Acessos liberados</p>
           <div className="grid grid-cols-2 gap-2">
@@ -234,18 +238,18 @@ export function AdminView({ onShowToast }: AdminViewProps) {
             return <div key={profile.id} className="p-4">
               <div className="flex gap-3 items-center">
                 <div className="w-11 h-11 rounded-full bg-[#0066ff]/10 overflow-hidden flex items-center justify-center font-bold">
-                  {profile.photo_url ? <img src={profile.photo_url} className="w-full h-full object-cover" alt=""/> : (profile.nome || profile.email).slice(0,1)}
+                  {profile.photo_url ? <img src={profile.photo_url} className="w-full h-full object-cover" alt=""/> : (profile.nome || profile.username).slice(0,1)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-xs">{profile.nome || 'Sem nome'}</p>
-                  <p className="text-[11px] text-[#727687] truncate">{profile.email}</p>
+                  <p className="text-[11px] text-[#727687] truncate">@{profile.username}</p>
                   <p className="text-[10px] text-[#0066ff] font-semibold mt-0.5">{profile.job_title || (isAdmin ? 'Administrador' : 'SDR / Colaborador')}</p>
                   <span className={`inline-block mt-2 px-2 py-1 rounded-lg text-[10px] font-bold ${(profile.permissions || []).includes('analises_solucoes') || isAdmin ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
                     {(profile.permissions || []).includes('analises_solucoes') || isAdmin ? 'Soluções na análise: liberadas' : 'Soluções na análise: bloqueadas'}
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                  {!isAdmin && <button onClick={() => isEditing ? setEditingPermissionsId(null) : startEditingPermissions(profile)} className="px-2 py-2 rounded-lg text-[#0066ff] hover:bg-blue-50 text-xs font-bold flex items-center gap-1" aria-label={`Editar acessos de ${profile.nome || profile.email}`} title="Editar acessos">
+                  {!isAdmin && <button onClick={() => isEditing ? setEditingPermissionsId(null) : startEditingPermissions(profile)} className="px-2 py-2 rounded-lg text-[#0066ff] hover:bg-blue-50 text-xs font-bold flex items-center gap-1" aria-label={`Editar acessos de ${profile.nome || profile.username}`} title="Editar acessos">
                     {isEditing ? <X className="w-4 h-4"/> : <Pencil className="w-4 h-4"/>}<span>{isEditing ? 'Fechar' : 'Acessos'}</span>
                   </button>}
                   <button
@@ -253,33 +257,45 @@ export function AdminView({ onShowToast }: AdminViewProps) {
                       if (isPasswordEditing) {
                         setPasswordUserId(null);
                         setPasswordDraft('');
+                        setUsernameDraft('');
                         setShowPasswordDraft(false);
                       } else {
                         setPasswordUserId(profile.id);
                         setPasswordDraft('');
+                        setUsernameDraft(profile.username);
                         setShowPasswordDraft(false);
                         setEditingPermissionsId(null);
                       }
                     }}
                     className="px-2 py-2 rounded-lg text-amber-700 hover:bg-amber-50 text-xs font-bold flex items-center gap-1"
-                    aria-label={`Redefinir senha de ${profile.nome || profile.email}`}
-                    title="Redefinir senha"
+                    aria-label={`Editar login de ${profile.nome || profile.username}`}
+                    title="Editar usuário e senha"
                   >
                     {isPasswordEditing ? <X className="w-4 h-4"/> : <KeyRound className="w-4 h-4"/>}
-                    <span>{isPasswordEditing ? 'Fechar' : 'Senha'}</span>
+                    <span>{isPasswordEditing ? 'Fechar' : 'Login'}</span>
                   </button>
                   <label className="text-xs text-[#0066ff] font-bold cursor-pointer"><Upload className="w-4 h-4 inline mr-1"/>Foto<input className="hidden" type="file" accept="image/*" onChange={e => void uploadPhoto(profile,e)}/></label>
-                  <button disabled={deletingId === profile.id} onClick={() => void deleteUser(profile)} className="p-2 rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-50" aria-label={`Excluir ${profile.nome || profile.email}`} title="Excluir usuário">
+                  <button disabled={deletingId === profile.id} onClick={() => void deleteUser(profile)} className="p-2 rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-50" aria-label={`Excluir ${profile.nome || profile.username}`} title="Excluir usuário">
                     {deletingId === profile.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <Trash2 className="w-4 h-4"/>}
                   </button>
                 </div>
               </div>
               {isAdmin && <p className="mt-3 text-[10px] text-[#727687]">Administrador tem acesso completo ao aplicativo.</p>}
               {isPasswordEditing && <div className="mt-4 p-4 rounded-xl border border-amber-200 bg-amber-50/70 dark:bg-amber-950/20">
-                <p className="text-xs font-bold">Definir uma nova senha</p>
-                <p className="text-[10px] text-[#727687] mt-1">Por segurança, a senha atual nunca pode ser visualizada. Defina uma nova quando alguém esquecer.</p>
+                <p className="text-xs font-bold">Alterar usuário e senha</p>
+                <p className="text-[10px] text-[#727687] mt-1">Altere o nome de usuário abaixo. Deixe a nova senha vazia para manter a senha atual.</p>
                 <label className="block text-[11px] font-bold mt-3">
-                  Nova senha
+                  Nome de usuário
+                  <input
+                    autoComplete="off"
+                    value={usernameDraft}
+                    onChange={event => setUsernameDraft(event.target.value.toLowerCase())}
+                    placeholder="Ex.: ricardo"
+                    className="input mt-1"
+                  />
+                </label>
+                <label className="block text-[11px] font-bold mt-3">
+                  Nova senha — opcional
                   <div className="relative mt-1">
                     <input
                       type={showPasswordDraft ? 'text' : 'password'}
@@ -300,9 +316,9 @@ export function AdminView({ onShowToast }: AdminViewProps) {
                   </div>
                 </label>
                 <div className="mt-3 flex justify-end gap-2">
-                  <button onClick={() => { setPasswordUserId(null); setPasswordDraft(''); setShowPasswordDraft(false); }} className="px-3 py-2 rounded-xl border text-xs font-bold">Cancelar</button>
-                  <button disabled={resettingPasswordId === profile.id || passwordDraft.length < 8} onClick={() => void resetPassword(profile)} className="px-4 py-2 rounded-xl bg-amber-600 text-white text-xs font-bold flex items-center gap-2 disabled:opacity-50">
-                    {resettingPasswordId === profile.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <KeyRound className="w-4 h-4"/>} Salvar nova senha
+                  <button onClick={() => { setPasswordUserId(null); setPasswordDraft(''); setUsernameDraft(''); setShowPasswordDraft(false); }} className="px-3 py-2 rounded-xl border text-xs font-bold">Cancelar</button>
+                  <button disabled={resettingPasswordId === profile.id || !/^[a-z0-9][a-z0-9._-]{2,31}$/.test(usernameDraft) || (!!passwordDraft && passwordDraft.length < 8)} onClick={() => void resetPassword(profile)} className="px-4 py-2 rounded-xl bg-amber-600 text-white text-xs font-bold flex items-center gap-2 disabled:opacity-50">
+                    {resettingPasswordId === profile.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <KeyRound className="w-4 h-4"/>} Salvar login
                   </button>
                 </div>
               </div>}
@@ -334,7 +350,7 @@ export function AdminView({ onShowToast }: AdminViewProps) {
     {activeTab === 'metas' && <div className="grid lg:grid-cols-[380px_1fr] gap-6">
       <section className="bg-white dark:bg-[#141936] p-5 rounded-2xl border space-y-4">
         <div className="flex items-center gap-2"><Target className="w-5 h-5 text-[#0066ff]"/><div><h3 className="font-bold text-sm">Definir meta individual</h3><p className="text-[11px] text-[#727687]">A meta aparecerá no dashboard do colaborador.</p></div></div>
-        <label className="text-xs font-semibold block">Colaborador<select value={goalForm.userId} onChange={event => setGoalForm({ ...goalForm, userId: event.target.value })} className="input mt-1"><option value="">Selecione</option>{profiles.filter(profile => profile.role !== 'admin').map(profile => <option key={profile.id} value={profile.id}>{profile.nome || profile.email}</option>)}</select></label>
+        <label className="text-xs font-semibold block">Colaborador<select value={goalForm.userId} onChange={event => setGoalForm({ ...goalForm, userId: event.target.value })} className="input mt-1"><option value="">Selecione</option>{profiles.filter(profile => profile.role !== 'admin').map(profile => <option key={profile.id} value={profile.id}>{profile.nome || profile.username}</option>)}</select></label>
         <div className="grid grid-cols-2 gap-3"><label className="text-xs font-semibold">Início<input type="date" value={goalForm.periodStart} onChange={event => setGoalForm({ ...goalForm, periodStart: event.target.value })} className="input mt-1"/></label><label className="text-xs font-semibold">Fim<input type="date" value={goalForm.periodEnd} onChange={event => setGoalForm({ ...goalForm, periodEnd: event.target.value })} className="input mt-1"/></label></div>
         <label className="text-xs font-semibold block">Leads prospectados<input type="number" min={0} value={goalForm.targetLeads} onChange={event => setGoalForm({ ...goalForm, targetLeads: Number(event.target.value) })} className="input mt-1"/></label>
         <label className="text-xs font-semibold block">Contatos registrados<input type="number" min={0} value={goalForm.targetContacts} onChange={event => setGoalForm({ ...goalForm, targetContacts: Number(event.target.value) })} className="input mt-1"/></label>
@@ -346,7 +362,7 @@ export function AdminView({ onShowToast }: AdminViewProps) {
         {!goals.length && <div className="p-8 text-center text-xs text-[#727687]">Nenhuma meta cadastrada.</div>}
         <div className="divide-y">{goals.map(goal => {
           const owner = profiles.find(profile => profile.id === goal.user_id);
-          return <div key={goal.id} className="p-4"><div className="flex justify-between gap-3"><div><p className="font-bold text-xs">{owner?.nome || owner?.email || 'Usuário removido'}</p><p className="text-[11px] text-[#727687]">{new Date(`${goal.period_start}T12:00:00`).toLocaleDateString('pt-BR')} até {new Date(`${goal.period_end}T12:00:00`).toLocaleDateString('pt-BR')}</p></div><button onClick={() => setGoalForm({ userId: goal.user_id, periodStart: goal.period_start, periodEnd: goal.period_end, targetLeads: goal.target_leads, targetContacts: goal.target_contacts, targetMeetings: goal.target_meetings })} className="text-xs text-[#0066ff] font-bold">Editar</button></div><div className="mt-3 grid grid-cols-3 gap-2 text-center"><GoalNumber label="Leads" value={goal.target_leads}/><GoalNumber label="Contatos" value={goal.target_contacts}/><GoalNumber label="Reuniões" value={goal.target_meetings}/></div></div>;
+          return <div key={goal.id} className="p-4"><div className="flex justify-between gap-3"><div><p className="font-bold text-xs">{owner?.nome || owner?.username || 'Usuário removido'}</p><p className="text-[11px] text-[#727687]">{new Date(`${goal.period_start}T12:00:00`).toLocaleDateString('pt-BR')} até {new Date(`${goal.period_end}T12:00:00`).toLocaleDateString('pt-BR')}</p></div><button onClick={() => setGoalForm({ userId: goal.user_id, periodStart: goal.period_start, periodEnd: goal.period_end, targetLeads: goal.target_leads, targetContacts: goal.target_contacts, targetMeetings: goal.target_meetings })} className="text-xs text-[#0066ff] font-bold">Editar</button></div><div className="mt-3 grid grid-cols-3 gap-2 text-center"><GoalNumber label="Leads" value={goal.target_leads}/><GoalNumber label="Contatos" value={goal.target_contacts}/><GoalNumber label="Reuniões" value={goal.target_meetings}/></div></div>;
         })}</div>
       </section>
     </div>}

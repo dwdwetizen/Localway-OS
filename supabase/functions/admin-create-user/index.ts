@@ -87,7 +87,7 @@ Deno.serve(async (request: Request) => {
   }
 
   if (request.method === "PATCH") {
-    let payload: { userId?: string; password?: string };
+    let payload: { userId?: string; username?: string; password?: string };
 
     try {
       payload = await request.json();
@@ -96,17 +96,23 @@ Deno.serve(async (request: Request) => {
     }
 
     const userId = payload.userId?.trim();
+    const username = payload.username?.trim().toLowerCase() || "";
     const password = payload.password || "";
     if (!userId) {
       return reply(400, { error: "Usuário não informado." });
     }
-    if (password.length < 8) {
+    if (!/^[a-z0-9][a-z0-9._-]{2,31}$/.test(username)) {
+      return reply(400, {
+        error: "Use de 3 a 32 caracteres no usuário: letras minúsculas, números, ponto, traço ou sublinhado.",
+      });
+    }
+    if (password && password.length < 8) {
       return reply(400, { error: "A nova senha deve ter pelo menos 8 caracteres." });
     }
 
     const { data: targetProfile, error: targetProfileError } = await admin
       .from("profiles")
-      .select("id, is_active")
+      .select("id, is_active, username")
       .eq("id", userId)
       .maybeSingle();
 
@@ -117,16 +123,40 @@ Deno.serve(async (request: Request) => {
       return reply(404, { error: "Usuário ativo não encontrado." });
     }
 
-    const { error: updatePasswordError } = await admin.auth.admin.updateUserById(userId, {
-      password,
-    });
-    if (updatePasswordError) {
-      return reply(500, {
-        error: updatePasswordError.message || "Não foi possível redefinir a senha.",
-      });
+    const { data: conflictingProfile, error: conflictError } = await admin
+      .from("profiles")
+      .select("id")
+      .ilike("username", username)
+      .neq("id", userId)
+      .maybeSingle();
+    if (conflictError) {
+      return reply(500, { error: "Não foi possível validar o nome de usuário." });
+    }
+    if (conflictingProfile) {
+      return reply(409, { error: "Este nome de usuário já está em uso." });
     }
 
-    return reply(200, { ok: true });
+    const { error: updateUsernameError } = await admin
+      .from("profiles")
+      .update({ username })
+      .eq("id", userId);
+    if (updateUsernameError) {
+      return reply(400, { error: updateUsernameError.message || "Não foi possível alterar o usuário." });
+    }
+
+    if (password) {
+      const { error: updatePasswordError } = await admin.auth.admin.updateUserById(userId, {
+        password,
+      });
+      if (updatePasswordError) {
+        await admin.from("profiles").update({ username: targetProfile.username }).eq("id", userId);
+        return reply(500, {
+          error: updatePasswordError.message || "Não foi possível redefinir a senha.",
+        });
+      }
+    }
+
+    return reply(200, { ok: true, username });
   }
 
   if (request.method === "DELETE") {
@@ -186,6 +216,7 @@ Deno.serve(async (request: Request) => {
   }
 
   let payload: {
+    username?: string;
     email?: string;
     password?: string;
     nome?: string;
@@ -199,19 +230,41 @@ Deno.serve(async (request: Request) => {
     return reply(400, { error: "Dados inválidos." });
   }
 
-  const email = payload.email?.trim().toLowerCase();
+  const username = (
+    payload.username?.trim().toLowerCase()
+    || payload.email?.split("@")[0]?.trim().toLowerCase()
+    || ""
+  );
   const password = payload.password || "";
   const nome = payload.nome?.trim();
   const jobTitle = payload.jobTitle?.trim() || "SDR / Colaborador";
   const permissions = Array.isArray(payload.permissions) ? payload.permissions : [];
 
-  if (!email || !password || !nome) {
-    return reply(400, { error: "Preencha nome, e-mail e senha." });
+  if (!username || !password || !nome) {
+    return reply(400, { error: "Preencha nome, usuário e senha." });
+  }
+  if (!/^[a-z0-9][a-z0-9._-]{2,31}$/.test(username)) {
+    return reply(400, {
+      error: "Use de 3 a 32 caracteres no usuário: letras minúsculas, números, ponto, traço ou sublinhado.",
+    });
   }
   if (password.length < 8) {
     return reply(400, { error: "A senha deve ter pelo menos 8 caracteres." });
   }
 
+  const { data: existingProfile, error: usernameLookupError } = await admin
+    .from("profiles")
+    .select("id")
+    .ilike("username", username)
+    .maybeSingle();
+  if (usernameLookupError) {
+    return reply(500, { error: "Não foi possível validar o nome de usuário." });
+  }
+  if (existingProfile) {
+    return reply(409, { error: "Este nome de usuário já está em uso." });
+  }
+
+  const email = `u.${crypto.randomUUID()}@usuarios.localway.app`;
   const { data: created, error: createError } = await admin.auth.admin.createUser({
     email,
     password,
@@ -225,6 +278,7 @@ Deno.serve(async (request: Request) => {
   const { error: saveProfileError } = await admin.from("profiles").upsert({
     id: created.user.id,
     email,
+    username,
     nome,
     role: "funcionario",
     job_title: jobTitle,
