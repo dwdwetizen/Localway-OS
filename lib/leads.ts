@@ -120,7 +120,9 @@ export function contactCountdown(value: string | null) {
   today.setHours(0, 0, 0, 0);
   target.setHours(0, 0, 0, 0);
   const days = Math.round((target.getTime() - today.getTime()) / 86_400_000);
-  const urgency: ContactUrgency = days <= 0 ? 'red' : days <= 2 ? 'yellow' : 'green';
+  // Amanhã já é urgente: o colaborador precisa enxergar a pendência antes
+  // do início do próximo dia de trabalho.
+  const urgency: ContactUrgency = days <= 1 ? 'red' : days <= 3 ? 'yellow' : 'green';
   const label = days < 0
     ? `${Math.abs(days)} ${Math.abs(days) === 1 ? 'dia atrasado' : 'dias atrasados'}`
     : days === 0

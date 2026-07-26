@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
-import { CalendarPlus, CheckCircle2, ExternalLink, MessageCircle, PhoneCall, Plus, X } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { CalendarPlus, CheckCircle2, ChevronDown, ChevronUp, ExternalLink, MessageCircle, PhoneCall, Plus, X } from 'lucide-react';
 import { useAuthProfile } from '@/components/AuthGate';
 import { useLeads } from '@/hooks/use-leads';
 import { contactCountdown, ContactUrgency, googleCalendarLink, Lead, LeadStatus, statusLabel, whatsappLink } from '@/lib/leads';
@@ -39,6 +39,13 @@ function countdownClass(urgency: ContactUrgency) {
   return 'bg-emerald-100 text-emerald-700 border-emerald-200';
 }
 
+function urgencyRowClass(urgency?: ContactUrgency) {
+  if (urgency === 'red') return 'border-l-4 border-l-rose-500 bg-rose-50/50 dark:bg-rose-950/10';
+  if (urgency === 'yellow') return 'border-l-4 border-l-amber-400 bg-amber-50/40 dark:bg-amber-950/10';
+  if (urgency === 'green') return 'border-l-4 border-l-emerald-500 bg-emerald-50/30 dark:bg-emerald-950/10';
+  return 'border-l-4 border-l-transparent';
+}
+
 export function FollowUpView({ onShowToast }: FollowUpViewProps) {
   const authProfile = useAuthProfile();
   const { leads, loading, error, updateLead } = useLeads();
@@ -46,7 +53,14 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
   const [dates, setDates] = useState<Record<string, string>>({});
   const [outcomes, setOutcomes] = useState<Record<string, FollowUpOutcome>>({});
   const [addOpen, setAddOpen] = useState(false);
+  const [expandedLeadId, setExpandedLeadId] = useState<string | null>(null);
+  const [, setUrgencyRefresh] = useState(0);
   const [newFollowUp, setNewFollowUp] = useState({ leadId: '', status: 'retornar_depois' as LeadStatus, date: '', note: '' });
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setUrgencyRefresh(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const list = useMemo(() => leads
     .filter(lead => followUpStatuses.includes(lead.status))
@@ -83,6 +97,7 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
     setNotes(current => ({ ...current, [lead.id]: '' }));
     setDates(current => ({ ...current, [lead.id]: '' }));
     setOutcomes(current => ({ ...current, [lead.id]: 'retornar_depois' }));
+    setExpandedLeadId(null);
 
     if (status === 'reuniao_marcada' && nextActionAt && supabase) {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -150,10 +165,10 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
     onShowToast('Follow-up adicionado.');
   };
 
-  const isDue = (lead: Lead) => (contactCountdown(lead.next_action_at)?.days ?? 1) <= 0;
+  const isDue = (lead: Lead) => (contactCountdown(lead.next_action_at)?.days ?? 2) <= 1;
   const isNear = (lead: Lead) => {
     const days = contactCountdown(lead.next_action_at)?.days;
-    return typeof days === 'number' && days > 0 && days <= 2;
+    return typeof days === 'number' && days >= 2 && days <= 3;
   };
 
   return <div className="space-y-6 animate-in fade-in duration-300">
@@ -164,28 +179,47 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
     {error && <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800">{error}</div>}
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       <Metric label="Agendados" value={list.length} />
-      <Metric label="Vencidos / hoje" value={list.filter(isDue).length} warning />
-      <Metric label="Próximos 2 dias" value={list.filter(isNear).length} />
+      <Metric label="Urgentes: até amanhã" value={list.filter(isDue).length} warning />
+      <Metric label="Atenção: 2 a 3 dias" value={list.filter(isNear).length} />
     </div>
-    <div className="space-y-4">
+    <div className="flex flex-wrap items-center gap-3 px-1 text-[10px] font-bold"><span className="text-rose-600">● Vermelho: atrasado, hoje ou amanhã</span><span className="text-amber-600">● Amarelo: 2–3 dias</span><span className="text-emerald-600">● Verde: 4 dias ou mais</span></div>
+    <div className="overflow-hidden rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] bg-white dark:bg-[#141936] divide-y divide-[#c2c6d8]/20 dark:divide-[#2e366b]">
       {loading && <div className="p-8 text-center text-xs text-[#727687]">Carregando follow-ups…</div>}
-      {!loading && !list.length && <div className="p-10 text-center text-xs text-[#727687] bg-white dark:bg-[#141936] rounded-2xl border border-[#c2c6d8]/30">Nenhum retorno com decisor pendente. Eles aparecerão aqui quando forem enviados pela prospecção.</div>}
-      {list.map(lead => { const countdown = contactCountdown(lead.next_action_at); return <article key={lead.id} className="bg-white dark:bg-[#141936] rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] p-5 shadow-sm">
-        <div className="flex flex-col lg:flex-row gap-5 justify-between">
-          <div className="space-y-1"><div className="flex items-center gap-2 flex-wrap"><h3 className="font-bold text-sm">{lead.company_name}</h3><span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#0066ff]/10 text-[#0066ff]">{statusLabel[lead.status]}</span>{countdown && <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${countdownClass(countdown.urgency)}`}>{countdown.label}</span>}</div>
-            <p className="text-xs text-[#727687]">{lead.decision_maker_name ? `Decisor: ${lead.decision_maker_name}` : 'Decisor não informado'}{lead.receptionist_name ? ` · Atendimento: ${lead.receptionist_name}` : ''}</p>
-            <p className="text-[11px] text-[#727687]">⭐ {lead.rating ?? '—'} ({lead.review_count ?? 0} avaliações) · {lead.has_website ? 'Tem site' : 'Sem site'}</p>
-            <p className="text-xs text-[#727687]">Próxima ação: {lead.next_action_at ? new Date(lead.next_action_at).toLocaleString('pt-BR') : 'não agendada'}</p>
-            <div className="flex gap-1 pt-1">{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer" className="p-2 rounded-lg text-[#0066ff] hover:bg-[#0066ff]/10" title="Abrir perfil no Google Maps"><ExternalLink className="w-4 h-4" /></a>}{whatsappLink(lead.whatsapp || lead.phone) && <a href={whatsappLink(lead.whatsapp || lead.phone) as string} target="_blank" rel="noreferrer" className="p-2 rounded-lg text-emerald-600 hover:bg-emerald-50" title="WhatsApp"><MessageCircle className="w-4 h-4" /></a>}{lead.phone && <a href={`tel:${lead.phone.replace(/\D/g, '')}`} className="p-2 rounded-lg text-[#0066ff] hover:bg-[#0066ff]/10" title="Ligar"><PhoneCall className="w-4 h-4" /></a>}</div>
+      {!loading && !list.length && <div className="p-10 text-center text-xs text-[#727687]">Nenhum retorno com decisor pendente. Eles aparecerão aqui quando forem enviados pela prospecção.</div>}
+      {list.map(lead => {
+        const countdown = contactCountdown(lead.next_action_at);
+        const expanded = expandedLeadId === lead.id;
+        const whatsApp = whatsappLink(lead.whatsapp || lead.phone);
+        return <article key={lead.id} className={urgencyRowClass(countdown?.urgency)}>
+          <div className="px-3 py-2 grid grid-cols-1 lg:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)_auto] lg:items-center gap-1 lg:gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h3 className="font-bold text-xs truncate">{lead.company_name}</h3>
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#0066ff]/10 text-[#0066ff]">{statusLabel[lead.status]}</span>
+                {countdown && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${countdownClass(countdown.urgency)}`}>{countdown.label}</span>}
+              </div>
+              <p className="text-[10px] text-[#727687] truncate">{lead.decision_maker_name ? `Decisor: ${lead.decision_maker_name}` : 'Decisor não informado'}{lead.receptionist_name ? ` • Atendimento: ${lead.receptionist_name}` : ''}</p>
+            </div>
+            <p className="text-[10px] text-[#727687] truncate">
+              Próximo contato: {lead.next_action_at ? new Date(lead.next_action_at).toLocaleString('pt-BR') : 'não agendado'} • ⭐ {lead.rating ?? '—'} ({lead.review_count ?? 0})
+            </p>
+            <div className="flex items-center gap-0.5">
+              {lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer" className="p-1.5 rounded-lg text-[#0066ff] hover:bg-[#0066ff]/10" title="Abrir perfil no Google Maps"><ExternalLink className="w-3.5 h-3.5" /></a>}
+              {whatsApp && <a href={whatsApp} target="_blank" rel="noreferrer" className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50" title="WhatsApp"><MessageCircle className="w-3.5 h-3.5" /></a>}
+              {lead.phone && <a href={`tel:${lead.phone.replace(/\D/g, '')}`} className="p-1.5 rounded-lg text-[#0066ff] hover:bg-[#0066ff]/10" title="Ligar"><PhoneCall className="w-3.5 h-3.5" /></a>}
+              <button type="button" onClick={() => setExpandedLeadId(expanded ? null : lead.id)} className="ml-1 px-2 py-1.5 rounded-lg border border-[#0066ff]/30 text-[#0066ff] text-[10px] font-bold flex items-center gap-1">
+                {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />} {expanded ? 'Fechar' : 'Atender'}
+              </button>
+            </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1 max-w-3xl">
-            <label className="text-[11px] font-semibold">Resultado<select value={outcomes[lead.id] || 'retornar_depois'} onChange={event => { const value = event.target.value as FollowUpOutcome; setOutcomes({ ...outcomes, [lead.id]: value }); if (value === 'retry_tomorrow') setDates({ ...dates, [lead.id]: tomorrowAtNine() }); }} className="mt-1 w-full p-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl">{followUpOutcomeOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-            <label className="text-[11px] font-semibold">{(outcomes[lead.id] || 'retornar_depois') === 'reuniao_marcada' ? 'Data e hora da reunião' : 'Próximo retorno'}<input type="datetime-local" disabled={(outcomes[lead.id] || 'retornar_depois') === 'qualificado' || (outcomes[lead.id] || 'retornar_depois') === 'sem_interesse'} value={dates[lead.id] || ''} onChange={event => setDates({ ...dates, [lead.id]: event.target.value })} className="mt-1 w-full p-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl disabled:opacity-50" /></label>
-            <label className="text-[11px] font-semibold sm:col-span-3">Resumo do último contato<textarea rows={2} value={notes[lead.id] || ''} onChange={event => setNotes({ ...notes, [lead.id]: event.target.value })} className="mt-1 w-full p-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl" placeholder="Ex.: falou com o decisor, pediu retorno na quinta…" /></label>
-            <button onClick={() => void saveContact(lead)} className="sm:col-span-3 justify-center flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-[#0066ff] hover:bg-[#0050cb] rounded-xl"><CheckCircle2 className="w-4 h-4" /> Salvar contato</button>
-          </div>
-        </div>
-      </article>;})}
+          {expanded && <div className="px-3 py-3 border-t border-[#c2c6d8]/20 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[200px_220px_1fr_auto] gap-2 items-end">
+            <label className="text-[10px] font-semibold">RESULTADO<select value={outcomes[lead.id] || 'retornar_depois'} onChange={event => { const value = event.target.value as FollowUpOutcome; setOutcomes({ ...outcomes, [lead.id]: value }); if (value === 'retry_tomorrow') setDates({ ...dates, [lead.id]: tomorrowAtNine() }); }} className="mt-1 w-full p-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl">{followUpOutcomeOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+            <label className="text-[10px] font-semibold">{(outcomes[lead.id] || 'retornar_depois') === 'reuniao_marcada' ? 'DATA E HORA DA REUNIÃO' : 'PRÓXIMO RETORNO'}<input type="datetime-local" disabled={(outcomes[lead.id] || 'retornar_depois') === 'qualificado' || (outcomes[lead.id] || 'retornar_depois') === 'sem_interesse'} value={dates[lead.id] || ''} onChange={event => setDates({ ...dates, [lead.id]: event.target.value })} className="mt-1 w-full p-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl disabled:opacity-50" /></label>
+            <label className="text-[10px] font-semibold">RESUMO DO CONTATO<input value={notes[lead.id] || ''} onChange={event => setNotes({ ...notes, [lead.id]: event.target.value })} className="mt-1 w-full p-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl" placeholder="Ex.: falou com o decisor, pediu retorno…" /></label>
+            <button onClick={() => void saveContact(lead)} className="h-9 justify-center flex items-center gap-2 px-4 text-xs font-bold text-white bg-[#0066ff] hover:bg-[#0050cb] rounded-xl"><CheckCircle2 className="w-4 h-4" /> Salvar</button>
+          </div>}
+        </article>;
+      })}
     </div>
     {addOpen && <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="w-full max-w-lg bg-white dark:bg-[#141936] rounded-2xl shadow-2xl border border-[#c2c6d8]/30 p-6 space-y-4">
