@@ -10,9 +10,13 @@ import {
 type AdsError = { error?: { message?: string; details?: Array<{ errors?: Array<{ message?: string }> }> } };
 
 function adsErrorMessage(result: AdsError) {
-  return result.error?.details?.flatMap(detail => detail.errors || [])[0]?.message
+  const message = result.error?.details?.flatMap(detail => detail.errors || [])[0]?.message
     || result.error?.message
     || 'O Google Ads não conseguiu consultar as palavras-chave.';
+  if (/developer token is only approved for use with test accounts/i.test(message)) {
+    return 'O Developer Token do Google Ads ainda está limitado a contas de teste. Solicite Acesso Básico na Central da API da conta administradora para consultar volumes de contas reais.';
+  }
+  return message;
 }
 
 async function suggestGeoTarget(
