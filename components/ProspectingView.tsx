@@ -27,6 +27,22 @@ function localDateTimeValue(date: Date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+function localDateValue(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function returnTimeForDate(value: string) {
+  const [year, month, day] = value.split('-').map(Number);
+  if (!year || !month || !day) return '';
+  const now = new Date();
+  const selected = new Date(year, month - 1, day, 9, 0, 0, 0);
+  if (selected.toDateString() === now.toDateString()) {
+    selected.setHours(Math.min(23, Math.max(9, now.getHours() + 1)), 0, 0, 0);
+  }
+  return localDateTimeValue(selected);
+}
+
 function returnDayOptions() {
   const now = new Date();
   return Array.from({ length: 14 }, (_, offset) => {
@@ -241,8 +257,30 @@ function LeadRow({ lead, selected, toggle, updateStep, archiveLead, onPitch }: {
           <CalendarDays className="w-4 h-4 text-[#0066ff]" />
         </button>
         {returnPickerOpen && <div className="mt-2 p-3 rounded-2xl border border-[#c2c6d8]/40 bg-white dark:bg-[#141936] shadow-xl">
-          <p className="text-[10px] text-[#727687] mb-2">Mês e ano são definidos automaticamente. O retorno será marcado para o próximo horário útil.</p>
+          <p className="text-[10px] text-[#727687] mb-2">Use um dos atalhos ou escolha qualquer data futura. O retorno será marcado para o próximo horário útil.</p>
           <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">{returnDayOptions().map(option => <button key={option.value} type="button" onClick={() => { setNextActionAt(option.value); setReturnPickerOpen(false); }} className={`p-2 rounded-xl border text-center hover:border-[#0066ff] hover:bg-[#0066ff]/5 ${nextActionAt === option.value ? 'border-[#0066ff] bg-[#0066ff]/10 text-[#0066ff]' : 'border-[#c2c6d8]/40'}`}><span className="block text-[9px] font-bold uppercase">{option.label}</span><strong className="block text-lg leading-5">{option.day}</strong><span className="block text-[9px] uppercase text-[#727687]">{option.month}</span></button>)}</div>
+          <div className="mt-3 pt-3 border-t border-[#c2c6d8]/30 flex flex-col sm:flex-row sm:items-center gap-2">
+            <div className="flex-1">
+              <p className="text-[10px] font-bold text-[#727687]">OUTRA DATA</p>
+              <p className="text-[10px] text-[#727687]">Para próxima semana, próximo mês ou uma data mais distante.</p>
+            </div>
+            <label className="relative">
+              <span className="sr-only">Escolher outra data de retorno</span>
+              <input
+                type="date"
+                min={localDateValue(new Date())}
+                value={nextActionAt ? nextActionAt.slice(0, 10) : ''}
+                onChange={event => {
+                  const value = returnTimeForDate(event.target.value);
+                  if (value) {
+                    setNextActionAt(value);
+                    setReturnPickerOpen(false);
+                  }
+                }}
+                className="w-full sm:w-auto px-3 py-2 rounded-xl bg-[#f4f2fd] dark:bg-[#10142e] border border-[#0066ff]/35 text-xs font-bold text-[#1a1b22] dark:text-[#f8f7ff]"
+              />
+            </label>
+          </div>
         </div>}
       </div>}
       {scheduledStatuses.includes(status) && status !== 'retornar_depois' && <label className="md:col-start-1 text-[10px] font-bold text-[#727687]">PRÓXIMO CONTATO<input type="datetime-local" value={nextActionAt} onChange={event => setNextActionAt(event.target.value)} className="mt-1 w-full px-3 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl" /></label>}
