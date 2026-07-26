@@ -62,9 +62,9 @@ export function Sidebar({
     badge?: string;
   }> = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'analises', label: 'Análises (GBP Check)', icon: BarChart3 },
+    { id: 'analises', label: 'Análises de Perfil', icon: BarChart3 },
     { id: 'mapa', label: 'Mapa de Calor', icon: MapPin },
-    { id: 'raiox', label: 'Raio-X Local', icon: Crosshair },
+    { id: 'raiox', label: 'Radar de Concorrentes', icon: Crosshair },
     { id: 'prospeccao', label: 'Prospecção', icon: Search, badge: 'IA' },
     { id: 'followup', label: 'Follow-up', icon: History },
     { id: 'crm', label: 'CRM (Vendas)', icon: Handshake, badge: 'IA' },

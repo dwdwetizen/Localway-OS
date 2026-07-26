@@ -209,6 +209,27 @@ function mapPlace(place: PlaceRecord, fallbackCategory = '', fallbackCity = '') 
   };
 }
 
+function mapCompetitorPlace(
+  place: PlaceRecord,
+  center: { latitude: number; longitude: number },
+) {
+  const mapped = mapPlace(place);
+  const location = readLocation(place.location);
+  const distance = location.latitude === null || location.longitude === null
+    ? null
+    : distanceInKilometres(
+      center,
+      { latitude: location.latitude, longitude: location.longitude },
+    );
+  return {
+    ...mapped,
+    photo_name: Array.isArray(place.photos)
+      ? readText((place.photos[0] as PlaceRecord | undefined)?.name)
+      : null,
+    distance_km: distance === null ? null : Number(distance.toFixed(2)),
+  };
+}
+
 function isGoogleMapsHost(hostname: string) {
   const host = hostname.toLowerCase();
   return host === 'maps.app.goo.gl'
@@ -539,7 +560,7 @@ async function loadGoogleConfiguration() {
   };
 }
 
-async function authorize(request: NextRequest, required: 'prospeccao' | 'analises' | 'mapa' | 'any') {
+async function authorize(request: NextRequest, required: 'prospeccao' | 'analises' | 'mapa' | 'raiox' | 'any') {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const accessToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
@@ -582,13 +603,21 @@ async function authorize(request: NextRequest, required: 'prospeccao' | 'analise
       ? permissions.some((item: string) => ['prospecção', 'prospeccao'].includes(item))
       : required === 'analises'
         ? permissions.some((item: string) => ['análises', 'analises'].includes(item))
-        : permissions.includes('mapa'));
+        : required === 'raiox'
+          ? permissions.some((item: string) => ['raio-x', 'raiox'].includes(item))
+          : permissions.includes('mapa'));
   if (!profile?.is_active || (!isAdmin && !allowed)) {
     return {
       error: NextResponse.json(
         {
           error: `Seu perfil não possui acesso a ${
-            required === 'prospeccao' ? 'prospecção' : required === 'analises' ? 'análises' : 'mapa'
+            required === 'prospeccao'
+              ? 'prospecção'
+              : required === 'analises'
+                ? 'análises'
+                : required === 'raiox'
+                  ? 'radar de concorrentes'
+                  : 'mapa'
           }.`,
         },
         { status: 403 },
@@ -615,7 +644,12 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const action = body.action === 'analyze' || body.action === 'analyze_url' || body.action === 'resolve_map_profile' || body.action === 'photo'
+  const action = body.action === 'analyze'
+    || body.action === 'analyze_url'
+    || body.action === 'resolve_map_profile'
+    || body.action === 'resolve_local_profile'
+    || body.action === 'local_competitors'
+    || body.action === 'photo'
     ? body.action
     : body.action === 'grid'
       ? 'grid'
@@ -624,7 +658,11 @@ export async function POST(request: NextRequest) {
     request,
     action === 'analyze' || action === 'analyze_url'
       ? 'analises'
-      : action === 'grid' || action === 'resolve_map_profile' || action === 'photo'
+      : action === 'local_competitors' || action === 'resolve_local_profile'
+        ? 'raiox'
+        : action === 'photo'
+          ? 'any'
+          : action === 'grid' || action === 'resolve_map_profile'
         ? 'mapa'
         : 'prospeccao',
   );
@@ -657,6 +695,106 @@ export async function POST(request: NextRequest) {
         'Cache-Control': 'private, max-age=86400',
       },
     });
+  }
+
+  if (action === 'local_competitors') {
+    const leadId = String(body.leadId || '').trim();
+    const targetPlaceId = String(body.placeId || '').trim();
+    const category = String(body.category || '').trim();
+    const centerLatitude = Number(body.latitude);
+    const centerLongitude = Number(body.longitude);
+    const radiusMeters = [1000, 3000, 5000].includes(Number(body.radiusMeters))
+      ? Number(body.radiusMeters)
+      : 3000;
+
+    if (!leadId || !targetPlaceId) {
+      return NextResponse.json({ error: 'Carregue o perfil da empresa antes de consultar os concorrentes.' }, { status: 400 });
+    }
+    if (category.length < 2 || category.length > 120) {
+      return NextResponse.json({ error: 'O Google não retornou um segmento válido para essa empresa.' }, { status: 400 });
+    }
+    if (!Number.isFinite(centerLatitude) || centerLatitude < -90 || centerLatitude > 90
+      || !Number.isFinite(centerLongitude) || centerLongitude < -180 || centerLongitude > 180) {
+      return NextResponse.json({ error: 'A empresa selecionada não possui coordenadas válidas.' }, { status: 400 });
+    }
+
+    const center = { latitude: centerLatitude, longitude: centerLongitude };
+    const latitudeDelta = radiusMeters / 111_320;
+    const longitudeScale = Math.max(Math.cos(centerLatitude * Math.PI / 180), 0.2);
+    const longitudeDelta = radiusMeters / (111_320 * longitudeScale);
+    const targetDetails = await fetchPlaceDetails(targetPlaceId, apiKey);
+    if (!targetDetails.response.ok) {
+      return NextResponse.json(
+        { error: targetDetails.result?.error?.message || 'Não foi possível atualizar o perfil analisado.' },
+        { status: targetDetails.response.status },
+      );
+    }
+
+    const searchResponse = await fetch('https://places.googleapis.com/v1/places:searchText', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': searchFieldMask,
+      },
+      body: JSON.stringify({
+        textQuery: category,
+        languageCode: 'pt-BR',
+        regionCode: 'BR',
+        pageSize: 20,
+        locationRestriction: {
+          rectangle: {
+            low: {
+              latitude: centerLatitude - latitudeDelta,
+              longitude: centerLongitude - longitudeDelta,
+            },
+            high: {
+              latitude: centerLatitude + latitudeDelta,
+              longitude: centerLongitude + longitudeDelta,
+            },
+          },
+        },
+      }),
+    });
+    const searchResult = await searchResponse.json();
+    if (!searchResponse.ok) {
+      return NextResponse.json(
+        { error: searchResult?.error?.message || 'O Google não conseguiu consultar os concorrentes da região.' },
+        { status: searchResponse.status },
+      );
+    }
+
+    const target = mapCompetitorPlace(targetDetails.result as PlaceRecord, center);
+    const competitors = ((Array.isArray(searchResult.places) ? searchResult.places : []) as PlaceRecord[])
+      .filter(place =>
+        readText(place.id) !== targetPlaceId
+        && place.businessStatus !== 'CLOSED_PERMANENTLY')
+      .map(place => mapCompetitorPlace(place, center))
+      .filter(place => place.distance_km !== null && place.distance_km <= radiusMeters / 1000)
+      .slice(0, 19);
+
+    const scanPayload = {
+      lead_id: leadId,
+      radius_m: radiusMeters,
+      category,
+      center_latitude: centerLatitude,
+      center_longitude: centerLongitude,
+      target,
+      competitors,
+      created_by: authorization.userId,
+    };
+    const { data: scan, error: saveError } = await authorization.client!
+      .from('local_competitor_scans')
+      .insert(scanPayload)
+      .select()
+      .single();
+    if (saveError) {
+      return NextResponse.json(
+        { error: `A comparação foi calculada, mas não pôde ser salva: ${saveError.message}` },
+        { status: 500 },
+      );
+    }
+    return NextResponse.json({ scan });
   }
 
   if (action === 'grid') {
@@ -823,7 +961,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ place: mapPlace(details) });
   }
 
-  if (action === 'analyze_url' || action === 'resolve_map_profile') {
+  if (action === 'analyze_url' || action === 'resolve_map_profile' || action === 'resolve_local_profile') {
     try {
       const place = await placeFromGoogleMapsUrl(String(body.googleMapsUrl || '').trim(), apiKey);
       return NextResponse.json({ place });
