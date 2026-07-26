@@ -1,7 +1,7 @@
 'use client';
 
 import React, { FormEvent, useMemo, useState } from 'react';
-import { Building2, CalendarDays, CheckSquare, ExternalLink, Globe2, MessageCircle, PhoneCall, Plus, Search, Sparkles, Square, X } from 'lucide-react';
+import { Building2, CalendarDays, CheckSquare, ExternalLink, Globe2, MessageCircle, PhoneCall, Plus, Search, Sparkles, Square, Trash2, X } from 'lucide-react';
 import { useLeads } from '@/hooks/use-leads';
 import { contactCountdown, ContactUrgency, Lead, LeadStatus, statusLabel, whatsappLink } from '@/lib/leads';
 import { supabase } from '@/lib/supabase';
@@ -46,7 +46,7 @@ function returnDayOptions() {
 }
 
 export function ProspectingView({ onShowToast, onOpenAiPitchModal }: ProspectingViewProps) {
-  const { leads, loading, error, createLead, updateLead } = useLeads();
+  const { leads, loading, error, createLead, updateLead, deleteLead } = useLeads();
   const [category, setCategory] = useState('');
   const [city, setCity] = useState('');
   const [limit, setLimit] = useState(10);
@@ -162,7 +162,7 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
       <div className="divide-y divide-[#c2c6d8]/20 dark:divide-[#2e366b]">
         {loading && <div className="p-8 text-center text-xs text-[#727687]">Carregando leads…</div>}
         {!loading && !prospects.length && <div className="p-10 text-center text-xs text-[#727687]">{prospectingMode === 'online' ? 'Informe o segmento e a região, depois clique em “Gerar leads”.' : 'Nenhuma empresa presencial cadastrada. Clique em “Adicionar presencial”.'}</div>}
-        {prospects.map(lead => <LeadRow key={lead.id} lead={lead} selected={selected.includes(lead.id)} toggle={toggle} updateStep={updateStep} onPitch={onOpenAiPitchModal} />)}
+        {prospects.map(lead => <LeadRow key={lead.id} lead={lead} selected={selected.includes(lead.id)} toggle={toggle} updateStep={updateStep} deleteLead={deleteLead} onShowToast={onShowToast} onPitch={onOpenAiPitchModal} />)}
       </div>
     </div>
 
@@ -170,7 +170,7 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
   </div>;
 }
 
-function LeadRow({ lead, selected, toggle, updateStep, onPitch }: { lead: Lead; selected: boolean; toggle: (id: string) => void; updateStep: (lead: Lead, status: LeadStatus, nextActionAt: string | null, notes: string) => Promise<boolean>; onPitch: (name: string, lead?: Lead) => void }) {
+function LeadRow({ lead, selected, toggle, updateStep, deleteLead, onShowToast, onPitch }: { lead: Lead; selected: boolean; toggle: (id: string) => void; updateStep: (lead: Lead, status: LeadStatus, nextActionAt: string | null, notes: string) => Promise<boolean>; deleteLead: (id: string) => Promise<{ error?: string }>; onShowToast: (message: string, type?: 'success' | 'info' | 'error') => void; onPitch: (name: string, lead?: Lead) => void }) {
   const wa = whatsappLink(lead.whatsapp || lead.phone);
   const profile = lead.health_score === null ? 'Sem análise' : lead.health_score <= 55 ? 'Boa oportunidade' : lead.health_score <= 75 ? 'Oportunidade média' : 'Perfil forte';
   const savedCountdown = lead.status === 'retornar_depois' ? contactCountdown(lead.next_action_at) : null;
@@ -178,6 +178,7 @@ function LeadRow({ lead, selected, toggle, updateStep, onPitch }: { lead: Lead; 
   const [nextActionAt, setNextActionAt] = useState(lead.next_action_at ? lead.next_action_at.slice(0, 16) : '');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [returnPickerOpen, setReturnPickerOpen] = useState(false);
   const register = async () => {
     setSaving(true);
@@ -185,10 +186,22 @@ function LeadRow({ lead, selected, toggle, updateStep, onPitch }: { lead: Lead; 
     setSaving(false);
     if (saved) setNotes('');
   };
+  const remove = async () => {
+    const confirmed = window.confirm(`Excluir o lead “${lead.company_name}”? Esta ação também remove o histórico vinculado e não pode ser desfeita.`);
+    if (!confirmed) return;
+    setDeleting(true);
+    const result = await deleteLead(lead.id);
+    if (result.error) {
+      onShowToast(result.error, 'error');
+      setDeleting(false);
+      return;
+    }
+    onShowToast(`${lead.company_name} foi excluída da prospecção.`, 'success');
+  };
   return <div className={`p-4 space-y-3 ${selected ? 'bg-[#0066ff]/5' : 'hover:bg-gray-50 dark:hover:bg-gray-800/40'}`}>
     <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
       <div className="flex gap-3 min-w-0"><button onClick={() => toggle(lead.id)} className="mt-1 text-[#0066ff]">{selected ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5 text-gray-300" />}</button><div className="min-w-0 space-y-1"><div className="flex gap-2 items-center flex-wrap"><h4 className="font-bold text-sm">{lead.company_name}</h4><span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#0066ff]/10 text-[#0066ff]">{profile}</span>{savedCountdown && <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${countdownClass(savedCountdown.urgency)}`}>{savedCountdown.label}</span>}</div><p className="text-xs text-[#727687]">{[lead.category, lead.address].filter(Boolean).join(' • ')}</p><p className="text-[11px] text-[#727687]">⭐ {lead.rating ?? '—'} ({lead.review_count ?? 0} avaliações) · {lead.has_website ? 'Tem site' : 'Sem site'} · {lead.photo_count ?? 0} fotos</p>{lead.opportunity && <p className="text-[11px] text-amber-700">{lead.opportunity}</p>}</div></div>
-      <div className="flex items-center gap-1 flex-wrap shrink-0">{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer" title="Abrir perfil no Google Maps" className="p-2 text-[#0066ff] hover:bg-[#0066ff]/10 rounded-lg"><ExternalLink className="w-4 h-4" /></a>}{wa && <a href={wa} target="_blank" rel="noreferrer" title="Abrir WhatsApp" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg"><MessageCircle className="w-4 h-4" /></a>}{lead.phone && <a href={`tel:${lead.phone.replace(/\D/g, '')}`} title="Ligar" className="p-2 text-[#0066ff] hover:bg-[#0066ff]/10 rounded-lg"><PhoneCall className="w-4 h-4" /></a>}<button onClick={() => onPitch(lead.company_name, lead)} className="px-3 py-2 bg-[#0066ff] hover:bg-[#0050cb] text-white text-xs font-bold rounded-xl flex items-center gap-1"><Sparkles className="w-3.5 h-3.5" /> IA</button></div>
+      <div className="flex items-center gap-1 flex-wrap shrink-0">{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer" title="Abrir perfil no Google Maps" className="p-2 text-[#0066ff] hover:bg-[#0066ff]/10 rounded-lg"><ExternalLink className="w-4 h-4" /></a>}{wa && <a href={wa} target="_blank" rel="noreferrer" title="Abrir WhatsApp" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg"><MessageCircle className="w-4 h-4" /></a>}{lead.phone && <a href={`tel:${lead.phone.replace(/\D/g, '')}`} title="Ligar" className="p-2 text-[#0066ff] hover:bg-[#0066ff]/10 rounded-lg"><PhoneCall className="w-4 h-4" /></a>}<button onClick={() => onPitch(lead.company_name, lead)} className="px-3 py-2 bg-[#0066ff] hover:bg-[#0050cb] text-white text-xs font-bold rounded-xl flex items-center gap-1"><Sparkles className="w-3.5 h-3.5" /> IA</button><button type="button" disabled={deleting} onClick={() => void remove()} title="Excluir lead" aria-label={`Excluir ${lead.company_name}`} className="p-2 text-rose-600 hover:bg-rose-50 disabled:opacity-50 rounded-lg">{deleting ? <span className="text-[10px] font-bold">...</span> : <Trash2 className="w-4 h-4" />}</button></div>
     </div>
     <div className="grid grid-cols-1 md:grid-cols-[180px_1fr_auto] gap-2 items-end pl-8">
       <label className="text-[10px] font-bold text-[#727687]">RESULTADO<select value={nextSteps.includes(status) ? status : ''} onChange={event => { const nextStatus = event.target.value as LeadStatus; setStatus(nextStatus); setReturnPickerOpen(nextStatus === 'retornar_depois'); }} className="mt-1 w-full px-2 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl"><option value="" disabled>Escolha o resultado</option>{nextSteps.map(item => <option key={item} value={item}>{statusLabel[item]}</option>)}</select></label>

@@ -101,6 +101,17 @@ export function useLeads() {
     return { data: next };
   }, [leads, profile.email, profile.id, profile.nome]);
 
+  const deleteLead = useCallback(async (id: string) => {
+    if (!supabase) return { error: supabaseConfigurationError() };
+    const { error: requestError } = await supabase
+      .from('leads')
+      .delete()
+      .eq('id', id);
+    if (requestError) return { error: requestError.message };
+    setLeads(current => current.filter(lead => lead.id !== id));
+    return {};
+  }, []);
+
   const addInteraction = useCallback(async (interaction: Omit<LeadInteraction, 'id' | 'occurred_at' | 'created_by' | 'actor_name' | 'actor_email'> & { occurred_at?: string }) => {
     if (!supabase) return { error: supabaseConfigurationError() };
     const { error: requestError } = await supabase.from('lead_interactions').insert({
@@ -113,5 +124,5 @@ export function useLeads() {
     return requestError ? { error: requestError.message } : {};
   }, [profile.email, profile.id, profile.nome]);
 
-  return { leads, loading, error, refresh, createLead, updateLead, addInteraction };
+  return { leads, loading, error, refresh, createLead, updateLead, deleteLead, addInteraction };
 }
