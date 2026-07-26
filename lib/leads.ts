@@ -41,6 +41,8 @@ export interface Lead {
   crm_stage: CrmStage | null;
   estimated_value: number | null;
   created_by: string | null;
+  archived_at: string | null;
+  archived_by: string | null;
   source: LeadSource;
   status: LeadStatus;
   next_action_at: string | null;

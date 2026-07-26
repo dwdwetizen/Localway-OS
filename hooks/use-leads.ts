@@ -1,11 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Lead, LeadInteraction } from '@/lib/leads';
 import { supabase, supabaseConfigurationError } from '@/lib/supabase';
 import { useAuthProfile } from '@/components/AuthGate';
 
-type NewLead = Omit<Lead, 'id' | 'created_at' | 'updated_at' | 'last_contact_at' | 'crm_stage' | 'estimated_value' | 'created_by'> & {
+type NewLead = Omit<Lead, 'id' | 'created_at' | 'updated_at' | 'last_contact_at' | 'crm_stage' | 'estimated_value' | 'created_by' | 'archived_at' | 'archived_by'> & {
   last_contact_at?: string | null;
   crm_stage?: Lead['crm_stage'];
   estimated_value?: Lead['estimated_value'];
@@ -23,6 +23,8 @@ export function useLeads() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const activeLeads = useMemo(() => leads.filter(lead => !lead.archived_at), [leads]);
+  const archivedLeads = useMemo(() => leads.filter(lead => Boolean(lead.archived_at)), [leads]);
 
   const refresh = useCallback(async () => {
     if (!supabase) {
@@ -124,5 +126,5 @@ export function useLeads() {
     return requestError ? { error: requestError.message } : {};
   }, [profile.email, profile.id, profile.nome]);
 
-  return { leads, loading, error, refresh, createLead, updateLead, deleteLead, addInteraction };
+  return { leads: activeLeads, archivedLeads, loading, error, refresh, createLead, updateLead, deleteLead, addInteraction };
 }

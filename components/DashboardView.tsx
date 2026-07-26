@@ -77,6 +77,7 @@ export function DashboardView({ setActiveTab, onShowToast }: DashboardViewProps)
         .from('leads')
         .select('id,status,crm_stage,created_at')
         .eq('created_by', profile.id)
+        .is('archived_at', null)
         .gte('created_at', startsAt)
         .lte('created_at', endsAt),
       supabase

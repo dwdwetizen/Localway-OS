@@ -1,7 +1,8 @@
 'use client';
 
 import React, { FormEvent, useMemo, useState } from 'react';
-import { Building2, CalendarDays, CheckSquare, ExternalLink, Globe2, MessageCircle, PhoneCall, Plus, Search, Sparkles, Square, Trash2, X } from 'lucide-react';
+import { Archive, Building2, CalendarDays, CheckSquare, ExternalLink, Globe2, MessageCircle, PhoneCall, Plus, RotateCcw, Search, Sparkles, Square, Trash2, X } from 'lucide-react';
+import { useAuthProfile } from '@/components/AuthGate';
 import { useLeads } from '@/hooks/use-leads';
 import { contactCountdown, ContactUrgency, Lead, LeadStatus, statusLabel, whatsappLink } from '@/lib/leads';
 import { supabase } from '@/lib/supabase';
@@ -46,7 +47,8 @@ function returnDayOptions() {
 }
 
 export function ProspectingView({ onShowToast, onOpenAiPitchModal }: ProspectingViewProps) {
-  const { leads, loading, error, createLead, updateLead, deleteLead } = useLeads();
+  const authProfile = useAuthProfile();
+  const { leads, archivedLeads, loading, error, createLead, updateLead, deleteLead } = useLeads();
   const [category, setCategory] = useState('');
   const [city, setCity] = useState('');
   const [limit, setLimit] = useState(10);
@@ -54,7 +56,7 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
   const [manualOpen, setManualOpen] = useState(false);
   const [manual, setManual] = useState(emptyManual);
   const [selected, setSelected] = useState<string[]>([]);
-  const [prospectingMode, setProspectingMode] = useState<'presencial' | 'online'>('online');
+  const [prospectingMode, setProspectingMode] = useState<'presencial' | 'online' | 'arquivados'>('online');
 
   const prospects = useMemo(
     () => leads.filter(lead => {
@@ -66,13 +68,35 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
         && lead.status !== 'perdido';
       const matchesMode = prospectingMode === 'online'
         ? lead.source === 'google_places'
-        : lead.source !== 'google_places';
+        : prospectingMode === 'presencial' && lead.source !== 'google_places';
       return isActive && matchesMode;
     }),
     [leads, prospectingMode],
   );
   const toggle = (id: string) => setSelected(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
   const toggleAll = () => setSelected(current => current.length === prospects.length ? [] : prospects.map(lead => lead.id));
+
+  const archiveLead = async (lead: Lead) => {
+    const result = await updateLead(
+      lead.id,
+      { archived_at: new Date().toISOString(), archived_by: authProfile.id },
+      { outcome: 'Lead arquivado', notes: 'Movido para a área de arquivados.', event_type: 'lead_archived' },
+    );
+    if (result.error) onShowToast(result.error, 'error');
+    else onShowToast(`${lead.company_name} foi arquivada.`, 'success');
+    return !result.error;
+  };
+
+  const restoreLead = async (lead: Lead) => {
+    const result = await updateLead(
+      lead.id,
+      { archived_at: null, archived_by: null },
+      { outcome: 'Lead restaurado', notes: 'Retornado para a prospecção ativa.', event_type: 'lead_restored' },
+    );
+    if (result.error) onShowToast(result.error, 'error');
+    else onShowToast(`${lead.company_name} voltou para a prospecção.`, 'success');
+    return !result.error;
+  };
 
   const generateLeads = async () => {
     if (!category.trim() || !city.trim()) return onShowToast('Informe o segmento e a cidade/região.', 'error');
@@ -84,7 +108,7 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
       if (!response.ok) throw new Error(data.error || 'Erro ao gerar leads.');
       let added = 0;
       for (const place of data.places) {
-        if (leads.some(lead => lead.google_place_id === place.google_place_id)) continue;
+        if ([...leads, ...archivedLeads].some(lead => lead.google_place_id === place.google_place_id)) continue;
         const result = await createLead({ ...place, decision_maker_name: null, receptionist_name: null, email: null, notes: null, source: 'google_places', status: 'novo', next_action_at: null });
         if (!result.error) added += 1;
       }
@@ -144,9 +168,10 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
       {prospectingMode === 'presencial' && <button aria-label="Adicionar empresa presencial" title="Adicionar empresa presencial" onClick={() => setManualOpen(true)} className="px-4 h-10 flex items-center gap-2 bg-[#0066ff] hover:bg-[#0050cb] text-white rounded-xl shadow text-xs font-bold"><Plus className="w-4 h-4" /> Adicionar presencial</button>}
     </div>
 
-    <div className="grid grid-cols-2 gap-2 rounded-2xl bg-white dark:bg-[#141936] p-2 border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-2xl bg-white dark:bg-[#141936] p-2 border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
       <button onClick={() => { setProspectingMode('presencial'); setSelected([]); }} className={`h-12 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-colors ${prospectingMode === 'presencial' ? 'bg-[#0066ff] text-white shadow' : 'text-[#727687] hover:bg-[#f4f2fd] dark:hover:bg-[#10142e]'}`}><Building2 className="w-4 h-4" /> Prospecção presencial</button>
       <button onClick={() => { setProspectingMode('online'); setSelected([]); }} className={`h-12 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-colors ${prospectingMode === 'online' ? 'bg-[#0066ff] text-white shadow' : 'text-[#727687] hover:bg-[#f4f2fd] dark:hover:bg-[#10142e]'}`}><Globe2 className="w-4 h-4" /> Prospecção online</button>
+      <button onClick={() => { setProspectingMode('arquivados'); setSelected([]); }} className={`h-12 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-colors ${prospectingMode === 'arquivados' ? 'bg-[#1a1b22] text-white shadow dark:bg-[#f8f7ff] dark:text-[#1a1b22]' : 'text-[#727687] hover:bg-[#f4f2fd] dark:hover:bg-[#10142e]'}`}><Archive className="w-4 h-4" /> Arquivados ({archivedLeads.length})</button>
     </div>
 
     {prospectingMode === 'online' && <div className="bg-white dark:bg-[#141936] p-4 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-4 items-end">
@@ -157,20 +182,27 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
     </div>}
     {error && <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800">{error}</div>}
 
-    <div className="bg-white dark:bg-[#141936] rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] overflow-hidden shadow-sm">
+    {prospectingMode !== 'arquivados' ? <div className="bg-white dark:bg-[#141936] rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] overflow-hidden shadow-sm">
       <div className="p-4 bg-[#f4f2fd] dark:bg-[#10142e] border-b border-[#c2c6d8]/30 flex items-center justify-between"><div className="flex items-center gap-2"><button onClick={toggleAll} className="text-[#0066ff]">{selected.length === prospects.length && prospects.length ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5 text-gray-400" />}</button><span className="text-xs font-bold">{prospectingMode === 'online' ? 'Leads online' : 'Empresas presenciais'} ({prospects.length})</span></div><span className="text-[11px] text-[#727687]">{prospectingMode === 'online' ? 'Google Places API' : 'Cadastro manual'}</span></div>
       <div className="divide-y divide-[#c2c6d8]/20 dark:divide-[#2e366b]">
         {loading && <div className="p-8 text-center text-xs text-[#727687]">Carregando leads…</div>}
         {!loading && !prospects.length && <div className="p-10 text-center text-xs text-[#727687]">{prospectingMode === 'online' ? 'Informe o segmento e a região, depois clique em “Gerar leads”.' : 'Nenhuma empresa presencial cadastrada. Clique em “Adicionar presencial”.'}</div>}
-        {prospects.map(lead => <LeadRow key={lead.id} lead={lead} selected={selected.includes(lead.id)} toggle={toggle} updateStep={updateStep} deleteLead={deleteLead} onShowToast={onShowToast} onPitch={onOpenAiPitchModal} />)}
+        {prospects.map(lead => <LeadRow key={lead.id} lead={lead} selected={selected.includes(lead.id)} toggle={toggle} updateStep={updateStep} archiveLead={archiveLead} onPitch={onOpenAiPitchModal} />)}
       </div>
-    </div>
+    </div> : <div className="bg-white dark:bg-[#141936] rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] overflow-hidden shadow-sm">
+      <div className="p-4 bg-[#f4f2fd] dark:bg-[#10142e] border-b border-[#c2c6d8]/30 flex items-center justify-between"><div><p className="text-xs font-bold">Leads arquivados ({archivedLeads.length})</p><p className="text-[10px] text-[#727687] mt-0.5">Restaure um lead ou exclua definitivamente.</p></div><Archive className="w-5 h-5 text-[#727687]" /></div>
+      <div className="divide-y divide-[#c2c6d8]/20 dark:divide-[#2e366b]">
+        {loading && <div className="p-8 text-center text-xs text-[#727687]">Carregando arquivados…</div>}
+        {!loading && !archivedLeads.length && <div className="p-10 text-center text-xs text-[#727687]">Nenhum lead arquivado.</div>}
+        {archivedLeads.map(lead => <ArchivedLeadRow key={lead.id} lead={lead} restoreLead={restoreLead} deleteLead={deleteLead} onShowToast={onShowToast} />)}
+      </div>
+    </div>}
 
     {manualOpen && <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"><form onSubmit={saveManual} className="w-full max-w-2xl bg-white dark:bg-[#141936] rounded-2xl shadow-2xl border border-[#c2c6d8]/30 p-6 space-y-4"><div className="flex justify-between items-center"><div><h3 className="font-bold text-lg">Adicionar empresa</h3><p className="text-xs text-[#727687]">Para uma visita presencial ou indicação.</p></div><button type="button" onClick={() => setManualOpen(false)}><X className="w-5 h-5" /></button></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><Field label="Empresa *" value={manual.companyName} onChange={value => setManual({ ...manual, companyName: value })} /><Field label="Segmento" value={manual.category} onChange={value => setManual({ ...manual, category: value })} /><Field label="Cidade" value={manual.city} onChange={value => setManual({ ...manual, city: value })} /><Field label="Telefone / WhatsApp" value={manual.phone} onChange={value => setManual({ ...manual, phone: value, whatsapp: value })} /><Field label="Nome do decisor" value={manual.decisionMaker} onChange={value => setManual({ ...manual, decisionMaker: value })} /><Field label="Nome da atendente" value={manual.receptionist} onChange={value => setManual({ ...manual, receptionist: value })} /><Field label="E-mail" value={manual.email} onChange={value => setManual({ ...manual, email: value })} /><Field label="Endereço" value={manual.address} onChange={value => setManual({ ...manual, address: value })} /></div><label className="text-xs font-semibold block">Observações<textarea value={manual.notes} onChange={event => setManual({ ...manual, notes: event.target.value })} className="mt-1 w-full p-2 rounded-xl border border-[#c2c6d8]/40 bg-[#f4f2fd]" rows={3} /></label><button className="w-full py-2.5 rounded-xl bg-[#0066ff] text-white text-xs font-bold">Adicionar à prospecção</button></form></div>}
   </div>;
 }
 
-function LeadRow({ lead, selected, toggle, updateStep, deleteLead, onShowToast, onPitch }: { lead: Lead; selected: boolean; toggle: (id: string) => void; updateStep: (lead: Lead, status: LeadStatus, nextActionAt: string | null, notes: string) => Promise<boolean>; deleteLead: (id: string) => Promise<{ error?: string }>; onShowToast: (message: string, type?: 'success' | 'info' | 'error') => void; onPitch: (name: string, lead?: Lead) => void }) {
+function LeadRow({ lead, selected, toggle, updateStep, archiveLead, onPitch }: { lead: Lead; selected: boolean; toggle: (id: string) => void; updateStep: (lead: Lead, status: LeadStatus, nextActionAt: string | null, notes: string) => Promise<boolean>; archiveLead: (lead: Lead) => Promise<boolean>; onPitch: (name: string, lead?: Lead) => void }) {
   const wa = whatsappLink(lead.whatsapp || lead.phone);
   const profile = lead.health_score === null ? 'Sem análise' : lead.health_score <= 55 ? 'Boa oportunidade' : lead.health_score <= 75 ? 'Oportunidade média' : 'Perfil forte';
   const savedCountdown = lead.status === 'retornar_depois' ? contactCountdown(lead.next_action_at) : null;
@@ -178,7 +210,7 @@ function LeadRow({ lead, selected, toggle, updateStep, deleteLead, onShowToast, 
   const [nextActionAt, setNextActionAt] = useState(lead.next_action_at ? lead.next_action_at.slice(0, 16) : '');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [archiving, setArchiving] = useState(false);
   const [returnPickerOpen, setReturnPickerOpen] = useState(false);
   const register = async () => {
     setSaving(true);
@@ -186,22 +218,17 @@ function LeadRow({ lead, selected, toggle, updateStep, deleteLead, onShowToast, 
     setSaving(false);
     if (saved) setNotes('');
   };
-  const remove = async () => {
-    const confirmed = window.confirm(`Excluir o lead “${lead.company_name}”? Esta ação também remove o histórico vinculado e não pode ser desfeita.`);
+  const archive = async () => {
+    const confirmed = window.confirm(`Arquivar o lead “${lead.company_name}”? Ele sairá das listas ativas, mas poderá ser restaurado.`);
     if (!confirmed) return;
-    setDeleting(true);
-    const result = await deleteLead(lead.id);
-    if (result.error) {
-      onShowToast(result.error, 'error');
-      setDeleting(false);
-      return;
-    }
-    onShowToast(`${lead.company_name} foi excluída da prospecção.`, 'success');
+    setArchiving(true);
+    const archived = await archiveLead(lead);
+    if (!archived) setArchiving(false);
   };
   return <div className={`p-4 space-y-3 ${selected ? 'bg-[#0066ff]/5' : 'hover:bg-gray-50 dark:hover:bg-gray-800/40'}`}>
     <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
       <div className="flex gap-3 min-w-0"><button onClick={() => toggle(lead.id)} className="mt-1 text-[#0066ff]">{selected ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5 text-gray-300" />}</button><div className="min-w-0 space-y-1"><div className="flex gap-2 items-center flex-wrap"><h4 className="font-bold text-sm">{lead.company_name}</h4><span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#0066ff]/10 text-[#0066ff]">{profile}</span>{savedCountdown && <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${countdownClass(savedCountdown.urgency)}`}>{savedCountdown.label}</span>}</div><p className="text-xs text-[#727687]">{[lead.category, lead.address].filter(Boolean).join(' • ')}</p><p className="text-[11px] text-[#727687]">⭐ {lead.rating ?? '—'} ({lead.review_count ?? 0} avaliações) · {lead.has_website ? 'Tem site' : 'Sem site'} · {lead.photo_count ?? 0} fotos</p>{lead.opportunity && <p className="text-[11px] text-amber-700">{lead.opportunity}</p>}</div></div>
-      <div className="flex items-center gap-1 flex-wrap shrink-0">{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer" title="Abrir perfil no Google Maps" className="p-2 text-[#0066ff] hover:bg-[#0066ff]/10 rounded-lg"><ExternalLink className="w-4 h-4" /></a>}{wa && <a href={wa} target="_blank" rel="noreferrer" title="Abrir WhatsApp" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg"><MessageCircle className="w-4 h-4" /></a>}{lead.phone && <a href={`tel:${lead.phone.replace(/\D/g, '')}`} title="Ligar" className="p-2 text-[#0066ff] hover:bg-[#0066ff]/10 rounded-lg"><PhoneCall className="w-4 h-4" /></a>}<button onClick={() => onPitch(lead.company_name, lead)} className="px-3 py-2 bg-[#0066ff] hover:bg-[#0050cb] text-white text-xs font-bold rounded-xl flex items-center gap-1"><Sparkles className="w-3.5 h-3.5" /> IA</button><button type="button" disabled={deleting} onClick={() => void remove()} title="Excluir lead" aria-label={`Excluir ${lead.company_name}`} className="p-2 text-rose-600 hover:bg-rose-50 disabled:opacity-50 rounded-lg">{deleting ? <span className="text-[10px] font-bold">...</span> : <Trash2 className="w-4 h-4" />}</button></div>
+      <div className="flex items-center gap-1 flex-wrap shrink-0">{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer" title="Abrir perfil no Google Maps" className="p-2 text-[#0066ff] hover:bg-[#0066ff]/10 rounded-lg"><ExternalLink className="w-4 h-4" /></a>}{wa && <a href={wa} target="_blank" rel="noreferrer" title="Abrir WhatsApp" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg"><MessageCircle className="w-4 h-4" /></a>}{lead.phone && <a href={`tel:${lead.phone.replace(/\D/g, '')}`} title="Ligar" className="p-2 text-[#0066ff] hover:bg-[#0066ff]/10 rounded-lg"><PhoneCall className="w-4 h-4" /></a>}<button onClick={() => onPitch(lead.company_name, lead)} className="px-3 py-2 bg-[#0066ff] hover:bg-[#0050cb] text-white text-xs font-bold rounded-xl flex items-center gap-1"><Sparkles className="w-3.5 h-3.5" /> IA</button><button type="button" disabled={archiving} onClick={() => void archive()} title="Arquivar lead" aria-label={`Arquivar ${lead.company_name}`} className="p-2 text-[#727687] hover:text-[#1a1b22] hover:bg-[#f4f2fd] disabled:opacity-50 rounded-lg">{archiving ? <span className="text-[10px] font-bold">...</span> : <Archive className="w-4 h-4" />}</button></div>
     </div>
     <div className="grid grid-cols-1 md:grid-cols-[180px_1fr_auto] gap-2 items-end pl-8">
       <label className="text-[10px] font-bold text-[#727687]">RESULTADO<select value={nextSteps.includes(status) ? status : ''} onChange={event => { const nextStatus = event.target.value as LeadStatus; setStatus(nextStatus); setReturnPickerOpen(nextStatus === 'retornar_depois'); }} className="mt-1 w-full px-2 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl"><option value="" disabled>Escolha o resultado</option>{nextSteps.map(item => <option key={item} value={item}>{statusLabel[item]}</option>)}</select></label>
@@ -219,6 +246,38 @@ function LeadRow({ lead, selected, toggle, updateStep, deleteLead, onShowToast, 
         </div>}
       </div>}
       {scheduledStatuses.includes(status) && status !== 'retornar_depois' && <label className="md:col-start-1 text-[10px] font-bold text-[#727687]">PRÓXIMO CONTATO<input type="datetime-local" value={nextActionAt} onChange={event => setNextActionAt(event.target.value)} className="mt-1 w-full px-3 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl" /></label>}
+    </div>
+  </div>;
+}
+
+function ArchivedLeadRow({ lead, restoreLead, deleteLead, onShowToast }: { lead: Lead; restoreLead: (lead: Lead) => Promise<boolean>; deleteLead: (id: string) => Promise<{ error?: string }>; onShowToast: (message: string, type?: 'success' | 'info' | 'error') => void }) {
+  const [busy, setBusy] = useState<'restore' | 'delete' | null>(null);
+  const restore = async () => {
+    setBusy('restore');
+    const restored = await restoreLead(lead);
+    if (!restored) setBusy(null);
+  };
+  const remove = async () => {
+    const confirmed = window.confirm(`Excluir definitivamente o lead “${lead.company_name}”? O histórico e as análises vinculadas também serão apagados. Esta ação não pode ser desfeita.`);
+    if (!confirmed) return;
+    setBusy('delete');
+    const result = await deleteLead(lead.id);
+    if (result.error) {
+      onShowToast(result.error, 'error');
+      setBusy(null);
+      return;
+    }
+    onShowToast(`${lead.company_name} foi excluída definitivamente.`, 'success');
+  };
+  return <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="min-w-0">
+      <div className="flex items-center gap-2 flex-wrap"><h4 className="font-bold text-sm">{lead.company_name}</h4><span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded bg-[#f4f2fd] dark:bg-[#10142e] text-[#727687]">{lead.source === 'google_places' ? 'Online' : 'Presencial'}</span></div>
+      <p className="text-xs text-[#727687] mt-1">{[lead.category, lead.address].filter(Boolean).join(' • ') || 'Sem detalhes adicionais'}</p>
+      <p className="text-[10px] text-[#727687] mt-1">Arquivado em {lead.archived_at ? new Date(lead.archived_at).toLocaleString('pt-BR') : 'data não informada'}</p>
+    </div>
+    <div className="flex items-center gap-2 shrink-0">
+      <button type="button" disabled={Boolean(busy)} onClick={() => void restore()} className="px-3 py-2 rounded-xl border border-[#0066ff]/30 text-[#0066ff] hover:bg-[#0066ff]/5 disabled:opacity-50 text-xs font-bold flex items-center gap-1.5"><RotateCcw className="w-4 h-4" />{busy === 'restore' ? 'Restaurando…' : 'Restaurar'}</button>
+      <button type="button" disabled={Boolean(busy)} onClick={() => void remove()} className="px-3 py-2 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 disabled:opacity-50 text-xs font-bold flex items-center gap-1.5"><Trash2 className="w-4 h-4" />{busy === 'delete' ? 'Excluindo…' : 'Excluir'}</button>
     </div>
   </div>;
 }
