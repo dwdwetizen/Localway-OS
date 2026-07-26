@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   authorizeGoogleAdsRequest,
   decryptSecret,
+  googleAdsRedirectUri,
   googleAdsStatus,
   loadGoogleAdsConfiguration,
   signOAuthState,
@@ -16,7 +17,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Salve primeiro o token, os IDs e as credenciais OAuth.' }, { status: 400 });
   }
   const origin = new URL(request.url).origin;
-  const redirectUri = `${origin}/api/google-ads/callback`;
+  const redirectUri = googleAdsRedirectUri();
   const state = signOAuthState({
     userId: authorization.userId,
     createdAt: Date.now(),

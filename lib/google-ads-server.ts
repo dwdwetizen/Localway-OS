@@ -113,6 +113,11 @@ export function googleAdsStatus(configuration: GoogleAdsConfiguration | null) {
   };
 }
 
+export function googleAdsRedirectUri() {
+  return process.env.GOOGLE_ADS_REDIRECT_URI?.trim()
+    || 'https://localway-os-2qwb.vercel.app/api/google-ads/callback';
+}
+
 export function signOAuthState(payload: object) {
   const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
   const signature = createHmac('sha256', encryptionKey()).update(encoded).digest('base64url');

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   decryptSecret,
   encryptSecret,
+  googleAdsRedirectUri,
   loadGoogleAdsConfiguration,
   serviceClient,
   verifyOAuthState,
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
       code,
       client_id: configuration.oauth_client_id || '',
       client_secret: decryptSecret(configuration.oauth_client_secret_encrypted),
-      redirect_uri: `${state.origin}/api/google-ads/callback`,
+      redirect_uri: googleAdsRedirectUri(),
       grant_type: 'authorization_code',
     }),
     cache: 'no-store',
