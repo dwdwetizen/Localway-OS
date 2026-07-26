@@ -4,7 +4,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import React, { ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Settings, Upload, Loader2, Trash2, Target, Pencil, Save, X } from 'lucide-react';
+import { Eye, EyeOff, KeyRound, Plus, Settings, Upload, Loader2, Trash2, Target, Pencil, Save, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface AdminViewProps { onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void; }
@@ -53,6 +53,10 @@ export function AdminView({ onShowToast }: AdminViewProps) {
   const [permissionsDraft, setPermissionsDraft] = useState<string[]>([]);
   const [jobTitleDraft, setJobTitleDraft] = useState('');
   const [savingPermissionsId, setSavingPermissionsId] = useState<string | null>(null);
+  const [passwordUserId, setPasswordUserId] = useState<string | null>(null);
+  const [passwordDraft, setPasswordDraft] = useState('');
+  const [showPasswordDraft, setShowPasswordDraft] = useState(false);
+  const [resettingPasswordId, setResettingPasswordId] = useState<string | null>(null);
   const load = useCallback(async () => {
     const client = supabase;
     if (!client) return;
@@ -111,6 +115,27 @@ export function AdminView({ onShowToast }: AdminViewProps) {
     onShowToast(`Acessos de ${profile.nome || profile.email} atualizados.`);
   };
   const createLogin = async () => { if (!supabase) return; setSaving(true); const { data } = await supabase.auth.getSession(); const response = await fetch('/api/admin/create-user', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token || ''}` }, body: JSON.stringify(form) }); const result = await response.json(); setSaving(false); if (!response.ok) return onShowToast(result.error || 'Não foi possível criar o login.', 'error'); onShowToast('Login criado. Passe o e-mail e a senha ao usuário por um canal seguro.'); setForm(initialForm); void load(); };
+  const resetPassword = async (profile: Profile) => {
+    if (!supabase) return;
+    if (passwordDraft.length < 8) return onShowToast('A nova senha deve ter pelo menos 8 caracteres.', 'error');
+    setResettingPasswordId(profile.id);
+    const { data } = await supabase.auth.getSession();
+    const response = await fetch('/api/admin/create-user', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${data.session?.access_token || ''}`,
+      },
+      body: JSON.stringify({ userId: profile.id, password: passwordDraft }),
+    });
+    const result = await response.json();
+    setResettingPasswordId(null);
+    if (!response.ok) return onShowToast(result.error || 'Não foi possível redefinir a senha.', 'error');
+    setPasswordUserId(null);
+    setPasswordDraft('');
+    setShowPasswordDraft(false);
+    onShowToast(`Nova senha de ${profile.nome || profile.email} salva com segurança.`);
+  };
   const deleteUser = async (profile: Profile) => { if (!supabase || !window.confirm(`Excluir o login de ${profile.nome || profile.email}? O histórico de leads será preservado.`)) return; setDeletingId(profile.id); const { data } = await supabase.auth.getSession(); const response = await fetch('/api/admin/create-user', { method: 'DELETE', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token || ''}` }, body: JSON.stringify({ userId: profile.id }) }); const result = await response.json(); setDeletingId(null); if (!response.ok) return onShowToast(result.error || 'Não foi possível excluir o usuário.', 'error'); onShowToast('Usuário excluído e login desativado.'); void load(); };
   const uploadPhoto = async (profile: Profile, event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file || !supabase) return; const path = `${profile.id}/avatar.${file.name.split('.').pop() || 'jpg'}`; const { error } = await supabase.storage.from('profile-photos').upload(path, file, { upsert: true, contentType: file.type }); if (error) return onShowToast(error.message, 'error'); const { error: updateError } = await supabase.from('profiles').update({ photo_url: path }).eq('id', profile.id); if (updateError) return onShowToast(updateError.message, 'error'); onShowToast('Foto atualizada.'); void load(); };
   const saveGoal = async () => {
@@ -205,6 +230,7 @@ export function AdminView({ onShowToast }: AdminViewProps) {
           {profiles.map(profile => {
             const isAdmin = ['administrador', 'admin'].includes((profile.role || '').toLowerCase());
             const isEditing = editingPermissionsId === profile.id;
+            const isPasswordEditing = passwordUserId === profile.id;
             return <div key={profile.id} className="p-4">
               <div className="flex gap-3 items-center">
                 <div className="w-11 h-11 rounded-full bg-[#0066ff]/10 overflow-hidden flex items-center justify-center font-bold">
@@ -218,10 +244,30 @@ export function AdminView({ onShowToast }: AdminViewProps) {
                     {(profile.permissions || []).includes('analises_solucoes') || isAdmin ? 'Soluções na análise: liberadas' : 'Soluções na análise: bloqueadas'}
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-2">
                   {!isAdmin && <button onClick={() => isEditing ? setEditingPermissionsId(null) : startEditingPermissions(profile)} className="px-2 py-2 rounded-lg text-[#0066ff] hover:bg-blue-50 text-xs font-bold flex items-center gap-1" aria-label={`Editar acessos de ${profile.nome || profile.email}`} title="Editar acessos">
                     {isEditing ? <X className="w-4 h-4"/> : <Pencil className="w-4 h-4"/>}<span>{isEditing ? 'Fechar' : 'Acessos'}</span>
                   </button>}
+                  <button
+                    onClick={() => {
+                      if (isPasswordEditing) {
+                        setPasswordUserId(null);
+                        setPasswordDraft('');
+                        setShowPasswordDraft(false);
+                      } else {
+                        setPasswordUserId(profile.id);
+                        setPasswordDraft('');
+                        setShowPasswordDraft(false);
+                        setEditingPermissionsId(null);
+                      }
+                    }}
+                    className="px-2 py-2 rounded-lg text-amber-700 hover:bg-amber-50 text-xs font-bold flex items-center gap-1"
+                    aria-label={`Redefinir senha de ${profile.nome || profile.email}`}
+                    title="Redefinir senha"
+                  >
+                    {isPasswordEditing ? <X className="w-4 h-4"/> : <KeyRound className="w-4 h-4"/>}
+                    <span>{isPasswordEditing ? 'Fechar' : 'Senha'}</span>
+                  </button>
                   <label className="text-xs text-[#0066ff] font-bold cursor-pointer"><Upload className="w-4 h-4 inline mr-1"/>Foto<input className="hidden" type="file" accept="image/*" onChange={e => void uploadPhoto(profile,e)}/></label>
                   <button disabled={deletingId === profile.id} onClick={() => void deleteUser(profile)} className="p-2 rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-50" aria-label={`Excluir ${profile.nome || profile.email}`} title="Excluir usuário">
                     {deletingId === profile.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <Trash2 className="w-4 h-4"/>}
@@ -229,6 +275,37 @@ export function AdminView({ onShowToast }: AdminViewProps) {
                 </div>
               </div>
               {isAdmin && <p className="mt-3 text-[10px] text-[#727687]">Administrador tem acesso completo ao aplicativo.</p>}
+              {isPasswordEditing && <div className="mt-4 p-4 rounded-xl border border-amber-200 bg-amber-50/70 dark:bg-amber-950/20">
+                <p className="text-xs font-bold">Definir uma nova senha</p>
+                <p className="text-[10px] text-[#727687] mt-1">Por segurança, a senha atual nunca pode ser visualizada. Defina uma nova quando alguém esquecer.</p>
+                <label className="block text-[11px] font-bold mt-3">
+                  Nova senha
+                  <div className="relative mt-1">
+                    <input
+                      type={showPasswordDraft ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      value={passwordDraft}
+                      onChange={event => setPasswordDraft(event.target.value)}
+                      placeholder="Mínimo de 8 caracteres"
+                      className="input pr-11"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPasswordDraft(current => !current)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#727687]"
+                      aria-label={showPasswordDraft ? 'Ocultar nova senha' : 'Mostrar nova senha'}
+                    >
+                      {showPasswordDraft ? <EyeOff className="w-4 h-4"/> : <Eye className="w-4 h-4"/>}
+                    </button>
+                  </div>
+                </label>
+                <div className="mt-3 flex justify-end gap-2">
+                  <button onClick={() => { setPasswordUserId(null); setPasswordDraft(''); setShowPasswordDraft(false); }} className="px-3 py-2 rounded-xl border text-xs font-bold">Cancelar</button>
+                  <button disabled={resettingPasswordId === profile.id || passwordDraft.length < 8} onClick={() => void resetPassword(profile)} className="px-4 py-2 rounded-xl bg-amber-600 text-white text-xs font-bold flex items-center gap-2 disabled:opacity-50">
+                    {resettingPasswordId === profile.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <KeyRound className="w-4 h-4"/>} Salvar nova senha
+                  </button>
+                </div>
+              </div>}
               {isEditing && <div className="mt-4 p-4 rounded-xl border bg-[#f8f9ff] dark:bg-[#10142e]">
                 <p className="text-xs font-bold">Editar acessos liberados</p>
                 <p className="text-[10px] text-[#727687] mt-1">As mudanças aparecem para este usuário no próximo carregamento da conta.</p>

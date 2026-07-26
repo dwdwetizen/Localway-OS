@@ -30,7 +30,11 @@ function reply(status: number, body: Record<string, unknown>) {
 }
 
 Deno.serve(async (request: Request) => {
-  if (request.method !== "POST" && request.method !== "DELETE") {
+  if (
+    request.method !== "POST" &&
+    request.method !== "DELETE" &&
+    request.method !== "PATCH"
+  ) {
     return reply(405, { error: "Método não permitido." });
   }
 
@@ -80,6 +84,49 @@ Deno.serve(async (request: Request) => {
   const normalizedRole = profile?.role?.trim().toLowerCase();
   if (!profile?.is_active || (normalizedRole !== "admin" && normalizedRole !== "administrador")) {
     return reply(403, { error: "Apenas administradores podem gerenciar usuários." });
+  }
+
+  if (request.method === "PATCH") {
+    let payload: { userId?: string; password?: string };
+
+    try {
+      payload = await request.json();
+    } catch {
+      return reply(400, { error: "Dados inválidos." });
+    }
+
+    const userId = payload.userId?.trim();
+    const password = payload.password || "";
+    if (!userId) {
+      return reply(400, { error: "Usuário não informado." });
+    }
+    if (password.length < 8) {
+      return reply(400, { error: "A nova senha deve ter pelo menos 8 caracteres." });
+    }
+
+    const { data: targetProfile, error: targetProfileError } = await admin
+      .from("profiles")
+      .select("id, is_active")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (targetProfileError) {
+      return reply(500, { error: "Não foi possível localizar o perfil do usuário." });
+    }
+    if (!targetProfile?.is_active) {
+      return reply(404, { error: "Usuário ativo não encontrado." });
+    }
+
+    const { error: updatePasswordError } = await admin.auth.admin.updateUserById(userId, {
+      password,
+    });
+    if (updatePasswordError) {
+      return reply(500, {
+        error: updatePasswordError.message || "Não foi possível redefinir a senha.",
+      });
+    }
+
+    return reply(200, { ok: true });
   }
 
   if (request.method === "DELETE") {

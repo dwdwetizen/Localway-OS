@@ -43,3 +43,7 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   return proxyUserManagement(request);
 }
+
+export async function PATCH(request: NextRequest) {
+  return proxyUserManagement(request);
+}
