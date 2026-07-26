@@ -6,6 +6,7 @@ import { Clock3, Grid3X3, History, Layers, Link2, Loader2, MapPin, Pencil, Plus,
 import { useLeads } from '@/hooks/use-leads';
 import { Lead } from '@/lib/leads';
 import { supabase } from '@/lib/supabase';
+import { KeywordOpportunityPanel } from '@/components/KeywordOpportunityPanel';
 
 interface HeatmapViewProps {
   onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
@@ -533,6 +534,27 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
     onShowToast(`Grade ${gridSize}×${gridSize} calculada e salva no histórico.`);
   };
 
+  const useKeywordFromResearch = async (keyword: string) => {
+    if (!selected) return;
+    const stored = selected.analysis_data?.visibility_keywords || [];
+    const keywords = stored.some(item => keywordKey(item) === keywordKey(keyword))
+      ? stored
+      : [...stored, keyword].slice(0, 10);
+    if (keywords !== stored) {
+      const result = await updateLead(selected.id, {
+        analysis_data: { ...(selected.analysis_data || {}), visibility_keywords: keywords },
+      });
+      if (result.error) {
+        onShowToast(result.error, 'error');
+        return;
+      }
+    }
+    setActiveKeyword(keyword);
+    setActiveScan(scanHistory.find(item =>
+      item.lead_id === selected.id && keywordKey(item.keyword) === keywordKey(keyword)) || null);
+    onShowToast(`“${keyword}” adicionada ao mapa de calor.`, 'success');
+  };
+
   return (
     <div className="space-y-5 animate-in fade-in duration-300" style={{ fontFamily: "'Inter', sans-serif" }}>
       <header className="flex items-center gap-3 bg-white dark:bg-[#141936] p-5 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
@@ -588,6 +610,15 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
           </div>
         </div>}
       </section>
+
+      {selected && <KeywordOpportunityPanel
+        selectedLead={selected}
+        leads={leads}
+        currentPosition={activeScan?.average_position || null}
+        rankedKeyword={activeScan?.keyword || ''}
+        onUseKeyword={useKeywordFromResearch}
+        onShowToast={onShowToast}
+      />}
 
       <div className={`grid grid-cols-1 overflow-hidden rounded-2xl border border-[#c2c6d8]/45 bg-white dark:bg-[#141936] shadow-sm ${activeScan ? 'lg:grid-cols-[350px_1fr]' : ''}`}>
         {activeScan && <aside className="flex flex-col min-h-[680px] max-h-[760px] border-b lg:border-b-0 lg:border-r border-[#c2c6d8]/35 bg-white dark:bg-[#141936]">

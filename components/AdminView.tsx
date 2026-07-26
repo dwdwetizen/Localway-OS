@@ -271,13 +271,137 @@ export function AdminView({ onShowToast }: AdminViewProps) {
       })}</div>
     </section>}
     {activeTab === 'servicos' && <section className="bg-white dark:bg-[#141936] p-6 rounded-2xl border"><h3 className="font-bold">Cadastrar novo serviço</h3><p className="text-xs text-[#727687] mt-1">Esta área foi movida para Administração.</p></section>}
-    {activeTab === 'integracoes' && <section className="bg-white dark:bg-[#141936] p-6 rounded-2xl border"><Settings className="text-[#0066ff]"/><h3 className="font-bold mt-3">Integrações</h3><p className="text-xs text-[#727687] mt-1">Use duas chaves diferentes: uma para o servidor e outra para o navegador.</p><div className="mt-4 grid gap-3 md:grid-cols-3"><IntegrationStatus configured={placesConfigured} title="Servidor — Places API (New)" ready="Geração de leads, análises e ranking local prontos." missing="Cole abaixo a chave de servidor da Places API (New)."/><IntegrationStatus configured={mapsConfigured} title="Navegador — Maps JavaScript API" ready="Exibição do mapa e da grade pronta." missing="Cole abaixo a chave de navegador do Maps JavaScript."/><IntegrationStatus configured title="Google Agenda" ready="Ativo por link seguro, sem chave de API." missing=""/></div><div className="mt-5 grid gap-4 md:grid-cols-2"><label className="text-xs font-bold">Chave de servidor — Google Places API (New)<input type="password" autoComplete="off" value={placesKeyInput} onChange={event => setPlacesKeyInput(event.target.value)} placeholder={placesConfigured ? 'Chave de servidor configurada — cole somente para substituir' : 'Cole a chave de servidor do Google Places'} className="input mt-1"/><span className="block text-[10px] font-normal text-[#727687] mt-1">Usada no servidor para buscar empresas, analisar perfis e calcular rankings. Restrinja somente à Places API (New).</span></label><label className="text-xs font-bold">Chave de navegador — Google Maps JavaScript API<input type="password" autoComplete="off" value={mapsKeyInput} onChange={event => setMapsKeyInput(event.target.value)} placeholder={mapsConfigured ? 'Chave de navegador configurada — cole somente para substituir' : 'Cole a chave de navegador do Google Maps'} className="input mt-1"/><span className="block text-[10px] font-normal text-[#727687] mt-1">Usada para exibir o mapa. Restrinja à Maps JavaScript API e aos domínios do aplicativo.</span></label></div><button disabled={savingIntegrations || (!placesKeyInput.trim() && !mapsKeyInput.trim())} onClick={() => void saveIntegrations()} className="mt-5 px-5 py-2.5 bg-[#0066ff] disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-2">{savingIntegrations ? <Loader2 className="w-4 h-4 animate-spin"/> : <Settings className="w-4 h-4"/>}Salvar integrações</button><IntegrationGuide/></section>}
+    {activeTab === 'integracoes' && <section className="bg-white dark:bg-[#141936] p-6 rounded-2xl border"><Settings className="text-[#0066ff]"/><h3 className="font-bold mt-3">Integrações</h3><p className="text-xs text-[#727687] mt-1">Use duas chaves diferentes: uma para o servidor e outra para o navegador.</p><div className="mt-4 grid gap-3 md:grid-cols-3"><IntegrationStatus configured={placesConfigured} title="Servidor — Places API (New)" ready="Geração de leads, análises e ranking local prontos." missing="Cole abaixo a chave de servidor da Places API (New)."/><IntegrationStatus configured={mapsConfigured} title="Navegador — Maps JavaScript API" ready="Exibição do mapa e da grade pronta." missing="Cole abaixo a chave de navegador do Maps JavaScript."/><IntegrationStatus configured title="Google Agenda" ready="Ativo por link seguro, sem chave de API." missing=""/></div><div className="mt-5 grid gap-4 md:grid-cols-2"><label className="text-xs font-bold">Chave de servidor — Google Places API (New)<input type="password" autoComplete="off" value={placesKeyInput} onChange={event => setPlacesKeyInput(event.target.value)} placeholder={placesConfigured ? 'Chave de servidor configurada — cole somente para substituir' : 'Cole a chave de servidor do Google Places'} className="input mt-1"/><span className="block text-[10px] font-normal text-[#727687] mt-1">Usada no servidor para buscar empresas, analisar perfis e calcular rankings. Restrinja somente à Places API (New).</span></label><label className="text-xs font-bold">Chave de navegador — Google Maps JavaScript API<input type="password" autoComplete="off" value={mapsKeyInput} onChange={event => setMapsKeyInput(event.target.value)} placeholder={mapsConfigured ? 'Chave de navegador configurada — cole somente para substituir' : 'Cole a chave de navegador do Google Maps'} className="input mt-1"/><span className="block text-[10px] font-normal text-[#727687] mt-1">Usada para exibir o mapa. Restrinja à Maps JavaScript API e aos domínios do aplicativo.</span></label></div><button disabled={savingIntegrations || (!placesKeyInput.trim() && !mapsKeyInput.trim())} onClick={() => void saveIntegrations()} className="mt-5 px-5 py-2.5 bg-[#0066ff] disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-2">{savingIntegrations ? <Loader2 className="w-4 h-4 animate-spin"/> : <Settings className="w-4 h-4"/>}Salvar integrações</button><GoogleAdsIntegrationCard onShowToast={onShowToast}/><IntegrationGuide/></section>}
   </div>;
   function Tab({ id, label }: { id: typeof activeTab; label: string }) { return <button onClick={() => setActiveTab(id)} className={`px-4 py-2 rounded-xl text-xs font-bold ${activeTab === id ? 'bg-[#0066ff] text-white' : 'text-[#727687]'}`}>{label}</button>; }
 }
 
 function GoalNumber({ label, value }: { label: string; value: number }) { return <div className="rounded-xl bg-[#f4f2fd] dark:bg-[#10142e] p-2"><p className="text-[10px] text-[#727687]">{label}</p><p className="font-bold text-sm">{value}</p></div>; }
 function IntegrationStatus({ configured, title, ready, missing }: { configured: boolean | null; title: string; ready: string; missing: string }) { return <div className={`p-4 rounded-xl border ${configured ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}><p className="text-xs font-bold">{title}: {configured ? 'configurada' : 'chave ausente'}</p><p className="text-[11px] mt-1">{configured ? ready : missing}</p></div>; }
+
+type GoogleAdsStatus = {
+  credentialsConfigured: boolean;
+  connected: boolean;
+  customerId: string;
+  loginCustomerId: string;
+  oauthClientId: string;
+  connectedEmail: string;
+  connectedAt: string | null;
+};
+
+function GoogleAdsIntegrationCard({ onShowToast }: AdminViewProps) {
+  const [status, setStatus] = useState<GoogleAdsStatus | null>(null);
+  const [loadingStatus, setLoadingStatus] = useState(true);
+  const [savingAds, setSavingAds] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [form, setForm] = useState({
+    developerToken: '',
+    customerId: '',
+    loginCustomerId: '',
+    oauthClientId: '',
+    oauthClientSecret: '',
+  });
+
+  const loadStatus = useCallback(async () => {
+    if (!supabase) return;
+    const { data } = await supabase.auth.getSession();
+    const response = await fetch('/api/google-ads/config', {
+      headers: { Authorization: `Bearer ${data.session?.access_token || ''}` },
+      cache: 'no-store',
+    });
+    const result = await response.json();
+    setLoadingStatus(false);
+    if (!response.ok) return;
+    setStatus(result);
+    setForm(current => ({
+      ...current,
+      customerId: result.customerId || current.customerId,
+      loginCustomerId: result.loginCustomerId || current.loginCustomerId,
+      oauthClientId: result.oauthClientId || current.oauthClientId,
+    }));
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadStatus(), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadStatus]);
+  useEffect(() => {
+    const receiveConnection = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin || event.data?.type !== 'localway-google-ads') return;
+      setConnecting(false);
+      if (event.data.success) {
+        onShowToast('Google Ads conectado com sucesso.', 'success');
+        void loadStatus();
+      } else {
+        onShowToast('O Google Ads não autorizou a conexão.', 'error');
+      }
+    };
+    window.addEventListener('message', receiveConnection);
+    return () => window.removeEventListener('message', receiveConnection);
+  }, [loadStatus, onShowToast]);
+
+  const saveCredentials = async () => {
+    if (!supabase) return;
+    setSavingAds(true);
+    const { data } = await supabase.auth.getSession();
+    const response = await fetch('/api/google-ads/config', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${data.session?.access_token || ''}`,
+      },
+      body: JSON.stringify(form),
+    });
+    const result = await response.json();
+    setSavingAds(false);
+    if (!response.ok) return onShowToast(result.error || 'Não foi possível salvar o Google Ads.', 'error');
+    setStatus(result);
+    setForm(current => ({ ...current, developerToken: '', oauthClientSecret: '' }));
+    onShowToast('Credenciais do Google Ads salvas com segurança.', 'success');
+  };
+
+  const connectGoogleAds = async () => {
+    if (!supabase) return;
+    setConnecting(true);
+    const { data } = await supabase.auth.getSession();
+    const response = await fetch('/api/google-ads/connect', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${data.session?.access_token || ''}` },
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      setConnecting(false);
+      return onShowToast(result.error || 'Não foi possível iniciar a conexão.', 'error');
+    }
+    const popup = window.open(result.authorizationUrl, 'localway-google-ads', 'width=620,height=720');
+    if (!popup) {
+      setConnecting(false);
+      return onShowToast('O navegador bloqueou a janela do Google. Libere pop-ups e tente novamente.', 'error');
+    }
+  };
+
+  return <div className="mt-7 rounded-2xl border border-[#c2c6d8]/45 bg-[#f8f9ff] dark:bg-[#10142e] p-5">
+    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+      <div><h4 className="font-bold text-sm">Google Ads — volume de palavras-chave</h4><p className="text-[11px] text-[#727687] mt-1">Credenciais ficam criptografadas e são usadas somente pelo servidor.</p></div>
+      <span className={`px-3 py-1.5 rounded-full text-[10px] font-bold ${status?.connected ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+        {loadingStatus ? 'Verificando…' : status?.connected ? `Conectado${status.connectedEmail ? ` • ${status.connectedEmail}` : ''}` : status?.credentialsConfigured ? 'Credenciais salvas' : 'Não configurado'}
+      </span>
+    </div>
+    <div className="grid md:grid-cols-2 gap-3 mt-4">
+      <label className="text-xs font-bold">Developer Token<input type="password" autoComplete="off" value={form.developerToken} onChange={event => setForm({...form, developerToken: event.target.value})} placeholder={status?.credentialsConfigured ? 'Configurado — cole apenas para substituir' : 'Token obtido no API Center do Google Ads'} className="input mt-1"/></label>
+      <label className="text-xs font-bold">ID da conta Google Ads<input inputMode="numeric" value={form.customerId} onChange={event => setForm({...form, customerId: event.target.value})} placeholder="1234567890 — sem traços" className="input mt-1"/></label>
+      <label className="text-xs font-bold">ID da conta administradora (opcional)<input inputMode="numeric" value={form.loginCustomerId} onChange={event => setForm({...form, loginCustomerId: event.target.value})} placeholder="Preencha somente se usar uma conta gerente" className="input mt-1"/></label>
+      <label className="text-xs font-bold">OAuth Client ID<input value={form.oauthClientId} onChange={event => setForm({...form, oauthClientId: event.target.value})} placeholder="...apps.googleusercontent.com" className="input mt-1"/></label>
+      <label className="text-xs font-bold md:col-span-2">OAuth Client Secret<input type="password" autoComplete="off" value={form.oauthClientSecret} onChange={event => setForm({...form, oauthClientSecret: event.target.value})} placeholder={status?.credentialsConfigured ? 'Configurado — cole apenas para substituir' : 'Segredo do cliente OAuth'} className="input mt-1"/></label>
+    </div>
+    <div className="mt-4 flex flex-wrap gap-2">
+      <button disabled={savingAds} onClick={() => void saveCredentials()} className="px-4 py-2.5 rounded-xl bg-[#0066ff] text-white text-xs font-bold disabled:opacity-50">{savingAds ? 'Salvando…' : 'Salvar credenciais'}</button>
+      <button disabled={connecting || !status?.credentialsConfigured} onClick={() => void connectGoogleAds()} className="px-4 py-2.5 rounded-xl border border-[#0066ff] text-[#0066ff] text-xs font-bold disabled:opacity-50">{connecting ? 'Abrindo Google…' : status?.connected ? 'Reconectar conta Google' : 'Conectar conta Google Ads'}</button>
+    </div>
+    <p className="mt-3 text-[10px] text-[#727687]">URL de redirecionamento OAuth: <code className="select-all">https://localway-os-2qwb.vercel.app/api/google-ads/callback</code></p>
+  </div>;
+}
+
 function IntegrationGuide() {
   return <div className="mt-6 rounded-2xl border border-[#c2c6d8]/40 bg-[#f4f2fd]/60 dark:bg-[#10142e] p-5">
     <h4 className="text-sm font-bold">Passo a passo para configurar</h4>
@@ -285,6 +409,8 @@ function IntegrationGuide() {
       <li><strong>Google Cloud:</strong> abra “APIs e serviços” e ative <strong>Places API (New)</strong> e <strong>Maps JavaScript API</strong> no mesmo projeto.</li>
       <li><strong>Chave de servidor:</strong> crie uma chave separada, restrinja-a somente à Places API (New), cole no primeiro campo e salve. Ela gera leads, analisa perfis e calcula o ranking local.</li>
       <li><strong>Chave de navegador:</strong> crie uma segunda chave, restrinja-a à Maps JavaScript API e aos endereços do aplicativo na Vercel, cole no segundo campo e salve.</li>
+      <li><strong>Google Ads:</strong> crie ou acesse uma conta administradora, abra o <strong>API Center</strong> e solicite o Developer Token. No Google Cloud, ative a Google Ads API e crie um cliente OAuth do tipo “Aplicativo da Web”.</li>
+      <li><strong>OAuth do Google Ads:</strong> adicione <code>https://localway-os-2qwb.vercel.app/api/google-ads/callback</code> às URLs de redirecionamento autorizadas. Cole o token, os IDs, o Client ID e o Client Secret acima; salve e clique em “Conectar conta Google Ads”.</li>
       <li><strong>Google Agenda:</strong> não cole chave. Ao marcar “Reunião marcada”, o aplicativo abre um evento preenchido na conta Google do colaborador; ele só precisa revisar e clicar em “Salvar”.</li>
       <li><strong>Teste:</strong> entre como colaborador, gere um lead, marque “Retornar depois” e confirme no Follow-up. Depois envie para o CRM e arraste o cartão.</li>
     </ol>
