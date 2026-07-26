@@ -142,6 +142,7 @@ Deno.serve(async (request: Request) => {
     email?: string;
     password?: string;
     nome?: string;
+    jobTitle?: string;
     permissions?: string[];
   };
 
@@ -154,6 +155,7 @@ Deno.serve(async (request: Request) => {
   const email = payload.email?.trim().toLowerCase();
   const password = payload.password || "";
   const nome = payload.nome?.trim();
+  const jobTitle = payload.jobTitle?.trim() || "SDR / Colaborador";
   const permissions = Array.isArray(payload.permissions) ? payload.permissions : [];
 
   if (!email || !password || !nome) {
@@ -178,6 +180,7 @@ Deno.serve(async (request: Request) => {
     email,
     nome,
     role: "funcionario",
+    job_title: jobTitle,
     permissions,
     is_active: true,
     deleted_at: null,

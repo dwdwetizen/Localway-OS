@@ -8,12 +8,12 @@ import { Plus, Settings, Upload, Loader2, Trash2, Target, Pencil, Save, X } from
 import { supabase } from '@/lib/supabase';
 
 interface AdminViewProps { onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void; }
-type Profile = { id: string; email: string; nome: string | null; role: string | null; permissions: string[] | null; photo_url: string | null; is_active: boolean; };
+type Profile = { id: string; email: string; nome: string | null; role: string | null; job_title: string | null; permissions: string[] | null; photo_url: string | null; is_active: boolean; };
 type Goal = { id: string; user_id: string; period_start: string; period_end: string; target_leads: number; target_contacts: number; target_meetings: number; };
 type ActivityLead = { company_name?: string; source?: string };
 type Activity = { id: string; created_by: string | null; actor_name: string | null; actor_email: string | null; outcome: string; notes: string | null; occurred_at: string; leads: ActivityLead | ActivityLead[] | null; };
 const pages = ['Análises', 'Mapa', 'Raio-X', 'Prospecção', 'Follow-up', 'CRM', 'Propostas', 'Meus Serviços', 'Equipe', 'Avaliações'];
-const initialForm = { nome: '', email: '', password: '', permissions: ['Prospecção', 'Follow-up'] };
+const initialForm = { nome: '', email: '', password: '', jobTitle: 'SDR', permissions: ['Prospecção', 'Follow-up'] };
 const now = new Date();
 const initialGoal = {
   userId: '',
@@ -51,6 +51,7 @@ export function AdminView({ onShowToast }: AdminViewProps) {
   const [historyUserId, setHistoryUserId] = useState('all');
   const [editingPermissionsId, setEditingPermissionsId] = useState<string | null>(null);
   const [permissionsDraft, setPermissionsDraft] = useState<string[]>([]);
+  const [jobTitleDraft, setJobTitleDraft] = useState('');
   const [savingPermissionsId, setSavingPermissionsId] = useState<string | null>(null);
   const load = useCallback(async () => {
     const client = supabase;
@@ -59,7 +60,7 @@ export function AdminView({ onShowToast }: AdminViewProps) {
     const { data: sessionData } = await client.auth.getSession();
     const accessToken = sessionData.session?.access_token || '';
     const [profilesRequest, goalsRequest, historyRequest, placesRequest] = await Promise.all([
-      client.from('profiles').select('id,email,nome,role,permissions,photo_url,is_active').eq('is_active', true).order('nome'),
+      client.from('profiles').select('id,email,nome,role,job_title,permissions,photo_url,is_active').eq('is_active', true).order('nome'),
       client.from('user_goals').select('id,user_id,period_start,period_end,target_leads,target_contacts,target_meetings').order('period_start', { ascending: false }),
       client.from('lead_interactions').select('id,created_by,actor_name,actor_email,outcome,notes,occurred_at,leads(company_name,source)').order('occurred_at', { ascending: false }),
       fetch('/api/places', { headers: { Authorization: `Bearer ${accessToken}` }, cache: 'no-store' }).then(response => response.json()).catch(() => ({ placesConfigured: false, mapsConfigured: false })),
@@ -87,6 +88,7 @@ export function AdminView({ onShowToast }: AdminViewProps) {
   const startEditingPermissions = (profile: Profile) => {
     setEditingPermissionsId(profile.id);
     setPermissionsDraft(profile.permissions || []);
+    setJobTitleDraft(profile.job_title || 'SDR / Colaborador');
   };
   const togglePermissionDraft = (item: string) => {
     setPermissionsDraft(current => current.includes(item) ? current.filter(value => value !== item) : [...current, item]);
@@ -96,15 +98,16 @@ export function AdminView({ onShowToast }: AdminViewProps) {
     setSavingPermissionsId(profile.id);
     const { data, error } = await supabase
       .from('profiles')
-      .update({ permissions: permissionsDraft })
+      .update({ permissions: permissionsDraft, job_title: jobTitleDraft.trim() || 'SDR / Colaborador' })
       .eq('id', profile.id)
-      .select('id,permissions')
+      .select('id,permissions,job_title')
       .maybeSingle();
     setSavingPermissionsId(null);
     if (error || !data) return onShowToast(error?.message || 'Não foi possível atualizar os acessos.', 'error');
-    setProfiles(current => current.map(item => item.id === profile.id ? { ...item, permissions: data.permissions } : item));
+    setProfiles(current => current.map(item => item.id === profile.id ? { ...item, permissions: data.permissions, job_title: data.job_title } : item));
     setEditingPermissionsId(null);
     setPermissionsDraft([]);
+    setJobTitleDraft('');
     onShowToast(`Acessos de ${profile.nome || profile.email} atualizados.`);
   };
   const createLogin = async () => { if (!supabase) return; setSaving(true); const { data } = await supabase.auth.getSession(); const response = await fetch('/api/admin/create-user', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token || ''}` }, body: JSON.stringify(form) }); const result = await response.json(); setSaving(false); if (!response.ok) return onShowToast(result.error || 'Não foi possível criar o login.', 'error'); onShowToast('Login criado. Passe o e-mail e a senha ao usuário por um canal seguro.'); setForm(initialForm); void load(); };
@@ -178,6 +181,7 @@ export function AdminView({ onShowToast }: AdminViewProps) {
         <h3 className="font-bold text-sm">Criar login e permissões</h3>
         <input placeholder="Nome completo" value={form.nome} onChange={e => setForm({...form,nome:e.target.value})} className="input"/>
         <input type="email" placeholder="E-mail" value={form.email} onChange={e => setForm({...form,email:e.target.value})} className="input"/>
+        <input placeholder="Cargo (ex.: SDR, Vendedor, Closer)" value={form.jobTitle} onChange={e => setForm({...form,jobTitle:e.target.value})} className="input"/>
         <input type="password" placeholder="Senha inicial (mínimo 8 caracteres)" value={form.password} onChange={e => setForm({...form,password:e.target.value})} className="input"/>
         <div>
           <p className="text-xs font-bold mb-2">Acessos liberados</p>
@@ -206,6 +210,7 @@ export function AdminView({ onShowToast }: AdminViewProps) {
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-xs">{profile.nome || 'Sem nome'}</p>
                   <p className="text-[11px] text-[#727687] truncate">{profile.email}</p>
+                  <p className="text-[10px] text-[#0066ff] font-semibold mt-0.5">{profile.job_title || (isAdmin ? 'Administrador' : 'SDR / Colaborador')}</p>
                   <span className={`inline-block mt-2 px-2 py-1 rounded-lg text-[10px] font-bold ${(profile.permissions || []).includes('analises_solucoes') || isAdmin ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
                     {(profile.permissions || []).includes('analises_solucoes') || isAdmin ? 'Soluções na análise: liberadas' : 'Soluções na análise: bloqueadas'}
                   </span>
@@ -224,6 +229,7 @@ export function AdminView({ onShowToast }: AdminViewProps) {
               {isEditing && <div className="mt-4 p-4 rounded-xl border bg-[#f8f9ff] dark:bg-[#10142e]">
                 <p className="text-xs font-bold">Editar acessos liberados</p>
                 <p className="text-[10px] text-[#727687] mt-1">As mudanças aparecem para este usuário no próximo carregamento da conta.</p>
+                <label className="block text-[11px] font-bold mt-3">Cargo<input value={jobTitleDraft} onChange={event => setJobTitleDraft(event.target.value)} placeholder="Ex.: SDR, Vendedor, Closer" className="input mt-1"/></label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-3">
                   {pages.map(page => <label key={page} className="text-[11px] flex gap-1.5 items-center"><input type="checkbox" checked={permissionsDraft.includes(page)} onChange={() => togglePermissionDraft(page)}/>{page}</label>)}
                 </div>
@@ -231,7 +237,7 @@ export function AdminView({ onShowToast }: AdminViewProps) {
                   <input type="checkbox" checked={permissionsDraft.includes('analises_solucoes')} onChange={() => togglePermissionDraft('analises_solucoes')}/> Pode ver soluções e ROI na análise
                 </label>
                 <div className="mt-3 flex justify-end gap-2">
-                  <button onClick={() => { setEditingPermissionsId(null); setPermissionsDraft([]); }} className="px-3 py-2 rounded-xl border text-xs font-bold">Cancelar</button>
+                  <button onClick={() => { setEditingPermissionsId(null); setPermissionsDraft([]); setJobTitleDraft(''); }} className="px-3 py-2 rounded-xl border text-xs font-bold">Cancelar</button>
                   <button disabled={savingPermissionsId === profile.id} onClick={() => void savePermissions(profile)} className="px-4 py-2 rounded-xl bg-[#0066ff] text-white text-xs font-bold flex items-center gap-2 disabled:opacity-50">
                     {savingPermissionsId === profile.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>} Salvar acessos
                   </button>
