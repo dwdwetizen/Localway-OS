@@ -101,7 +101,11 @@ export function useLeads(options: { scope?: 'personal' | 'team' } = {}) {
         actor_name: profile.nome,
         actor_email: profile.email,
       });
-      if (historyError) return { error: `Lead atualizado, mas o histórico falhou: ${historyError.message}` };
+      if (historyError) {
+        const warning = `Lead atualizado, mas o histórico falhou: ${historyError.message}`;
+        setError(warning);
+        return { data: next, warning };
+      }
     }
     return { data: next };
   }, [leads, profile.email, profile.id, profile.nome]);
