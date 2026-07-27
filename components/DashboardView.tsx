@@ -94,10 +94,19 @@ export function DashboardView({ setActiveTab, onShowToast }: DashboardViewProps)
 
     const leads = (leadRequest.data || []) as LeadSummary[];
     const history = (activityRequest.data || []) as unknown as Activity[];
-    const periodLeads = leads.filter(item => item.created_at >= startsAt && item.created_at <= endsAt);
+    const startTime = new Date(startsAt).getTime();
+    const endTime = new Date(endsAt).getTime();
+    const periodLeads = leads.filter(item => {
+      const createdAt = new Date(item.created_at).getTime();
+      return createdAt >= startTime && createdAt <= endTime;
+    });
     const contacts = history.filter(item => ['prospecting_contact', 'follow_up'].includes(item.event_type)).length;
     const meetings = new Set(history.filter(item => item.new_status === 'reuniao_marcada').map(item => item.lead_id)).size;
-    const contracts = leads.filter(item => item.crm_closed_at && item.crm_closed_at >= startsAt && item.crm_closed_at <= endsAt).length;
+    const contracts = leads.filter(item => {
+      if (!item.crm_closed_at) return false;
+      const closedAt = new Date(item.crm_closed_at).getTime();
+      return closedAt >= startTime && closedAt <= endTime;
+    }).length;
 
     setGoal(activeGoal);
     setMetrics({ leads: periodLeads.length, contacts, meetings, contracts });
