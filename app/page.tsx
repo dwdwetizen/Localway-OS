@@ -105,7 +105,12 @@ function AuthenticatedHome() {
   }, [darkMode]);
 
   useEffect(() => {
-    const savedTheme = window.localStorage.getItem(`localway-theme:${profile.id}`);
+    let savedTheme: string | null = null;
+    try {
+      savedTheme = window.localStorage.getItem(`localway-theme:${profile.id}`);
+    } catch {
+      // Keep the default light theme if browser storage is unavailable.
+    }
     const frame = window.requestAnimationFrame(() => {
       if (savedTheme === 'dark') setDarkMode(true);
       else setDarkMode(false);
@@ -114,7 +119,11 @@ function AuthenticatedHome() {
   }, [profile.id]);
 
   useEffect(() => {
-    window.localStorage.setItem(`localway-theme:${profile.id}`, darkMode ? 'dark' : 'light');
+    try {
+      window.localStorage.setItem(`localway-theme:${profile.id}`, darkMode ? 'dark' : 'light');
+    } catch {
+      // Theme still works for the current session.
+    }
   }, [darkMode, profile.id]);
 
   const showToast = useCallback((message: string, type: 'success' | 'info' | 'error' = 'success') => {

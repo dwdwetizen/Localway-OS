@@ -61,49 +61,78 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     if (!client) return;
 
     const validate = async () => {
-      const { data } = await client.auth.getSession();
-      if (!data.session) {
+      try {
+        const { data, error: sessionError } = await client.auth.getSession();
+        if (sessionError) throw sessionError;
+        if (!data.session) {
+          setProfile(null);
+          setAuthenticated(false);
+          return;
+        }
+
+        const { data: currentProfile, error: profileError } = await client
+          .from('profiles')
+          .select('id, email, username, nome, role, permissions, is_active, photo_url')
+          .eq('id', data.session.user.id)
+          .maybeSingle();
+        if (profileError) throw profileError;
+        if (!currentProfile?.is_active) {
+          await client.auth.signOut({ scope: 'local' });
+          setProfile(null);
+          setMessage('Este usuário não está autorizado a acessar o Localway OS.');
+          setAuthenticated(false);
+          return;
+        }
+
+        let photoUrl: string | null = null;
+        if (currentProfile.photo_url) {
+          const signed = await client.storage.from('profile-photos').createSignedUrl(currentProfile.photo_url, 3600);
+          photoUrl = signed.data?.signedUrl || null;
+        }
+
+        const safeUsername = String(
+          currentProfile.username
+          || currentProfile.email?.split('@')[0]
+          || data.session.user.email?.split('@')[0]
+          || 'usuario'
+        ).trim();
+        const safePermissions = Array.isArray(currentProfile.permissions)
+          ? currentProfile.permissions.filter((permission): permission is string => typeof permission === 'string')
+          : [];
+        const nextProfile: AuthProfile = {
+          ...currentProfile,
+          email: currentProfile.email || data.session.user.email || '',
+          username: safeUsername,
+          nome: currentProfile.nome || null,
+          role: currentProfile.role || null,
+          permissions: safePermissions,
+          photo_url: photoUrl,
+        };
+        setProfile(nextProfile);
+        setAuthenticated(true);
+        setPassword('');
+
+        const account = { username: safeUsername, nome: currentProfile.nome || null };
+        setRememberedAccounts(current => {
+          const next = [
+            account,
+            ...current.filter(item => item.username.toLowerCase() !== account.username.toLowerCase()),
+          ].slice(0, 6);
+          try {
+            window.localStorage.setItem(rememberedAccountsKey, JSON.stringify(next));
+          } catch {
+            // Login continues even when the browser blocks local storage.
+          }
+          return next;
+        });
+      } catch (error) {
+        console.error('Falha ao validar a sessão', error);
         setProfile(null);
         setAuthenticated(false);
+        setMessage('Não foi possível carregar sua conta. Atualize a página e tente novamente.');
+      } finally {
         setReady(true);
-        return;
       }
-
-      const { data: currentProfile } = await client
-        .from('profiles')
-        .select('id, email, username, nome, role, permissions, is_active, photo_url')
-        .eq('id', data.session.user.id)
-        .maybeSingle();
-      if (!currentProfile?.is_active) {
-        await client.auth.signOut({ scope: 'local' });
-        setProfile(null);
-        setMessage('Este usuário não está autorizado a acessar o Localway OS.');
-        setAuthenticated(false);
-        setReady(true);
-        return;
-      }
-
-      let photoUrl: string | null = null;
-      if (currentProfile.photo_url) {
-        const signed = await client.storage.from('profile-photos').createSignedUrl(currentProfile.photo_url, 3600);
-        photoUrl = signed.data?.signedUrl || null;
-      }
-
-      const nextProfile = { ...currentProfile, photo_url: photoUrl } as AuthProfile;
-      setProfile(nextProfile);
-      setAuthenticated(true);
-      setPassword('');
-
-      const account = { username: currentProfile.username, nome: currentProfile.nome };
-      setRememberedAccounts(current => {
-        const next = [
-          account,
-          ...current.filter(item => item.username.toLowerCase() !== account.username.toLowerCase()),
-        ].slice(0, 6);
-        window.localStorage.setItem(rememberedAccountsKey, JSON.stringify(next));
-        return next;
-      });
-      setReady(true);
     };
 
     const refreshOnFocus = () => void validate();
@@ -131,24 +160,29 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     setSubmitting(true);
     setMessage('');
 
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: username.trim(), password }),
-    });
-    const result = await response.json().catch(() => ({ error: 'Não foi possível entrar.' }));
-    if (!response.ok) {
-      setSubmitting(false);
-      setMessage(result.error || 'Usuário ou senha incorretos.');
-      return;
-    }
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: username.trim(), password }),
+      });
+      const result = await response.json().catch(() => ({ error: 'Não foi possível entrar.' }));
+      if (!response.ok) {
+        setMessage(result.error || 'Usuário ou senha incorretos.');
+        return;
+      }
 
-    const { error } = await supabase.auth.setSession({
-      access_token: result.accessToken,
-      refresh_token: result.refreshToken,
-    });
-    setSubmitting(false);
-    if (error) setMessage('Não foi possível iniciar sua sessão. Tente novamente.');
+      const { error } = await supabase.auth.setSession({
+        access_token: result.accessToken,
+        refresh_token: result.refreshToken,
+      });
+      if (error) setMessage('Não foi possível iniciar sua sessão. Tente novamente.');
+    } catch (error) {
+      console.error('Falha no login', error);
+      setMessage('A conexão falhou. Verifique a internet e tente novamente.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const chooseAccount = (accountUsername: string) => {
@@ -161,7 +195,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const forgetAccount = (accountUsername: string) => {
     setRememberedAccounts(current => {
       const next = current.filter(item => item.username.toLowerCase() !== accountUsername.toLowerCase());
-      window.localStorage.setItem(rememberedAccountsKey, JSON.stringify(next));
+      try {
+        window.localStorage.setItem(rememberedAccountsKey, JSON.stringify(next));
+      } catch {
+        // The in-memory list still updates in restricted browsers.
+      }
       return next;
     });
     if (username.toLowerCase() === accountUsername.toLowerCase()) {
