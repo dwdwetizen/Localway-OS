@@ -5,7 +5,7 @@ import { Lead, LeadInteraction } from '@/lib/leads';
 import { supabase, supabaseConfigurationError } from '@/lib/supabase';
 import { useAuthProfile } from '@/components/AuthGate';
 
-type NewLead = Omit<Lead, 'id' | 'created_at' | 'updated_at' | 'last_contact_at' | 'crm_stage' | 'estimated_value' | 'created_by' | 'archived_at' | 'archived_by' | 'calendar_event_id' | 'calendar_event_url'> & {
+type NewLead = Omit<Lead, 'id' | 'created_at' | 'updated_at' | 'last_contact_at' | 'crm_stage' | 'estimated_value' | 'created_by' | 'archived_at' | 'archived_by' | 'calendar_event_id' | 'calendar_event_url' | 'crm_closed_at'> & {
   last_contact_at?: string | null;
   crm_stage?: Lead['crm_stage'];
   estimated_value?: Lead['estimated_value'];
@@ -18,8 +18,9 @@ type ActivityDetails = {
   event_type?: string;
 };
 
-export function useLeads() {
+export function useLeads(options: { scope?: 'personal' | 'team' } = {}) {
   const profile = useAuthProfile();
+  const scope = options.scope || 'personal';
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -33,17 +34,19 @@ export function useLeads() {
       return;
     }
     setLoading(true);
-    const { data, error: requestError } = await supabase
+    let query = supabase
       .from('leads')
       .select('*')
       .order('created_at', { ascending: false });
+    if (scope === 'personal') query = query.eq('created_by', profile.id);
+    const { data, error: requestError } = await query;
     if (requestError) setError(requestError.message);
     else {
       setLeads((data || []) as Lead[]);
       setError(null);
     }
     setLoading(false);
-  }, []);
+  }, [profile.id, scope]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void refresh(), 0);

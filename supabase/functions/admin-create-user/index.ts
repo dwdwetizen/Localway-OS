@@ -238,7 +238,16 @@ Deno.serve(async (request: Request) => {
   const password = payload.password || "";
   const nome = payload.nome?.trim();
   const jobTitle = payload.jobTitle?.trim() || "SDR / Colaborador";
-  const permissions = Array.isArray(payload.permissions) ? payload.permissions : [];
+  const permissions = Array.from(new Set([
+    ...(Array.isArray(payload.permissions) ? payload.permissions : []),
+    "Análises",
+    "Mapa",
+    "Raio-X",
+    "Prospecção",
+    "Follow-up",
+    "CRM",
+    "Equipe",
+  ])).filter((permission) => permission.toLocaleLowerCase("pt-BR") !== "crm_gestao");
 
   if (!username || !password || !nome) {
     return reply(400, { error: "Preencha nome, usuário e senha." });

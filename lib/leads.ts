@@ -45,6 +45,7 @@ export interface Lead {
   archived_by: string | null;
   calendar_event_id: string | null;
   calendar_event_url: string | null;
+  crm_closed_at: string | null;
   source: LeadSource;
   status: LeadStatus;
   next_action_at: string | null;

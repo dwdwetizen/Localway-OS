@@ -14,6 +14,7 @@ interface ProspectingViewProps {
 
 const nextSteps: LeadStatus[] = ['nao_atendeu', 'retornar_depois', 'ligar_depois', 'reuniao_marcada', 'sem_interesse'];
 const scheduledStatuses: LeadStatus[] = ['nao_atendeu', 'ligar_depois', 'retornar_depois', 'reuniao_marcada'];
+type MeetingDetails = { decisionMakerName: string; phone: string; email: string };
 const emptyManual = { companyName: '', category: '', city: '', address: '', phone: '', whatsapp: '', email: '', decisionMaker: '', receptionist: '', notes: '' };
 
 function countdownClass(urgency: ContactUrgency) {
@@ -78,6 +79,8 @@ function tomorrowReturnValue() {
 
 export function ProspectingView({ onShowToast, onOpenAiPitchModal }: ProspectingViewProps) {
   const authProfile = useAuthProfile();
+  const isPrimaryAdmin = ['admin', 'administrador'].includes((authProfile.role || '').toLowerCase())
+    && authProfile.username.toLowerCase() === 'localway01';
   const { leads, archivedLeads, loading, error, createLead, updateLead, deleteLead } = useLeads();
   const [category, setCategory] = useState('');
   const [city, setCity] = useState('');
@@ -169,7 +172,7 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
     setManual(emptyManual); setManualOpen(false); onShowToast('Empresa adicionada à lista de prospecção.');
   };
 
-  const updateStep = async (lead: Lead, status: LeadStatus, nextActionAt: string | null, notes: string) => {
+  const updateStep = async (lead: Lead, status: LeadStatus, nextActionAt: string | null, notes: string, meetingDetails?: MeetingDetails) => {
     if (scheduledStatuses.includes(status) && !nextActionAt) {
       onShowToast('Escolha a data do próximo contato.', 'error');
       return false;
@@ -178,6 +181,10 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
       lead.id,
       {
         status,
+        decision_maker_name: status === 'reuniao_marcada' ? (meetingDetails?.decisionMakerName.trim() || lead.decision_maker_name) : lead.decision_maker_name,
+        phone: status === 'reuniao_marcada' ? (meetingDetails?.phone.trim() || lead.phone) : lead.phone,
+        whatsapp: status === 'reuniao_marcada' ? (meetingDetails?.phone.trim() || lead.whatsapp || lead.phone) : lead.whatsapp,
+        email: status === 'reuniao_marcada' ? (meetingDetails?.email.trim() || lead.email) : lead.email,
         crm_stage: status === 'reuniao_marcada'
           ? (lead.crm_stage || 'qualificacao')
           : lead.crm_stage,
@@ -197,6 +204,7 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
     if (result.error) return false;
 
     if (status === 'reuniao_marcada' && nextActionAt && supabase) {
+      const effectiveLead = result.data || lead;
       const { data: sessionData } = await supabase.auth.getSession();
       const calendarResponse = await fetch('/api/google-calendar/events', {
         method: 'POST',
@@ -205,13 +213,14 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
           Authorization: `Bearer ${sessionData.session?.access_token || ''}`,
         },
         body: JSON.stringify({
-          companyName: lead.company_name,
-          decisionMakerName: lead.decision_maker_name,
-          receptionistName: lead.receptionist_name,
-          phone: lead.phone,
-          whatsapp: lead.whatsapp,
-          address: lead.address,
-          googleMapsUrl: lead.google_maps_url,
+          companyName: effectiveLead.company_name,
+          decisionMakerName: effectiveLead.decision_maker_name,
+          receptionistName: effectiveLead.receptionist_name,
+          phone: effectiveLead.phone,
+          whatsapp: effectiveLead.whatsapp,
+          email: effectiveLead.email,
+          address: effectiveLead.address,
+          googleMapsUrl: effectiveLead.google_maps_url,
           notes,
           start: nextActionAt,
         }),
@@ -228,7 +237,7 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
         });
         onShowToast('Reunião enviada ao CRM e criada no Google Agenda.', 'success');
       } else {
-        window.open(googleCalendarLink(lead, nextActionAt), '_blank', 'noopener,noreferrer');
+        window.open(googleCalendarLink(effectiveLead, nextActionAt), '_blank', 'noopener,noreferrer');
         onShowToast(`${calendarResult.error || 'Agenda central não conectado.'} Abrimos o evento preenchido para salvar manualmente.`, 'info');
       }
     } else if (status === 'retornar_depois') onShowToast('Lead enviado ao Follow-up para retorno com o decisor.');
@@ -267,11 +276,11 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
         {prospects.map(lead => <LeadRow key={lead.id} lead={lead} selected={selected.includes(lead.id)} toggle={toggle} updateStep={updateStep} archiveLead={archiveLead} onPitch={onOpenAiPitchModal} />)}
       </div>
     </div> : <div className="bg-white dark:bg-[#141936] rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] overflow-hidden shadow-sm">
-      <div className="p-4 bg-[#f4f2fd] dark:bg-[#10142e] border-b border-[#c2c6d8]/30 flex items-center justify-between"><div><p className="text-xs font-bold">Leads arquivados ({archivedLeads.length})</p><p className="text-[10px] text-[#727687] mt-0.5">Restaure um lead ou exclua definitivamente.</p></div><Archive className="w-5 h-5 text-[#727687]" /></div>
+      <div className="p-4 bg-[#f4f2fd] dark:bg-[#10142e] border-b border-[#c2c6d8]/30 flex items-center justify-between"><div><p className="text-xs font-bold">Leads arquivados ({archivedLeads.length})</p><p className="text-[10px] text-[#727687] mt-0.5">{isPrimaryAdmin ? 'Restaure um lead ou exclua definitivamente.' : 'Você pode restaurar; a exclusão definitiva é feita pela gestão.'}</p></div><Archive className="w-5 h-5 text-[#727687]" /></div>
       <div className="divide-y divide-[#c2c6d8]/20 dark:divide-[#2e366b]">
         {loading && <div className="p-8 text-center text-xs text-[#727687]">Carregando arquivados…</div>}
         {!loading && !archivedLeads.length && <div className="p-10 text-center text-xs text-[#727687]">Nenhum lead arquivado.</div>}
-        {archivedLeads.map(lead => <ArchivedLeadRow key={lead.id} lead={lead} restoreLead={restoreLead} deleteLead={deleteLead} onShowToast={onShowToast} />)}
+        {archivedLeads.map(lead => <ArchivedLeadRow key={lead.id} lead={lead} restoreLead={restoreLead} deleteLead={deleteLead} canDelete={isPrimaryAdmin} onShowToast={onShowToast} />)}
       </div>
     </div>}
 
@@ -279,20 +288,25 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
   </div>;
 }
 
-function LeadRow({ lead, selected, toggle, updateStep, archiveLead, onPitch }: { lead: Lead; selected: boolean; toggle: (id: string) => void; updateStep: (lead: Lead, status: LeadStatus, nextActionAt: string | null, notes: string) => Promise<boolean>; archiveLead: (lead: Lead) => Promise<boolean>; onPitch: (name: string, lead?: Lead) => void }) {
+function LeadRow({ lead, selected, toggle, updateStep, archiveLead, onPitch }: { lead: Lead; selected: boolean; toggle: (id: string) => void; updateStep: (lead: Lead, status: LeadStatus, nextActionAt: string | null, notes: string, meetingDetails?: MeetingDetails) => Promise<boolean>; archiveLead: (lead: Lead) => Promise<boolean>; onPitch: (name: string, lead?: Lead) => void }) {
   const wa = whatsappLink(lead.whatsapp || lead.phone);
   const profile = lead.health_score === null ? 'Sem análise' : lead.health_score <= 55 ? 'Boa oportunidade' : lead.health_score <= 75 ? 'Oportunidade média' : 'Perfil forte';
   const savedCountdown = ['nao_atendeu', 'ligar_depois', 'retornar_depois'].includes(lead.status) ? contactCountdown(lead.next_action_at) : null;
   const [status, setStatus] = useState<LeadStatus>(lead.status);
   const [nextActionAt, setNextActionAt] = useState(lead.next_action_at ? lead.next_action_at.slice(0, 16) : '');
   const [notes, setNotes] = useState('');
+  const [meetingDetails, setMeetingDetails] = useState<MeetingDetails>({
+    decisionMakerName: lead.decision_maker_name || '',
+    phone: lead.whatsapp || lead.phone || '',
+    email: lead.email || '',
+  });
   const [saving, setSaving] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [returnPickerOpen, setReturnPickerOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const register = async () => {
     setSaving(true);
-    const saved = await updateStep(lead, status, nextActionAt ? new Date(nextActionAt).toISOString() : null, notes);
+    const saved = await updateStep(lead, status, nextActionAt ? new Date(nextActionAt).toISOString() : null, notes, meetingDetails);
     setSaving(false);
     if (saved) {
       setNotes('');
@@ -385,12 +399,18 @@ function LeadRow({ lead, selected, toggle, updateStep, archiveLead, onPitch }: {
         </div>}
       </div>}
       {scheduledStatuses.includes(status) && status !== 'retornar_depois' && status !== 'ligar_depois' && <label className="md:col-start-1 text-[10px] font-bold text-[#727687]">{status === 'reuniao_marcada' ? 'DATA E HORA DA REUNIÃO' : 'PRÓXIMA TENTATIVA'}<input type="datetime-local" value={nextActionAt} onChange={event => setNextActionAt(event.target.value)} className="mt-1 w-full px-3 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl" /></label>}
+      {status === 'reuniao_marcada' && <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-xl border border-emerald-200 bg-emerald-50/60 dark:bg-emerald-950/10 p-3">
+        <label className="text-[10px] font-bold text-[#727687]">PESSOA DA REUNIÃO<input value={meetingDetails.decisionMakerName} onChange={event => setMeetingDetails({...meetingDetails, decisionMakerName: event.target.value})} placeholder="Nome do decisor" className="input mt-1"/></label>
+        <label className="text-[10px] font-bold text-[#727687]">TELEFONE / WHATSAPP<input value={meetingDetails.phone} onChange={event => setMeetingDetails({...meetingDetails, phone: event.target.value})} placeholder="(85) 99999-9999" className="input mt-1"/></label>
+        <label className="text-[10px] font-bold text-[#727687]">E-MAIL<input type="email" value={meetingDetails.email} onChange={event => setMeetingDetails({...meetingDetails, email: event.target.value})} placeholder="contato@empresa.com" className="input mt-1"/></label>
+        <p className="sm:col-span-3 text-[10px] text-emerald-800">Ao registrar, o lead entra no CRM e a reunião é criada automaticamente na agenda central configurada por LocalWay01.</p>
+      </div>}
       </div>
     </div>}
   </div>;
 }
 
-function ArchivedLeadRow({ lead, restoreLead, deleteLead, onShowToast }: { lead: Lead; restoreLead: (lead: Lead) => Promise<boolean>; deleteLead: (id: string) => Promise<{ error?: string }>; onShowToast: (message: string, type?: 'success' | 'info' | 'error') => void }) {
+function ArchivedLeadRow({ lead, restoreLead, deleteLead, canDelete, onShowToast }: { lead: Lead; restoreLead: (lead: Lead) => Promise<boolean>; deleteLead: (id: string) => Promise<{ error?: string }>; canDelete: boolean; onShowToast: (message: string, type?: 'success' | 'info' | 'error') => void }) {
   const [busy, setBusy] = useState<'restore' | 'delete' | null>(null);
   const restore = async () => {
     setBusy('restore');
@@ -417,7 +437,7 @@ function ArchivedLeadRow({ lead, restoreLead, deleteLead, onShowToast }: { lead:
     </div>
     <div className="flex items-center gap-2 shrink-0">
       <button type="button" disabled={Boolean(busy)} onClick={() => void restore()} className="px-3 py-2 rounded-xl border border-[#0066ff]/30 text-[#0066ff] hover:bg-[#0066ff]/5 disabled:opacity-50 text-xs font-bold flex items-center gap-1.5"><RotateCcw className="w-4 h-4" />{busy === 'restore' ? 'Restaurando…' : 'Restaurar'}</button>
-      <button type="button" disabled={Boolean(busy)} onClick={() => void remove()} className="px-3 py-2 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 disabled:opacity-50 text-xs font-bold flex items-center gap-1.5"><Trash2 className="w-4 h-4" />{busy === 'delete' ? 'Excluindo…' : 'Excluir'}</button>
+      {canDelete && <button type="button" disabled={Boolean(busy)} onClick={() => void remove()} className="px-3 py-2 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 disabled:opacity-50 text-xs font-bold flex items-center gap-1.5"><Trash2 className="w-4 h-4" />{busy === 'delete' ? 'Excluindo…' : 'Excluir'}</button>}
     </div>
   </div>;
 }

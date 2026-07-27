@@ -18,6 +18,7 @@ type Goal = {
   target_leads: number;
   target_contacts: number;
   target_meetings: number;
+  target_contracts: number;
 };
 
 type Activity = {
@@ -35,10 +36,11 @@ type LeadSummary = {
   id: string;
   status: string;
   crm_stage: string | null;
+  crm_closed_at: string | null;
   created_at: string;
 };
 
-const emptyMetrics = { leads: 0, contacts: 0, meetings: 0, qualified: 0 };
+const emptyMetrics = { leads: 0, contacts: 0, meetings: 0, contracts: 0 };
 
 export function DashboardView({ setActiveTab, onShowToast }: DashboardViewProps) {
   const profile = useAuthProfile();
@@ -57,7 +59,7 @@ export function DashboardView({ setActiveTab, onShowToast }: DashboardViewProps)
 
     const { data: goalData, error: goalError } = await supabase
       .from('user_goals')
-      .select('id,period_start,period_end,target_leads,target_contacts,target_meetings')
+      .select('id,period_start,period_end,target_leads,target_contacts,target_meetings,target_contracts')
       .eq('user_id', profile.id)
       .lte('period_start', today)
       .gte('period_end', today)
@@ -75,11 +77,9 @@ export function DashboardView({ setActiveTab, onShowToast }: DashboardViewProps)
     const [leadRequest, activityRequest] = await Promise.all([
       supabase
         .from('leads')
-        .select('id,status,crm_stage,created_at')
+        .select('id,status,crm_stage,crm_closed_at,created_at')
         .eq('created_by', profile.id)
-        .is('archived_at', null)
-        .gte('created_at', startsAt)
-        .lte('created_at', endsAt),
+        .or(`created_at.gte.${startsAt},crm_closed_at.gte.${startsAt}`),
       supabase
         .from('lead_interactions')
         .select('id,lead_id,outcome,notes,occurred_at,event_type,new_status,leads(company_name)')
@@ -94,12 +94,13 @@ export function DashboardView({ setActiveTab, onShowToast }: DashboardViewProps)
 
     const leads = (leadRequest.data || []) as LeadSummary[];
     const history = (activityRequest.data || []) as unknown as Activity[];
-    const contacts = history.filter(item => item.event_type !== 'lead_created').length;
+    const periodLeads = leads.filter(item => item.created_at >= startsAt && item.created_at <= endsAt);
+    const contacts = history.filter(item => ['prospecting_contact', 'follow_up'].includes(item.event_type)).length;
     const meetings = new Set(history.filter(item => item.new_status === 'reuniao_marcada').map(item => item.lead_id)).size;
-    const qualified = leads.filter(item => item.status === 'qualificado' || item.crm_stage === 'fechado').length;
+    const contracts = leads.filter(item => item.crm_closed_at && item.crm_closed_at >= startsAt && item.crm_closed_at <= endsAt).length;
 
     setGoal(activeGoal);
-    setMetrics({ leads: leads.length, contacts, meetings, qualified });
+    setMetrics({ leads: periodLeads.length, contacts, meetings, contracts });
     setActivities(history.slice(0, 12));
     setLoading(false);
   }, [onShowToast, profile.id]);
@@ -111,8 +112,9 @@ export function DashboardView({ setActiveTab, onShowToast }: DashboardViewProps)
 
   const goals = useMemo(() => [
     { label: 'Leads prospectados', current: metrics.leads, target: goal?.target_leads || 0, color: 'bg-[#0066ff]' },
-    { label: 'Contatos registrados', current: metrics.contacts, target: goal?.target_contacts || 0, color: 'bg-purple-500' },
+    { label: 'Contatos feitos', current: metrics.contacts, target: goal?.target_contacts || 0, color: 'bg-purple-500' },
     { label: 'Reuniões marcadas', current: metrics.meetings, target: goal?.target_meetings || 0, color: 'bg-emerald-500' },
+    { label: 'Fechamento de contratos', current: metrics.contracts, target: goal?.target_contracts || 0, color: 'bg-amber-500' },
   ], [goal, metrics]);
 
   return <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-300">
@@ -126,9 +128,9 @@ export function DashboardView({ setActiveTab, onShowToast }: DashboardViewProps)
 
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
       <Metric icon={Building2} label="Leads prospectados" value={metrics.leads} color="text-[#0066ff] bg-[#0066ff]/10" loading={loading} />
-      <Metric icon={Phone} label="Contatos registrados" value={metrics.contacts} color="text-purple-600 bg-purple-500/10" loading={loading} />
+      <Metric icon={Phone} label="Contatos feitos" value={metrics.contacts} color="text-purple-600 bg-purple-500/10" loading={loading} />
       <Metric icon={CalendarCheck} label="Reuniões marcadas" value={metrics.meetings} color="text-amber-600 bg-amber-500/10" loading={loading} />
-      <Metric icon={CheckCircle2} label="Leads qualificados" value={metrics.qualified} color="text-emerald-600 bg-emerald-500/10" loading={loading} />
+      <Metric icon={CheckCircle2} label="Contratos fechados" value={metrics.contracts} color="text-emerald-600 bg-emerald-500/10" loading={loading} />
     </div>
 
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

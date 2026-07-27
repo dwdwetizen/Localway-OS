@@ -21,6 +21,7 @@ import {
 import { useLeads } from '@/hooks/use-leads';
 import { Lead, LeadAnalysisData } from '@/lib/leads';
 import { supabase } from '@/lib/supabase';
+import { useAuthProfile } from '@/components/AuthGate';
 
 interface RaioXViewProps {
   onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
@@ -78,6 +79,7 @@ function formatDate(value: string) {
 }
 
 export function RaioXView({ onShowToast, onOpenAiPitchModal }: RaioXViewProps) {
+  const profile = useAuthProfile();
   const { leads, loading, error, createLead, updateLead } = useLeads();
   const analyzable = useMemo(
     () => leads.filter(lead =>
@@ -112,6 +114,7 @@ export function RaioXView({ onShowToast, onOpenAiPitchModal }: RaioXViewProps) {
       const { data, error: requestError } = await supabase!
         .from('local_competitor_scans')
         .select('*')
+        .eq('created_by', profile.id)
         .order('created_at', { ascending: false })
         .limit(30);
       if (!active) return;
@@ -131,7 +134,7 @@ export function RaioXView({ onShowToast, onOpenAiPitchModal }: RaioXViewProps) {
     return () => {
       active = false;
     };
-  }, [onShowToast]);
+  }, [onShowToast, profile.id]);
 
   const benchmark = useMemo(() => {
     if (!currentProfile) return null;

@@ -6,22 +6,34 @@
 import React, { ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Eye, EyeOff, KeyRound, Plus, Settings, Upload, Loader2, Trash2, Target, Pencil, Save, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { AdminCleanupPanel } from '@/components/AdminCleanupPanel';
 
 interface AdminViewProps { onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void; }
 type Profile = { id: string; username: string; nome: string | null; role: string | null; job_title: string | null; permissions: string[] | null; photo_url: string | null; is_active: boolean; };
-type Goal = { id: string; user_id: string; period_start: string; period_end: string; target_leads: number; target_contacts: number; target_meetings: number; };
+type Goal = { id: string; user_id: string; period_start: string; period_end: string; target_leads: number; target_contacts: number; target_meetings: number; target_contracts: number; };
 type ActivityLead = { company_name?: string; source?: string };
 type Activity = { id: string; created_by: string | null; actor_name: string | null; actor_email: string | null; outcome: string; notes: string | null; occurred_at: string; leads: ActivityLead | ActivityLead[] | null; };
 const pages = ['Análises', 'Mapa', 'Raio-X', 'Prospecção', 'Follow-up', 'CRM', 'Propostas', 'Meus Serviços', 'Equipe', 'Avaliações'];
-const initialForm = { nome: '', username: '', password: '', jobTitle: 'SDR', permissions: ['Prospecção', 'Follow-up', 'CRM', 'Equipe'] };
+const initialForm = {
+  nome: '',
+  username: '',
+  password: '',
+  jobTitle: 'SDR',
+  permissions: ['Análises', 'Mapa', 'Raio-X', 'Prospecção', 'Follow-up', 'CRM', 'Equipe'],
+};
 const now = new Date();
+const weekStart = new Date(now);
+weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+const weekEnd = new Date(weekStart);
+weekEnd.setDate(weekStart.getDate() + 6);
 const initialGoal = {
   userId: '',
-  periodStart: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10),
-  periodEnd: new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10),
+  periodStart: weekStart.toISOString().slice(0, 10),
+  periodEnd: weekEnd.toISOString().slice(0, 10),
   targetLeads: 100,
   targetContacts: 60,
   targetMeetings: 10,
+  targetContracts: 2,
 };
 
 function activityOwnerKey(item: Activity) {
@@ -37,7 +49,7 @@ function sourceLabel(source?: string) {
 }
 
 export function AdminView({ onShowToast }: AdminViewProps) {
-  const [activeTab, setActiveTab] = useState<'usuarios' | 'metas' | 'historico' | 'servicos' | 'integracoes'>('usuarios');
+  const [activeTab, setActiveTab] = useState<'usuarios' | 'metas' | 'historico' | 'limpeza' | 'servicos' | 'integracoes'>('usuarios');
   const [profiles, setProfiles] = useState<Profile[]>([]); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [deletingId, setDeletingId] = useState<string | null>(null); const [form, setForm] = useState(initialForm);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [goalForm, setGoalForm] = useState(initialGoal);
@@ -66,7 +78,7 @@ export function AdminView({ onShowToast }: AdminViewProps) {
     const accessToken = sessionData.session?.access_token || '';
     const [profilesRequest, goalsRequest, historyRequest, placesRequest] = await Promise.all([
       client.from('profiles').select('id,username,nome,role,job_title,permissions,photo_url,is_active').eq('is_active', true).order('nome'),
-      client.from('user_goals').select('id,user_id,period_start,period_end,target_leads,target_contacts,target_meetings').order('period_start', { ascending: false }),
+      client.from('user_goals').select('id,user_id,period_start,period_end,target_leads,target_contacts,target_meetings,target_contracts').order('period_start', { ascending: false }),
       client.from('lead_interactions').select('id,created_by,actor_name,actor_email,outcome,notes,occurred_at,leads(company_name,source)').order('occurred_at', { ascending: false }),
       fetch('/api/places', { headers: { Authorization: `Bearer ${accessToken}` }, cache: 'no-store' }).then(response => response.json()).catch(() => ({ placesConfigured: false, mapsConfigured: false })),
     ]);
@@ -103,7 +115,7 @@ export function AdminView({ onShowToast }: AdminViewProps) {
     setSavingPermissionsId(profile.id);
     const { data, error } = await supabase
       .from('profiles')
-      .update({ permissions: permissionsDraft, job_title: jobTitleDraft.trim() || 'SDR / Colaborador' })
+      .update({ permissions: permissionsDraft.filter(permission => permission.toLowerCase() !== 'crm_gestao'), job_title: jobTitleDraft.trim() || 'SDR / Colaborador' })
       .eq('id', profile.id)
       .select('id,permissions,job_title')
       .maybeSingle();
@@ -152,6 +164,7 @@ export function AdminView({ onShowToast }: AdminViewProps) {
       target_leads: goalForm.targetLeads,
       target_contacts: goalForm.targetContacts,
       target_meetings: goalForm.targetMeetings,
+      target_contracts: goalForm.targetContracts,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id,period_start,period_end' });
     setSavingGoal(false);
@@ -202,6 +215,7 @@ export function AdminView({ onShowToast }: AdminViewProps) {
       <Tab id="usuarios" label="Gestão de usuários"/>
       <Tab id="metas" label="Metas da equipe"/>
       <Tab id="historico" label="Histórico"/>
+      <Tab id="limpeza" label="Excluir dados"/>
       <Tab id="servicos" label="Cadastrar serviços"/>
       <Tab id="integracoes" label="Integrações"/>
     </div>
@@ -220,9 +234,9 @@ export function AdminView({ onShowToast }: AdminViewProps) {
           <label className="mt-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 flex gap-2 text-xs font-bold">
             <input type="checkbox" checked={form.permissions.includes('analises_solucoes')} onChange={() => toggle('analises_solucoes')}/> Pode ver soluções e ROI na análise
           </label>
-          <label className="mt-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 flex gap-2 text-xs font-bold">
-            <input type="checkbox" checked={form.permissions.includes('crm_gestao')} onChange={() => toggle('crm_gestao')}/> Pode administrar e movimentar o CRM da equipe
-          </label>
+          <p className="mt-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 text-[11px] text-blue-800">
+            O colaborador acompanha o próprio CRM em modo somente leitura. A movimentação fica exclusiva para LocalWay01.
+          </p>
         </div>
         <button disabled={saving} onClick={() => void createLogin()} className="w-full py-2.5 bg-[#0066ff] text-white rounded-xl text-xs font-bold flex justify-center gap-2">
           {saving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Plus className="w-4 h-4"/>} Criar login
@@ -332,9 +346,9 @@ export function AdminView({ onShowToast }: AdminViewProps) {
                 <label className="mt-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 flex gap-2 text-xs font-bold">
                   <input type="checkbox" checked={permissionsDraft.includes('analises_solucoes')} onChange={() => togglePermissionDraft('analises_solucoes')}/> Pode ver soluções e ROI na análise
                 </label>
-                <label className="mt-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 flex gap-2 text-xs font-bold">
-                  <input type="checkbox" checked={permissionsDraft.includes('crm_gestao')} onChange={() => togglePermissionDraft('crm_gestao')}/> Pode administrar e movimentar o CRM da equipe
-                </label>
+                <p className="mt-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 text-[11px] text-blue-800">
+                  Este perfil acompanha o próprio CRM; somente LocalWay01 pode movimentar os cartões.
+                </p>
                 <div className="mt-3 flex justify-end gap-2">
                   <button onClick={() => { setEditingPermissionsId(null); setPermissionsDraft([]); setJobTitleDraft(''); }} className="px-3 py-2 rounded-xl border text-xs font-bold">Cancelar</button>
                   <button disabled={savingPermissionsId === profile.id} onClick={() => void savePermissions(profile)} className="px-4 py-2 rounded-xl bg-[#0066ff] text-white text-xs font-bold flex items-center gap-2 disabled:opacity-50">
@@ -349,12 +363,13 @@ export function AdminView({ onShowToast }: AdminViewProps) {
     </div>}
     {activeTab === 'metas' && <div className="grid lg:grid-cols-[380px_1fr] gap-6">
       <section className="bg-white dark:bg-[#141936] p-5 rounded-2xl border space-y-4">
-        <div className="flex items-center gap-2"><Target className="w-5 h-5 text-[#0066ff]"/><div><h3 className="font-bold text-sm">Definir meta individual</h3><p className="text-[11px] text-[#727687]">A meta aparecerá no dashboard do colaborador.</p></div></div>
+        <div className="flex items-center gap-2"><Target className="w-5 h-5 text-[#0066ff]"/><div><h3 className="font-bold text-sm">Definir meta semanal individual</h3><p className="text-[11px] text-[#727687]">A semana atual já vem preenchida e a meta aparece apenas no dashboard do colaborador selecionado.</p></div></div>
         <label className="text-xs font-semibold block">Colaborador<select value={goalForm.userId} onChange={event => setGoalForm({ ...goalForm, userId: event.target.value })} className="input mt-1"><option value="">Selecione</option>{profiles.filter(profile => profile.role !== 'admin').map(profile => <option key={profile.id} value={profile.id}>{profile.nome || profile.username}</option>)}</select></label>
         <div className="grid grid-cols-2 gap-3"><label className="text-xs font-semibold">Início<input type="date" value={goalForm.periodStart} onChange={event => setGoalForm({ ...goalForm, periodStart: event.target.value })} className="input mt-1"/></label><label className="text-xs font-semibold">Fim<input type="date" value={goalForm.periodEnd} onChange={event => setGoalForm({ ...goalForm, periodEnd: event.target.value })} className="input mt-1"/></label></div>
         <label className="text-xs font-semibold block">Leads prospectados<input type="number" min={0} value={goalForm.targetLeads} onChange={event => setGoalForm({ ...goalForm, targetLeads: Number(event.target.value) })} className="input mt-1"/></label>
-        <label className="text-xs font-semibold block">Contatos registrados<input type="number" min={0} value={goalForm.targetContacts} onChange={event => setGoalForm({ ...goalForm, targetContacts: Number(event.target.value) })} className="input mt-1"/></label>
+        <label className="text-xs font-semibold block">Contatos feitos<input type="number" min={0} value={goalForm.targetContacts} onChange={event => setGoalForm({ ...goalForm, targetContacts: Number(event.target.value) })} className="input mt-1"/></label>
         <label className="text-xs font-semibold block">Reuniões marcadas<input type="number" min={0} value={goalForm.targetMeetings} onChange={event => setGoalForm({ ...goalForm, targetMeetings: Number(event.target.value) })} className="input mt-1"/></label>
+        <label className="text-xs font-semibold block">Fechamento de contratos<input type="number" min={0} value={goalForm.targetContracts} onChange={event => setGoalForm({ ...goalForm, targetContracts: Number(event.target.value) })} className="input mt-1"/></label>
         <button disabled={savingGoal} onClick={() => void saveGoal()} className="w-full py-2.5 bg-[#0066ff] disabled:opacity-50 text-white rounded-xl text-xs font-bold">{savingGoal ? 'Salvando…' : 'Salvar meta'}</button>
       </section>
       <section className="bg-white dark:bg-[#141936] rounded-2xl border overflow-hidden">
@@ -362,7 +377,7 @@ export function AdminView({ onShowToast }: AdminViewProps) {
         {!goals.length && <div className="p-8 text-center text-xs text-[#727687]">Nenhuma meta cadastrada.</div>}
         <div className="divide-y">{goals.map(goal => {
           const owner = profiles.find(profile => profile.id === goal.user_id);
-          return <div key={goal.id} className="p-4"><div className="flex justify-between gap-3"><div><p className="font-bold text-xs">{owner?.nome || owner?.username || 'Usuário removido'}</p><p className="text-[11px] text-[#727687]">{new Date(`${goal.period_start}T12:00:00`).toLocaleDateString('pt-BR')} até {new Date(`${goal.period_end}T12:00:00`).toLocaleDateString('pt-BR')}</p></div><button onClick={() => setGoalForm({ userId: goal.user_id, periodStart: goal.period_start, periodEnd: goal.period_end, targetLeads: goal.target_leads, targetContacts: goal.target_contacts, targetMeetings: goal.target_meetings })} className="text-xs text-[#0066ff] font-bold">Editar</button></div><div className="mt-3 grid grid-cols-3 gap-2 text-center"><GoalNumber label="Leads" value={goal.target_leads}/><GoalNumber label="Contatos" value={goal.target_contacts}/><GoalNumber label="Reuniões" value={goal.target_meetings}/></div></div>;
+          return <div key={goal.id} className="p-4"><div className="flex justify-between gap-3"><div><p className="font-bold text-xs">{owner?.nome || owner?.username || 'Usuário removido'}</p><p className="text-[11px] text-[#727687]">{new Date(`${goal.period_start}T12:00:00`).toLocaleDateString('pt-BR')} até {new Date(`${goal.period_end}T12:00:00`).toLocaleDateString('pt-BR')}</p></div><button onClick={() => setGoalForm({ userId: goal.user_id, periodStart: goal.period_start, periodEnd: goal.period_end, targetLeads: goal.target_leads, targetContacts: goal.target_contacts, targetMeetings: goal.target_meetings, targetContracts: goal.target_contracts })} className="text-xs text-[#0066ff] font-bold">Editar</button></div><div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center"><GoalNumber label="Leads" value={goal.target_leads}/><GoalNumber label="Contatos" value={goal.target_contacts}/><GoalNumber label="Reuniões" value={goal.target_meetings}/><GoalNumber label="Contratos" value={goal.target_contracts}/></div></div>;
         })}</div>
       </section>
     </div>}
@@ -375,6 +390,7 @@ export function AdminView({ onShowToast }: AdminViewProps) {
         return <div key={item.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2"><div><p className="text-xs font-bold">{item.outcome}</p><p className="text-[11px] text-[#727687]">{relation?.company_name || 'Empresa'} • {item.actor_name || item.actor_email || 'Usuário removido'}{origin ? ` • ${origin}` : ''}{item.notes ? ` • ${item.notes}` : ''}</p></div><time className="text-[10px] text-[#727687] whitespace-nowrap">{new Date(item.occurred_at).toLocaleString('pt-BR')}</time></div>;
       })}</div>
     </section>}
+    {activeTab === 'limpeza' && <AdminCleanupPanel profiles={profiles} onShowToast={onShowToast}/>}
     {activeTab === 'servicos' && <section className="bg-white dark:bg-[#141936] p-6 rounded-2xl border"><h3 className="font-bold">Cadastrar novo serviço</h3><p className="text-xs text-[#727687] mt-1">Esta área foi movida para Administração.</p></section>}
     {activeTab === 'integracoes' && <section className="bg-white dark:bg-[#141936] p-6 rounded-2xl border"><Settings className="text-[#0066ff]"/><h3 className="font-bold mt-3">Integrações</h3><p className="text-xs text-[#727687] mt-1">Use duas chaves diferentes: uma para o servidor e outra para o navegador.</p><div className="mt-4 grid gap-3 md:grid-cols-2"><IntegrationStatus configured={placesConfigured} title="Servidor — Places API (New)" ready="Geração de leads, análises e ranking local prontos." missing="Cole abaixo a chave de servidor da Places API (New)."/><IntegrationStatus configured={mapsConfigured} title="Navegador — Maps JavaScript API" ready="Exibição do mapa e da grade pronta." missing="Cole abaixo a chave de navegador do Maps JavaScript."/></div><div className="mt-5 grid gap-4 md:grid-cols-2"><label className="text-xs font-bold">Chave de servidor — Google Places API (New)<input type="password" autoComplete="off" value={placesKeyInput} onChange={event => setPlacesKeyInput(event.target.value)} placeholder={placesConfigured ? 'Chave de servidor configurada — cole somente para substituir' : 'Cole a chave de servidor do Google Places'} className="input mt-1"/><span className="block text-[10px] font-normal text-[#727687] mt-1">Usada no servidor para buscar empresas, analisar perfis e calcular rankings. Restrinja somente à Places API (New).</span></label><label className="text-xs font-bold">Chave de navegador — Google Maps JavaScript API<input type="password" autoComplete="off" value={mapsKeyInput} onChange={event => setMapsKeyInput(event.target.value)} placeholder={mapsConfigured ? 'Chave de navegador configurada — cole somente para substituir' : 'Cole a chave de navegador do Google Maps'} className="input mt-1"/><span className="block text-[10px] font-normal text-[#727687] mt-1">Usada para exibir o mapa. Restrinja à Maps JavaScript API e aos domínios do aplicativo.</span></label></div><button disabled={savingIntegrations || (!placesKeyInput.trim() && !mapsKeyInput.trim())} onClick={() => void saveIntegrations()} className="mt-5 px-5 py-2.5 bg-[#0066ff] disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-2">{savingIntegrations ? <Loader2 className="w-4 h-4 animate-spin"/> : <Settings className="w-4 h-4"/>}Salvar integrações</button><GoogleCalendarIntegrationCard onShowToast={onShowToast}/><GoogleAdsIntegrationCard onShowToast={onShowToast}/><IntegrationGuide/></section>}
   </div>;
@@ -497,7 +513,7 @@ function GoogleCalendarIntegrationCard({ onShowToast }: AdminViewProps) {
     <div className="grid md:grid-cols-2 gap-3 mt-4">
       <label className="text-xs font-bold">OAuth Client ID<input value={form.oauthClientId} onChange={event => setForm({...form, oauthClientId: event.target.value})} placeholder="...apps.googleusercontent.com" className="input mt-1"/></label>
       <label className="text-xs font-bold">OAuth Client Secret<input type="password" autoComplete="off" value={form.oauthClientSecret} onChange={event => setForm({...form, oauthClientSecret: event.target.value})} placeholder={status?.credentialsConfigured ? 'Configurado — cole apenas para substituir' : 'Segredo do cliente OAuth'} className="input mt-1"/></label>
-      <label className="text-xs font-bold md:col-span-2">ID da agenda<input value={form.calendarId} onChange={event => setForm({...form, calendarId: event.target.value})} placeholder="primary" className="input mt-1"/><span className="block text-[10px] font-normal text-[#727687] mt-1">Use <strong>primary</strong> para a agenda principal da conta conectada.</span></label>
+      <label className="text-xs font-bold md:col-span-2">ID da agenda central<input value={form.calendarId} onChange={event => setForm({...form, calendarId: event.target.value})} placeholder="primary" className="input mt-1"/><span className="block text-[10px] font-normal text-[#727687] mt-1">Use <strong>primary</strong> para a agenda principal da conta conectada. Para uma agenda compartilhada: Google Agenda → Configurações da agenda → Integrar agenda → copie o “ID da agenda”. Todos os colaboradores enviarão reuniões para este mesmo calendário.</span></label>
     </div>
     <div className="mt-4 flex flex-wrap gap-2">
       <button disabled={savingCalendar} onClick={() => void saveCredentials(false)} className="px-4 py-2.5 rounded-xl bg-[#0066ff] text-white text-xs font-bold disabled:opacity-50">{savingCalendar ? 'Salvando…' : 'Salvar credenciais'}</button>

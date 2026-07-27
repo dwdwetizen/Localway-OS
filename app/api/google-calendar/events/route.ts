@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
     body.receptionistName ? `Atendimento: ${body.receptionistName}` : '',
     body.phone ? `Telefone: ${body.phone}` : '',
     body.whatsapp ? `WhatsApp: ${body.whatsapp}` : '',
+    body.email ? `E-mail: ${body.email}` : '',
     body.googleMapsUrl ? `Google Maps: ${body.googleMapsUrl}` : '',
     body.notes ? `Observações: ${body.notes}` : '',
     '',
@@ -70,4 +71,3 @@ export async function POST(request: NextRequest) {
     calendarEmail: configuration.connected_email || '',
   });
 }
-

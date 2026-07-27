@@ -7,6 +7,7 @@ import { useLeads } from '@/hooks/use-leads';
 import { Lead } from '@/lib/leads';
 import { supabase } from '@/lib/supabase';
 import { KeywordOpportunityPanel } from '@/components/KeywordOpportunityPanel';
+import { useAuthProfile } from '@/components/AuthGate';
 
 interface HeatmapViewProps {
   onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
@@ -281,6 +282,7 @@ function GridMapCanvas({ scan, mapsKey, onError }: {
 }
 
 export function HeatmapView({ onShowToast }: HeatmapViewProps) {
+  const profile = useAuthProfile();
   const { leads, loading, error, createLead, updateLead } = useLeads();
   const [selectedId, setSelectedId] = useState('');
   const [mapsKey, setMapsKey] = useState(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '');
@@ -310,6 +312,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
         supabase
           .from('local_visibility_scans')
           .select('*')
+          .eq('created_by', profile.id)
           .order('created_at', { ascending: false })
           .limit(20),
       ]);
@@ -327,7 +330,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
     };
     void loadConfiguration();
     return () => { active = false; };
-  }, []);
+  }, [profile.id]);
 
   const located = useMemo(
     () => leads.filter(lead => typeof lead.latitude === 'number' && typeof lead.longitude === 'number'),

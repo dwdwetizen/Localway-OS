@@ -52,6 +52,9 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [dates, setDates] = useState<Record<string, string>>({});
   const [outcomes, setOutcomes] = useState<Record<string, FollowUpOutcome>>({});
+  const [meetingPeople, setMeetingPeople] = useState<Record<string, string>>({});
+  const [meetingPhones, setMeetingPhones] = useState<Record<string, string>>({});
+  const [meetingEmails, setMeetingEmails] = useState<Record<string, string>>({});
   const [addOpen, setAddOpen] = useState(false);
   const [expandedLeadId, setExpandedLeadId] = useState<string | null>(null);
   const [, setUrgencyRefresh] = useState(0);
@@ -79,6 +82,10 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
       lead.id,
       {
         status,
+        decision_maker_name: status === 'reuniao_marcada' ? (meetingPeople[lead.id]?.trim() || lead.decision_maker_name) : lead.decision_maker_name,
+        phone: status === 'reuniao_marcada' ? (meetingPhones[lead.id]?.trim() || lead.phone) : lead.phone,
+        whatsapp: status === 'reuniao_marcada' ? (meetingPhones[lead.id]?.trim() || lead.whatsapp || lead.phone) : lead.whatsapp,
+        email: status === 'reuniao_marcada' ? (meetingEmails[lead.id]?.trim() || lead.email) : lead.email,
         crm_stage: status === 'qualificado' || status === 'reuniao_marcada' ? (lead.crm_stage || 'qualificacao') : lead.crm_stage,
         next_action_at: status === 'reuniao_marcada' || status === 'retornar_depois' ? nextActionAt : null,
         last_contact_at: new Date().toISOString(),
@@ -100,6 +107,7 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
     setExpandedLeadId(null);
 
     if (status === 'reuniao_marcada' && nextActionAt && supabase) {
+      const effectiveLead = result.data || lead;
       const { data: sessionData } = await supabase.auth.getSession();
       const calendarResponse = await fetch('/api/google-calendar/events', {
         method: 'POST',
@@ -108,13 +116,14 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
           Authorization: `Bearer ${sessionData.session?.access_token || ''}`,
         },
         body: JSON.stringify({
-          companyName: lead.company_name,
-          decisionMakerName: lead.decision_maker_name,
-          receptionistName: lead.receptionist_name,
-          phone: lead.phone,
-          whatsapp: lead.whatsapp,
-          address: lead.address,
-          googleMapsUrl: lead.google_maps_url,
+          companyName: effectiveLead.company_name,
+          decisionMakerName: effectiveLead.decision_maker_name,
+          receptionistName: effectiveLead.receptionist_name,
+          phone: effectiveLead.phone,
+          whatsapp: effectiveLead.whatsapp,
+          email: effectiveLead.email,
+          address: effectiveLead.address,
+          googleMapsUrl: effectiveLead.google_maps_url,
           notes: note,
           start: nextActionAt,
         }),
@@ -131,7 +140,7 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
         });
         onShowToast('Reunião criada no Google Agenda e empresa enviada ao CRM.', 'success');
       } else {
-        window.open(googleCalendarLink(lead, nextActionAt), '_blank', 'noopener,noreferrer');
+        window.open(googleCalendarLink(effectiveLead, nextActionAt), '_blank', 'noopener,noreferrer');
         onShowToast(`${calendarResult.error || 'Agenda central não conectado.'} Abrimos o evento preenchido para salvar manualmente.`, 'info');
       }
     } else if (status === 'qualificado') onShowToast('Empresa enviada para a primeira coluna do CRM.');
@@ -217,6 +226,12 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
             <label className="text-[10px] font-semibold">{(outcomes[lead.id] || 'retornar_depois') === 'reuniao_marcada' ? 'DATA E HORA DA REUNIÃO' : 'PRÓXIMO RETORNO'}<input type="datetime-local" disabled={(outcomes[lead.id] || 'retornar_depois') === 'qualificado' || (outcomes[lead.id] || 'retornar_depois') === 'sem_interesse'} value={dates[lead.id] || ''} onChange={event => setDates({ ...dates, [lead.id]: event.target.value })} className="mt-1 w-full p-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl disabled:opacity-50" /></label>
             <label className="text-[10px] font-semibold">RESUMO DO CONTATO<input value={notes[lead.id] || ''} onChange={event => setNotes({ ...notes, [lead.id]: event.target.value })} className="mt-1 w-full p-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl" placeholder="Ex.: falou com o decisor, pediu retorno…" /></label>
             <button onClick={() => void saveContact(lead)} className="h-9 justify-center flex items-center gap-2 px-4 text-xs font-bold text-white bg-[#0066ff] hover:bg-[#0050cb] rounded-xl"><CheckCircle2 className="w-4 h-4" /> Salvar</button>
+            {(outcomes[lead.id] || 'retornar_depois') === 'reuniao_marcada' && <div className="md:col-span-2 xl:col-span-4 grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-xl border border-emerald-200 bg-emerald-50/60 dark:bg-emerald-950/10 p-3">
+              <label className="text-[10px] font-semibold">PESSOA DA REUNIÃO<input value={meetingPeople[lead.id] ?? lead.decision_maker_name ?? ''} onChange={event => setMeetingPeople({...meetingPeople, [lead.id]: event.target.value})} className="input mt-1" placeholder="Nome do decisor"/></label>
+              <label className="text-[10px] font-semibold">TELEFONE / WHATSAPP<input value={meetingPhones[lead.id] ?? lead.whatsapp ?? lead.phone ?? ''} onChange={event => setMeetingPhones({...meetingPhones, [lead.id]: event.target.value})} className="input mt-1" placeholder="(85) 99999-9999"/></label>
+              <label className="text-[10px] font-semibold">E-MAIL<input type="email" value={meetingEmails[lead.id] ?? lead.email ?? ''} onChange={event => setMeetingEmails({...meetingEmails, [lead.id]: event.target.value})} className="input mt-1" placeholder="contato@empresa.com"/></label>
+              <p className="sm:col-span-3 text-[10px] text-emerald-800">A reunião será criada na agenda central e o lead entrará no CRM para acompanhamento da gestão.</p>
+            </div>}
           </div>}
         </article>;
       })}

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { DragEvent, useMemo, useState } from 'react';
+import React, { DragEvent, useEffect, useMemo, useState } from 'react';
 import {
   CalendarClock,
   Globe2,
@@ -17,6 +17,7 @@ import {
 import { useAuthProfile } from '@/components/AuthGate';
 import { useLeads } from '@/hooks/use-leads';
 import { CrmStage, Lead, whatsappLink } from '@/lib/leads';
+import { supabase } from '@/lib/supabase';
 
 interface CrmViewProps {
   onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
@@ -43,18 +44,43 @@ const dealStage = (lead: Lead): CrmStage => lead.crm_stage || 'qualificacao';
 
 export function CrmView({ onShowToast, onOpenAiPitchModal }: CrmViewProps) {
   const profile = useAuthProfile();
-  const { leads, loading, error, updateLead } = useLeads();
+  const { leads, loading, error, updateLead } = useLeads({ scope: 'team' });
   const [viewMode, setViewMode] = useState<'kanban' | 'tabela'>('kanban');
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [ownerFilter, setOwnerFilter] = useState('all');
+  const [owners, setOwners] = useState<Array<{ id: string; username: string; nome: string | null }>>([]);
 
   const isAdmin = ['admin', 'administrador'].includes((profile.role || '').toLowerCase());
-  const canManageCrm = isAdmin || (profile.permissions || []).includes('crm_gestao');
+  const isPrimaryAdmin = isAdmin && profile.username.toLowerCase() === 'localway01';
+  const canManageCrm = isPrimaryAdmin;
   const deals = useMemo(
     () => leads.filter(lead => lead.crm_stage || lead.status === 'qualificado' || lead.status === 'reuniao_marcada'),
     [leads],
   );
-  const pipelineTotal = deals.reduce((sum, lead) => sum + Number(lead.estimated_value || 0), 0);
-  const paidSales = deals.filter(lead => dealStage(lead) === 'fechado').length;
+  const visibleDeals = useMemo(
+    () => deals.filter(lead => ownerFilter === 'all' || lead.created_by === ownerFilter),
+    [deals, ownerFilter],
+  );
+  const pipelineTotal = visibleDeals.reduce((sum, lead) => sum + Number(lead.estimated_value || 0), 0);
+  const paidSales = visibleDeals.filter(lead => dealStage(lead) === 'fechado').length;
+
+  useEffect(() => {
+    const client = supabase;
+    if (!isPrimaryAdmin || !client) return;
+    const loadOwners = async () => {
+      const { data } = await client
+        .from('profiles')
+        .select('id,username,nome')
+        .eq('is_active', true)
+        .order('nome');
+      setOwners((data || []) as Array<{ id: string; username: string; nome: string | null }>);
+    };
+    void loadOwners();
+  }, [isPrimaryAdmin]);
+
+  const ownerName = (lead: Lead) => owners.find(owner => owner.id === lead.created_by)?.nome
+    || owners.find(owner => owner.id === lead.created_by)?.username
+    || 'Usuário removido';
 
   const move = async (lead: Lead, stage: CrmStage) => {
     if (!canManageCrm) {
@@ -83,7 +109,7 @@ export function CrmView({ onShowToast, onOpenAiPitchModal }: CrmViewProps) {
     event.preventDefault();
     if (!canManageCrm) return;
 
-    const lead = deals.find(item => item.id === draggedId);
+    const lead = visibleDeals.find(item => item.id === draggedId);
     if (lead) void move(lead, stage);
     setDraggedId(null);
   };
@@ -115,6 +141,13 @@ export function CrmView({ onShowToast, onOpenAiPitchModal }: CrmViewProps) {
         </div>
       </header>
 
+      {isPrimaryAdmin && (
+        <div className="rounded-xl border border-[#c2c6d8]/30 bg-white dark:bg-[#141936] p-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+          <div className="min-w-0 flex-1"><p className="text-xs font-bold">CRM central da equipe</p><p className="text-[10px] text-[#727687]">Você movimenta os leads de todos os colaboradores sem trocar de conta.</p></div>
+          <label className="text-[10px] font-bold sm:min-w-60">COLABORADOR<select value={ownerFilter} onChange={event => setOwnerFilter(event.target.value)} className="input mt-1"><option value="all">Toda a equipe</option>{owners.filter(owner => owner.id !== profile.id).map(owner => <option key={owner.id} value={owner.id}>{owner.nome || owner.username}</option>)}</select></label>
+        </div>
+      )}
+
       {!canManageCrm && (
         <div className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs font-semibold text-blue-800">
           <LockKeyhole className="h-4 w-4 shrink-0" />
@@ -126,9 +159,9 @@ export function CrmView({ onShowToast, onOpenAiPitchModal }: CrmViewProps) {
         <Metric label="Pipeline total" value={formatCurrency(pipelineTotal)} />
         <Metric
           label="Negócios ativos"
-          value={String(deals.filter(lead => !['perdido', 'fechado'].includes(dealStage(lead))).length)}
+          value={String(visibleDeals.filter(lead => !['perdido', 'fechado'].includes(dealStage(lead))).length)}
         />
-        <Metric label="Ticket médio" value={formatCurrency(deals.length ? pipelineTotal / deals.length : 0)} />
+        <Metric label="Ticket médio" value={formatCurrency(visibleDeals.length ? pipelineTotal / visibleDeals.length : 0)} />
         <Metric label="Vendas pagas" value={String(paidSales)} accent />
       </section>
 
@@ -141,7 +174,7 @@ export function CrmView({ onShowToast, onOpenAiPitchModal }: CrmViewProps) {
       ) : viewMode === 'kanban' ? (
         <div className="flex gap-3 sm:gap-4 overflow-x-auto mobile-scroll snap-x snap-mandatory pb-4 sm:pb-6 pt-1 -mx-3 px-3 sm:mx-0 sm:px-0">
           {stages.map(stage => {
-            const cards = deals.filter(lead => dealStage(lead) === stage.id);
+            const cards = visibleDeals.filter(lead => dealStage(lead) === stage.id);
             return (
               <div
                 key={stage.id}
@@ -162,6 +195,7 @@ export function CrmView({ onShowToast, onOpenAiPitchModal }: CrmViewProps) {
                     <LeadCard
                       key={lead.id}
                       lead={lead}
+                      ownerName={isPrimaryAdmin ? ownerName(lead) : undefined}
                       canManageCrm={canManageCrm}
                       draggable={canManageCrm}
                       onDragStart={() => {
@@ -184,23 +218,25 @@ export function CrmView({ onShowToast, onOpenAiPitchModal }: CrmViewProps) {
       ) : (
         <div className="bg-white dark:bg-[#141936] rounded-2xl border border-[#c2c6d8]/30 overflow-hidden">
           <div className="md:hidden divide-y divide-[#c2c6d8]/20">
-            {deals.map(lead => (
+            {visibleDeals.map(lead => (
               <div key={`mobile-table-${lead.id}`} className="p-3">
                 <LeadCard
                   lead={lead}
+                  ownerName={isPrimaryAdmin ? ownerName(lead) : undefined}
                   canManageCrm={canManageCrm}
                   onMove={stageId => void move(lead, stageId)}
                   onPitch={() => onOpenAiPitchModal(lead.company_name, lead)}
                 />
               </div>
             ))}
-            {!deals.length && <p className="p-8 text-center text-xs text-[#727687]">Nenhum negócio no CRM.</p>}
+            {!visibleDeals.length && <p className="p-8 text-center text-xs text-[#727687]">Nenhum negócio no CRM.</p>}
           </div>
           <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-[#f4f2fd] dark:bg-[#10142e] text-[#727687]">
               <tr>
                 <th className="p-4">Empresa</th>
+                {isPrimaryAdmin && <th className="p-4">Colaborador</th>}
                 <th className="p-4">Etapa</th>
                 <th className="p-4">Análise</th>
                 <th className="p-4">Valor</th>
@@ -208,12 +244,13 @@ export function CrmView({ onShowToast, onOpenAiPitchModal }: CrmViewProps) {
               </tr>
             </thead>
             <tbody>
-              {deals.map(lead => (
+              {visibleDeals.map(lead => (
                 <tr key={lead.id} className="border-t border-[#c2c6d8]/20">
                   <td className="p-4 font-bold">
                     {lead.company_name}<br />
                     <span className="font-normal text-[#727687]">{lead.category || 'Sem segmento'}</span>
                   </td>
+                  {isPrimaryAdmin && <td className="p-4 text-[#727687]">{ownerName(lead)}</td>}
                   <td className="p-4">{stages.find(item => item.id === dealStage(lead))?.label}</td>
                   <td className="p-4">
                     Nota {lead.rating ?? '—'} • {lead.review_count ?? 0} avaliações<br />
@@ -247,12 +284,14 @@ function Metric({ label, value, accent = false }: { label: string; value: string
 
 function LeadCard({
   lead,
+  ownerName,
   onPitch,
   canManageCrm,
   onMove,
   ...dragProps
 }: {
   lead: Lead;
+  ownerName?: string;
   onPitch: () => void;
   canManageCrm: boolean;
   onMove: (stage: CrmStage) => void;
@@ -273,6 +312,7 @@ function LeadCard({
           </span>
           <h4 className="font-bold text-xs text-[#1a1b22] dark:text-[#f8f7ff] mt-1">{lead.company_name}</h4>
           <p className="text-[11px] text-[#727687]">{lead.decision_maker_name || lead.phone || 'Contato a identificar'}</p>
+          {ownerName && <p className="text-[10px] font-semibold text-[#0066ff] mt-0.5">Responsável: {ownerName}</p>}
         </div>
         {canManageCrm
           ? <GripVertical className="w-4 h-4 text-[#727687]" />

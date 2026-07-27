@@ -40,15 +40,16 @@ export async function authorizeCalendarRequest(request: NextRequest, adminOnly =
   }
   const { data: profile } = await client
     .from('profiles')
-    .select('role,permissions,is_active')
+    .select('role,username,permissions,is_active')
     .eq('id', data.user.id)
     .maybeSingle();
   const role = String(profile?.role || '').toLocaleLowerCase('pt-BR');
   const permissions = (profile?.permissions || []).map((item: string) => item.toLocaleLowerCase('pt-BR'));
   const isAdmin = role === 'admin' || role === 'administrador';
+  const isPrimaryAdmin = isAdmin && String(profile?.username || '').toLocaleLowerCase('pt-BR') === 'localway01';
   const hasCommercialAccess = permissions.some((item: string) =>
     ['prospecção', 'prospeccao', 'follow-up', 'followup', 'crm'].includes(item));
-  if (!profile?.is_active || (adminOnly ? !isAdmin : !isAdmin && !hasCommercialAccess)) {
+  if (!profile?.is_active || (adminOnly ? !isPrimaryAdmin : !isAdmin && !hasCommercialAccess)) {
     return { error: NextResponse.json({ error: 'Acesso não autorizado.' }, { status: 403 }), userId: '' };
   }
   return { error: null, userId: data.user.id };
@@ -102,4 +103,3 @@ export async function googleCalendarAccessToken(configuration: GoogleCalendarCon
   }
   return String(result.access_token);
 }
-
