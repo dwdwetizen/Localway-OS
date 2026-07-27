@@ -650,6 +650,7 @@ export async function POST(request: NextRequest) {
     || body.action === 'resolve_local_profile'
     || body.action === 'local_competitors'
     || body.action === 'photo'
+    || body.action === 'suggest'
     ? body.action
     : body.action === 'grid'
       ? 'grid'
@@ -658,6 +659,8 @@ export async function POST(request: NextRequest) {
     request,
     action === 'analyze' || action === 'analyze_url'
       ? 'analises'
+      : action === 'suggest'
+        ? body.module === 'mapa' ? 'mapa' : 'analises'
       : action === 'local_competitors' || action === 'resolve_local_profile'
         ? 'raiox'
         : action === 'photo'
@@ -672,6 +675,40 @@ export async function POST(request: NextRequest) {
   const apiKey = configuration.placesKey;
   if (!apiKey) {
     return NextResponse.json({ error: 'A chave do Google Places ainda não foi cadastrada em Administração → Integrações.' }, { status: 500 });
+  }
+
+  if (action === 'suggest') {
+    const query = String(body.query || '').trim();
+    if (query.length < 2) {
+      return NextResponse.json({ suggestions: [] });
+    }
+    const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': searchFieldMask,
+      },
+      body: JSON.stringify({
+        textQuery: query,
+        languageCode: 'pt-BR',
+        regionCode: 'BR',
+        pageSize: 6,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      return NextResponse.json(
+        { error: data?.error?.message || 'O Google não conseguiu buscar empresas.' },
+        { status: response.status },
+      );
+    }
+    const suggestions = ((Array.isArray(data.places) ? data.places : []) as PlaceRecord[])
+      .filter(place => place.businessStatus !== 'CLOSED_PERMANENTLY')
+      .map(place => mapPlace(place))
+      .filter(place => place.google_place_id && place.google_maps_url)
+      .slice(0, 6);
+    return NextResponse.json({ suggestions });
   }
 
   if (action === 'photo') {

@@ -21,6 +21,7 @@ import { useAuthProfile } from '@/components/AuthGate';
 import { useLeads } from '@/hooks/use-leads';
 import { Lead, LeadAnalysisData } from '@/lib/leads';
 import { supabase } from '@/lib/supabase';
+import { GooglePlaceSearch, GooglePlaceSuggestion } from '@/components/GooglePlaceSearch';
 
 interface AnalisesViewProps {
   onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
@@ -128,8 +129,9 @@ export function AnalisesView({ onShowToast }: AnalisesViewProps) {
     }
   };
 
-  const analyzeGoogleMapsUrl = async () => {
-    if (!googleMapsUrl.trim() || !supabase) {
+  const analyzeGoogleMapsUrl = async (selectedUrl?: string) => {
+    const mapsUrl = selectedUrl?.trim() || googleMapsUrl.trim();
+    if (!mapsUrl || !supabase) {
       return onShowToast('Cole o link da empresa no Google Maps.', 'error');
     }
     setAnalyzingUrl(true);
@@ -141,7 +143,7 @@ export function AnalisesView({ onShowToast }: AnalisesViewProps) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${sessionData.session?.access_token || ''}`,
         },
-        body: JSON.stringify({ action: 'analyze_url', googleMapsUrl: googleMapsUrl.trim() }),
+        body: JSON.stringify({ action: 'analyze_url', googleMapsUrl: mapsUrl }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Não foi possível analisar esse link.');
@@ -172,7 +174,7 @@ export function AnalisesView({ onShowToast }: AnalisesViewProps) {
           email: null,
           notes: null,
           google_place_id: placeId,
-          google_maps_url: place.google_maps_url || googleMapsUrl.trim(),
+          google_maps_url: place.google_maps_url || mapsUrl,
           website_url: place.website_url || null,
           rating: place.rating ?? null,
           review_count: place.review_count ?? null,
@@ -213,6 +215,11 @@ export function AnalisesView({ onShowToast }: AnalisesViewProps) {
     }
   };
 
+  const chooseSuggestion = async (place: GooglePlaceSuggestion) => {
+    setGoogleMapsUrl(place.google_maps_url);
+    await analyzeGoogleMapsUrl(place.google_maps_url);
+  };
+
   if (loading) {
     return <div className="p-12 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-[#0066ff]" /></div>;
   }
@@ -242,10 +249,12 @@ export function AnalisesView({ onShowToast }: AnalisesViewProps) {
         <div className="flex items-center gap-2 mb-3">
           <Link2 className="w-5 h-5 text-[#0066ff]" />
           <div>
-            <h3 className="font-bold text-sm">Analisar uma empresa pelo Google Maps</h3>
-            <p className="text-xs text-[#727687]">Cole o link curto ou completo da ficha da empresa. Esta análise é independente da Prospecção.</p>
+            <h3 className="font-bold text-sm">Encontrar e analisar uma empresa</h3>
+            <p className="text-xs text-[#727687]">Busque pelo nome ou cole o link do Google Maps. Esta análise é independente da Prospecção.</p>
           </div>
         </div>
+        <GooglePlaceSearch module="analises" disabled={analyzingUrl} onSelect={chooseSuggestion}/>
+        <div className="my-4 flex items-center gap-3"><span className="h-px flex-1 bg-[#c2c6d8]/30"/><span className="text-[10px] font-bold uppercase text-[#727687]">ou cole o link</span><span className="h-px flex-1 bg-[#c2c6d8]/30"/></div>
         <div className="flex flex-col sm:flex-row gap-2">
           <input
             type="url"
@@ -272,8 +281,8 @@ export function AnalisesView({ onShowToast }: AnalisesViewProps) {
       {!selected ? (
         <div className="bg-white dark:bg-[#141936] p-10 rounded-2xl border text-center">
           <MapPin className="w-8 h-8 mx-auto text-[#0066ff] mb-3" />
-          <h3 className="font-bold">Cole o link de uma empresa acima</h3>
-          <p className="text-xs text-[#727687] mt-1">Aceitamos links curtos e completos do Google Maps.</p>
+          <h3 className="font-bold">Busque ou cole o link de uma empresa acima</h3>
+          <p className="text-xs text-[#727687] mt-1">Escolha uma sugestão do Google ou use um link curto ou completo do Maps.</p>
         </div>
       ) : (
         <>

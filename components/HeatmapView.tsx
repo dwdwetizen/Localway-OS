@@ -8,6 +8,7 @@ import { Lead } from '@/lib/leads';
 import { supabase } from '@/lib/supabase';
 import { KeywordOpportunityPanel } from '@/components/KeywordOpportunityPanel';
 import { useAuthProfile } from '@/components/AuthGate';
+import { GooglePlaceSearch, GooglePlaceSuggestion } from '@/components/GooglePlaceSearch';
 
 interface HeatmapViewProps {
   onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
@@ -427,9 +428,10 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
     setKeywordManagerOpen(false);
     onShowToast('Palavras-chave atualizadas.', 'success');
   };
-  const resolveGoogleProfile = async () => {
+  const resolveGoogleProfile = async (selectedUrl?: string) => {
     if (resolvingProfileRef.current) return;
-    if (!supabase || !googleMapsUrl.trim()) {
+    const mapsUrl = selectedUrl?.trim() || googleMapsUrl.trim();
+    if (!supabase || !mapsUrl) {
       return onShowToast('Cole o link do perfil da empresa no Google Maps.', 'error');
     }
     resolvingProfileRef.current = true;
@@ -444,7 +446,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
         },
         body: JSON.stringify({
           action: 'resolve_map_profile',
-          googleMapsUrl: googleMapsUrl.trim(),
+          googleMapsUrl: mapsUrl,
         }),
       });
       const result = await response.json();
@@ -471,7 +473,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
           email: null,
           notes: null,
           google_place_id: place.google_place_id,
-          google_maps_url: place.google_maps_url || googleMapsUrl.trim(),
+          google_maps_url: place.google_maps_url || mapsUrl,
           website_url: place.website_url || null,
           rating: place.rating ?? null,
           review_count: place.review_count ?? null,
@@ -499,6 +501,11 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
       resolvingProfileRef.current = false;
       setResolvingProfile(false);
     }
+  };
+
+  const chooseSuggestion = async (place: GooglePlaceSuggestion) => {
+    setGoogleMapsUrl(place.google_maps_url);
+    await resolveGoogleProfile(place.google_maps_url);
   };
 
   const runVisibilityGrid = async () => {
@@ -564,11 +571,13 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
         <div className="w-10 h-10 sm:w-12 sm:h-12 shrink-0 rounded-xl sm:rounded-2xl bg-[#0066ff]/10 text-[#0066ff] flex items-center justify-center"><MapPin className="w-5 h-5 sm:w-6 sm:h-6" /></div>
         <div>
           <h2 className="text-xl font-semibold tracking-tight" style={{ fontFamily: "'Inter', sans-serif" }}>Mapa de calor de ranking local</h2>
-          <p className="text-xs text-[#727687] mt-0.5">Cole o perfil do Google e veja a posição da empresa em cada ponto da região.</p>
+          <p className="text-xs text-[#727687] mt-0.5">Busque a empresa ou cole o perfil do Google e veja a posição em cada ponto da região.</p>
         </div>
       </header>
 
       <section className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#141936] border border-[#c2c6d8]/35 dark:border-[#2e366b] shadow-sm space-y-4">
+        <GooglePlaceSearch module="mapa" disabled={resolvingProfile} onSelect={chooseSuggestion}/>
+        <div className="flex items-center gap-3"><span className="h-px flex-1 bg-[#c2c6d8]/30"/><span className="text-[10px] font-bold uppercase text-[#727687]">ou cole o link</span><span className="h-px flex-1 bg-[#c2c6d8]/30"/></div>
         <div className="flex flex-col sm:flex-row gap-2">
           <div className="relative flex-1">
             <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#727687]" />
