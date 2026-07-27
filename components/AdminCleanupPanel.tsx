@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, RefreshCw, Trash2 } from 'lucide-react';
+import { Archive, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 type ProfileOption = { id: string; username: string; nome: string | null };
@@ -49,6 +49,7 @@ export function AdminCleanupPanel({ profiles, onShowToast }: AdminCleanupPanelPr
   const [leads, setLeads] = useState<CleanupLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  const [archiving, setArchiving] = useState(false);
   const [ownerId, setOwnerId] = useState('all');
   const [scope, setScope] = useState<'all' | 'followup' | 'archived'>('all');
   const [preset, setPreset] = useState('semana_atual');
@@ -119,6 +120,25 @@ export function AdminCleanupPanel({ profiles, onShowToast }: AdminCleanupPanelPr
     void load();
   };
 
+  const archiveSelected = async () => {
+    if (!supabase) return;
+    const activeIds = selected.filter(id => !leads.find(lead => lead.id === id)?.archived_at);
+    if (!activeIds.length) return onShowToast('Os leads selecionados já estão arquivados.', 'info');
+    const confirmed = window.confirm(`Arquivar ${activeIds.length} lead(s)? Eles poderão ser restaurados depois e não serão excluídos.`);
+    if (!confirmed) return;
+    setArchiving(true);
+    const { data } = await supabase.auth.getUser();
+    const { error } = await supabase
+      .from('leads')
+      .update({ archived_at: new Date().toISOString(), archived_by: data.user?.id || null })
+      .in('id', activeIds);
+    setArchiving(false);
+    if (error) return onShowToast(error.message, 'error');
+    onShowToast(`${activeIds.length} lead(s) arquivado(s) com segurança.`, 'success');
+    setSelected([]);
+    void load();
+  };
+
   return <section className="rounded-2xl border bg-white dark:bg-[#141936] overflow-hidden">
     <div className="p-4 sm:p-5 border-b">
       <h3 className="font-bold text-sm">Limpeza administrativa de leads e follow-ups</h3>
@@ -135,7 +155,8 @@ export function AdminCleanupPanel({ profiles, onShowToast }: AdminCleanupPanelPr
       <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={visible.length > 0 && visible.every(lead => selected.includes(lead.id))} onChange={toggleAll}/> Selecionar os {visible.length} resultados</label>
       <div className="flex gap-2">
         <button onClick={() => void load()} className="min-h-10 px-3 rounded-xl border text-xs font-bold flex items-center gap-1.5"><RefreshCw className="w-3.5 h-3.5"/> Atualizar</button>
-        <button disabled={!selected.length || deleting} onClick={() => void removeSelected()} className="min-h-10 px-3 rounded-xl bg-rose-600 text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-40">{deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Trash2 className="w-3.5 h-3.5"/>} Excluir {selected.length || ''}</button>
+        <button disabled={!selected.length || archiving || deleting} onClick={() => void archiveSelected()} className="min-h-10 px-3 rounded-xl border border-[#0066ff]/35 text-[#0066ff] text-xs font-bold flex items-center gap-1.5 disabled:opacity-40">{archiving ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Archive className="w-3.5 h-3.5"/>} Arquivar {selected.length || ''}</button>
+        <button disabled={!selected.length || deleting || archiving} onClick={() => void removeSelected()} className="min-h-10 px-3 rounded-xl bg-rose-600 text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-40">{deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Trash2 className="w-3.5 h-3.5"/>} Excluir {selected.length || ''}</button>
       </div>
     </div>
     {loading ? <div className="p-10 grid place-items-center"><Loader2 className="w-5 h-5 animate-spin text-[#0066ff]"/></div> : <div className="divide-y">

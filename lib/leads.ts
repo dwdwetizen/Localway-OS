@@ -11,7 +11,7 @@ export type LeadStatus =
   | 'perdido';
 
 export type LeadSource = 'presencial' | 'google_places' | 'manual';
-export type CrmStage = 'qualificacao' | 'proposta' | 'negociacao' | 'fechado' | 'perdido';
+export type CrmStage = 'reuniao_marcada' | 'reuniao_realizada' | 'proposta' | 'negociacao' | 'fechado' | 'perdido';
 
 export interface Lead {
   id: string;
@@ -97,7 +97,7 @@ export const statusLabel: Record<LeadStatus, string> = {
   ligar_depois: 'Retornar depois — funcionário',
   retornar_depois: 'Retornar depois — decisor',
   reuniao_marcada: 'Reunião marcada',
-  qualificado: 'Enviar para o CRM',
+  qualificado: 'Qualificado',
   sem_interesse: 'Sem interesse',
   perdido: 'Perdido',
 };

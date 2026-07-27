@@ -12,8 +12,8 @@ interface ProspectingViewProps {
   onOpenAiPitchModal: (companyName: string, lead?: Lead) => void;
 }
 
-const nextSteps: LeadStatus[] = ['nao_atendeu', 'retornar_depois', 'ligar_depois', 'reuniao_marcada', 'sem_interesse'];
-const scheduledStatuses: LeadStatus[] = ['nao_atendeu', 'ligar_depois', 'retornar_depois', 'reuniao_marcada'];
+const nextSteps: LeadStatus[] = ['nao_atendeu', 'retornar_depois', 'ligar_depois', 'sem_interesse'];
+const scheduledStatuses: LeadStatus[] = ['nao_atendeu', 'ligar_depois', 'retornar_depois'];
 type MeetingDetails = { decisionMakerName: string; phone: string; email: string };
 const emptyManual = { companyName: '', category: '', city: '', address: '', phone: '', whatsapp: '', email: '', decisionMaker: '', receptionist: '', notes: '' };
 
@@ -186,7 +186,7 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
         whatsapp: status === 'reuniao_marcada' ? (meetingDetails?.phone.trim() || lead.whatsapp || lead.phone) : lead.whatsapp,
         email: status === 'reuniao_marcada' ? (meetingDetails?.email.trim() || lead.email) : lead.email,
         crm_stage: status === 'reuniao_marcada'
-          ? (lead.crm_stage || 'qualificacao')
+          ? (lead.crm_stage || 'reuniao_marcada')
           : lead.crm_stage,
         next_action_at: scheduledStatuses.includes(status) ? nextActionAt : null,
         last_contact_at: status === 'novo' ? lead.last_contact_at : new Date().toISOString(),

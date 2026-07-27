@@ -25,7 +25,8 @@ interface CrmViewProps {
 }
 
 const stages: Array<{ id: CrmStage; label: string; color: string }> = [
-  { id: 'qualificacao', label: 'Qualificação', color: 'border-purple-500 text-purple-600' },
+  { id: 'reuniao_marcada', label: 'Reunião marcada', color: 'border-blue-500 text-blue-600' },
+  { id: 'reuniao_realizada', label: 'Reunião realizada', color: 'border-purple-500 text-purple-600' },
   { id: 'proposta', label: 'Proposta enviada', color: 'border-amber-500 text-amber-600' },
   { id: 'negociacao', label: 'Em negociação', color: 'border-orange-500 text-orange-600' },
   { id: 'fechado', label: 'Pago', color: 'border-emerald-500 text-emerald-600' },
@@ -40,7 +41,7 @@ const formatDate = (value: string | null) => value
   ? new Date(value).toLocaleDateString('pt-BR')
   : 'Sem retorno agendado';
 
-const dealStage = (lead: Lead): CrmStage => lead.crm_stage || 'qualificacao';
+const dealStage = (lead: Lead): CrmStage => lead.crm_stage || 'reuniao_marcada';
 
 export function CrmView({ onShowToast, onOpenAiPitchModal }: CrmViewProps) {
   const profile = useAuthProfile();

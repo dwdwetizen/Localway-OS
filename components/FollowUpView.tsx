@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { CalendarPlus, CheckCircle2, ChevronDown, ChevronUp, ExternalLink, MessageCircle, PhoneCall, Plus, X } from 'lucide-react';
+import { Archive, CalendarPlus, CheckCircle2, ChevronDown, ChevronUp, ExternalLink, MessageCircle, PhoneCall, Plus, X } from 'lucide-react';
 import { useAuthProfile } from '@/components/AuthGate';
 import { useLeads } from '@/hooks/use-leads';
 import { contactCountdown, ContactUrgency, googleCalendarLink, Lead, LeadStatus, statusLabel, whatsappLink } from '@/lib/leads';
@@ -12,12 +12,11 @@ interface FollowUpViewProps {
 }
 
 const followUpStatuses: LeadStatus[] = ['retornar_depois'];
-type FollowUpOutcome = 'retry_tomorrow' | 'retornar_depois' | 'reuniao_marcada' | 'qualificado' | 'sem_interesse';
+type FollowUpOutcome = 'retry_tomorrow' | 'retornar_depois' | 'reuniao_marcada' | 'sem_interesse';
 const followUpOutcomeOptions: Array<{ value: FollowUpOutcome; label: string }> = [
   { value: 'retry_tomorrow', label: 'Não atendeu — tentar amanhã' },
   { value: 'retornar_depois', label: 'Retornar depois — decisor' },
   { value: 'reuniao_marcada', label: 'Reunião marcada' },
-  { value: 'qualificado', label: 'Enviar para o CRM' },
   { value: 'sem_interesse', label: 'Sem interesse' },
 ];
 
@@ -57,6 +56,7 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
   const [meetingEmails, setMeetingEmails] = useState<Record<string, string>>({});
   const [addOpen, setAddOpen] = useState(false);
   const [expandedLeadId, setExpandedLeadId] = useState<string | null>(null);
+  const [archivingLeadId, setArchivingLeadId] = useState<string | null>(null);
   const [, setUrgencyRefresh] = useState(0);
   const [newFollowUp, setNewFollowUp] = useState({ leadId: '', status: 'retornar_depois' as LeadStatus, date: '', note: '' });
 
@@ -68,6 +68,24 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
   const list = useMemo(() => leads
     .filter(lead => followUpStatuses.includes(lead.status))
     .sort((a, b) => new Date(a.next_action_at || 0).getTime() - new Date(b.next_action_at || 0).getTime()), [leads]);
+
+  const archiveLead = async (lead: Lead) => {
+    const confirmed = window.confirm(`Arquivar o lead “${lead.company_name}”? Ele sairá do Follow-up, mas poderá ser restaurado na área de Arquivados da Prospecção.`);
+    if (!confirmed) return;
+    setArchivingLeadId(lead.id);
+    const result = await updateLead(lead.id, {
+      archived_at: new Date().toISOString(),
+      archived_by: authProfile.id,
+    }, {
+      outcome: 'Lead arquivado no Follow-up',
+      notes: 'Arquivado sem exclusão definitiva.',
+      event_type: 'lead_archived',
+    });
+    setArchivingLeadId(null);
+    if (result.error) return onShowToast(result.error, 'error');
+    setExpandedLeadId(null);
+    onShowToast('Lead arquivado. Ele pode ser restaurado em Prospecção → Arquivados.', 'success');
+  };
 
   const saveContact = async (lead: Lead) => {
     const outcome = outcomes[lead.id] || 'retornar_depois';
@@ -86,7 +104,7 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
         phone: status === 'reuniao_marcada' ? (meetingPhones[lead.id]?.trim() || lead.phone) : lead.phone,
         whatsapp: status === 'reuniao_marcada' ? (meetingPhones[lead.id]?.trim() || lead.whatsapp || lead.phone) : lead.whatsapp,
         email: status === 'reuniao_marcada' ? (meetingEmails[lead.id]?.trim() || lead.email) : lead.email,
-        crm_stage: status === 'qualificado' || status === 'reuniao_marcada' ? (lead.crm_stage || 'qualificacao') : lead.crm_stage,
+        crm_stage: status === 'reuniao_marcada' ? (lead.crm_stage || 'reuniao_marcada') : lead.crm_stage,
         next_action_at: status === 'reuniao_marcada' || status === 'retornar_depois' ? nextActionAt : null,
         last_contact_at: new Date().toISOString(),
         archived_at: status === 'sem_interesse' ? new Date().toISOString() : lead.archived_at,
@@ -143,8 +161,7 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
         window.open(googleCalendarLink(effectiveLead, nextActionAt), '_blank', 'noopener,noreferrer');
         onShowToast(`${calendarResult.error || 'Agenda central não conectado.'} Abrimos o evento preenchido para salvar manualmente.`, 'info');
       }
-    } else if (status === 'qualificado') onShowToast('Empresa enviada para a primeira coluna do CRM.');
-    else if (status === 'sem_interesse') onShowToast('Lead arquivado como sem interesse.');
+    } else if (status === 'sem_interesse') onShowToast('Lead arquivado como sem interesse.');
     else if (outcome === 'retry_tomorrow') onShowToast('Nova tentativa programada automaticamente para amanhã.');
     else onShowToast('Próximo retorno com o decisor atualizado.');
   };
@@ -219,11 +236,14 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
               <button type="button" onClick={() => setExpandedLeadId(expanded ? null : lead.id)} className="ml-1 px-2 py-1.5 rounded-lg border border-[#0066ff]/30 text-[#0066ff] text-[10px] font-bold flex items-center gap-1">
                 {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />} {expanded ? 'Fechar' : 'Atender'}
               </button>
+              <button type="button" disabled={archivingLeadId === lead.id} onClick={() => void archiveLead(lead)} className="px-2 py-1.5 rounded-lg border border-[#c2c6d8]/40 text-[#727687] hover:text-[#1a1b22] text-[10px] font-bold flex items-center gap-1 disabled:opacity-50" title="Arquivar sem excluir">
+                <Archive className="w-3.5 h-3.5"/> {archivingLeadId === lead.id ? 'Arquivando…' : 'Arquivar'}
+              </button>
             </div>
           </div>
           {expanded && <div className="px-3 py-3 border-t border-[#c2c6d8]/20 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[200px_220px_1fr_auto] gap-2 items-end">
             <label className="text-[10px] font-semibold">RESULTADO<select value={outcomes[lead.id] || 'retornar_depois'} onChange={event => { const value = event.target.value as FollowUpOutcome; setOutcomes({ ...outcomes, [lead.id]: value }); if (value === 'retry_tomorrow') setDates({ ...dates, [lead.id]: tomorrowAtNine() }); }} className="mt-1 w-full p-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl">{followUpOutcomeOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-            <label className="text-[10px] font-semibold">{(outcomes[lead.id] || 'retornar_depois') === 'reuniao_marcada' ? 'DATA E HORA DA REUNIÃO' : 'PRÓXIMO RETORNO'}<input type="datetime-local" disabled={(outcomes[lead.id] || 'retornar_depois') === 'qualificado' || (outcomes[lead.id] || 'retornar_depois') === 'sem_interesse'} value={dates[lead.id] || ''} onChange={event => setDates({ ...dates, [lead.id]: event.target.value })} className="mt-1 w-full p-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl disabled:opacity-50" /></label>
+            <label className="text-[10px] font-semibold">{(outcomes[lead.id] || 'retornar_depois') === 'reuniao_marcada' ? 'DATA E HORA DA REUNIÃO' : 'PRÓXIMO RETORNO'}<input type="datetime-local" disabled={(outcomes[lead.id] || 'retornar_depois') === 'sem_interesse'} value={dates[lead.id] || ''} onChange={event => setDates({ ...dates, [lead.id]: event.target.value })} className="mt-1 w-full p-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl disabled:opacity-50" /></label>
             <label className="text-[10px] font-semibold">RESUMO DO CONTATO<input value={notes[lead.id] || ''} onChange={event => setNotes({ ...notes, [lead.id]: event.target.value })} className="mt-1 w-full p-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl" placeholder="Ex.: falou com o decisor, pediu retorno…" /></label>
             <button onClick={() => void saveContact(lead)} className="h-9 justify-center flex items-center gap-2 px-4 text-xs font-bold text-white bg-[#0066ff] hover:bg-[#0050cb] rounded-xl"><CheckCircle2 className="w-4 h-4" /> Salvar</button>
             {(outcomes[lead.id] || 'retornar_depois') === 'reuniao_marcada' && <div className="md:col-span-2 xl:col-span-4 grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-xl border border-emerald-200 bg-emerald-50/60 dark:bg-emerald-950/10 p-3">
