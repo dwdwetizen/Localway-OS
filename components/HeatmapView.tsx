@@ -269,7 +269,7 @@ function GridMapCanvas({ scan, mapsKey, onError }: {
     };
   }, [mapsKey, onError, scan]);
 
-  return <div className="relative w-full h-[680px] bg-[#eef2f6]">
+  return <div className="relative w-full h-[520px] sm:h-[680px] bg-[#eef2f6]">
     <div ref={node} className="absolute inset-0 w-full h-full" />
     {!mapReady && !mapError && <div className="absolute inset-0 z-10 grid place-items-center bg-[#eef2f6]">
       <div className="text-center"><Loader2 className="w-7 h-7 animate-spin text-[#0066ff] mx-auto" /><p className="text-xs font-semibold mt-2">Carregando mapa…</p></div>
@@ -556,16 +556,16 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
   };
 
   return (
-    <div className="space-y-5 animate-in fade-in duration-300" style={{ fontFamily: "'Inter', sans-serif" }}>
-      <header className="flex items-center gap-3 bg-white dark:bg-[#141936] p-5 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
-        <div className="w-12 h-12 rounded-2xl bg-[#0066ff]/10 text-[#0066ff] flex items-center justify-center"><MapPin className="w-6 h-6" /></div>
+    <div className="space-y-4 sm:space-y-5 animate-in fade-in duration-300" style={{ fontFamily: "'Inter', sans-serif" }}>
+      <header className="flex items-center gap-3 bg-white dark:bg-[#141936] p-4 sm:p-5 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
+        <div className="w-10 h-10 sm:w-12 sm:h-12 shrink-0 rounded-xl sm:rounded-2xl bg-[#0066ff]/10 text-[#0066ff] flex items-center justify-center"><MapPin className="w-5 h-5 sm:w-6 sm:h-6" /></div>
         <div>
           <h2 className="text-xl font-semibold tracking-tight" style={{ fontFamily: "'Inter', sans-serif" }}>Mapa de calor de ranking local</h2>
           <p className="text-xs text-[#727687] mt-0.5">Cole o perfil do Google e veja a posição da empresa em cada ponto da região.</p>
         </div>
       </header>
 
-      <section className="p-5 rounded-2xl bg-white dark:bg-[#141936] border border-[#c2c6d8]/35 dark:border-[#2e366b] shadow-sm space-y-4">
+      <section className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#141936] border border-[#c2c6d8]/35 dark:border-[#2e366b] shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row gap-2">
           <div className="relative flex-1">
             <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#727687]" />
@@ -589,7 +589,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
         {selected && <div className="flex flex-wrap items-center gap-2">
           <span className="mr-1 text-[10px] uppercase tracking-[0.12em] font-semibold text-[#727687]">Palavras-chave</span>
           {keywordTabs.map(keyword => <button key={keyword} type="button" onClick={() => selectKeyword(keyword)} className={`px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors ${keywordKey(activeKeyword) === keywordKey(keyword) ? 'bg-[#0066ff] border-[#0066ff] text-white shadow-sm' : 'bg-white dark:bg-[#10142e] border-[#c2c6d8]/45 hover:border-[#0066ff] text-[#424656] dark:text-[#dfe3f4]'}`}>{keyword}</button>)}
-          <button type="button" onClick={openKeywordManager} className="ml-auto px-3 py-1.5 rounded-full border border-[#c2c6d8]/45 text-xs font-semibold text-[#0066ff] hover:bg-[#0066ff]/5 flex items-center gap-1.5"><Pencil className="w-3 h-3" /> Gerenciar</button>
+          <button type="button" onClick={openKeywordManager} className="w-full sm:w-auto sm:ml-auto px-3 py-2 sm:py-1.5 rounded-xl sm:rounded-full border border-[#c2c6d8]/45 text-xs font-semibold text-[#0066ff] hover:bg-[#0066ff]/5 flex justify-center items-center gap-1.5"><Pencil className="w-3 h-3" /> Gerenciar palavras-chave</button>
         </div>}
 
         {selected && <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-4 rounded-xl bg-[#f8f9fc] dark:bg-[#10142e] border border-[#c2c6d8]/30">
@@ -598,12 +598,12 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
             <p className="text-sm font-semibold mt-1">{selected.company_name}</p>
             <p className="text-xs text-[#727687]">{selected.category || 'Categoria identificada pelo Google'}</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="px-3 py-2 rounded-xl bg-white dark:bg-[#141936] border border-[#c2c6d8]/35 text-xs font-medium">Raio fixo: 2 km</span>
-            <select aria-label="Tamanho da grade" value={gridSize} onChange={event => setGridSize(Number(event.target.value))} className="px-3 py-2 rounded-xl bg-white dark:bg-[#141936] border border-[#c2c6d8]/50 text-xs font-medium">
+          <div className="grid grid-cols-2 md:flex w-full md:w-auto items-center gap-2">
+            <span className="px-3 py-2.5 rounded-xl bg-white dark:bg-[#141936] border border-[#c2c6d8]/35 text-xs font-medium text-center">Raio: 2 km</span>
+            <select aria-label="Tamanho da grade" value={gridSize} onChange={event => setGridSize(Number(event.target.value))} className="min-w-0 px-3 py-2 rounded-xl bg-white dark:bg-[#141936] border border-[#c2c6d8]/50 text-xs font-medium">
               {[3, 4, 5, 6, 7].map(size => <option key={size} value={size}>{size}×{size} ({size * size} pontos)</option>)}
             </select>
-            <button disabled={generatingGrid} onClick={() => void runVisibilityGrid()} className="px-5 py-2 rounded-xl bg-[#0066ff] hover:bg-[#0050cb] disabled:opacity-50 text-white text-xs font-semibold flex justify-center items-center gap-2">
+            <button disabled={generatingGrid} onClick={() => void runVisibilityGrid()} className="col-span-2 md:col-span-1 min-h-11 px-5 py-2 rounded-xl bg-[#0066ff] hover:bg-[#0050cb] disabled:opacity-50 text-white text-xs font-semibold flex justify-center items-center gap-2">
               {generatingGrid ? <Loader2 className="w-4 h-4 animate-spin"/> : <Grid3X3 className="w-4 h-4"/>}
               {generatingGrid ? `Consultando ${gridSize * gridSize} pontos…` : 'Gerar mapa de calor'}
             </button>
@@ -621,7 +621,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
       />}
 
       <div className={`grid grid-cols-1 overflow-hidden rounded-2xl border border-[#c2c6d8]/45 bg-white dark:bg-[#141936] shadow-sm ${activeScan ? 'lg:grid-cols-[350px_1fr]' : ''}`}>
-        {activeScan && <aside className="flex flex-col min-h-[680px] max-h-[760px] border-b lg:border-b-0 lg:border-r border-[#c2c6d8]/35 bg-white dark:bg-[#141936]">
+        {activeScan && <aside className="flex flex-col min-h-0 max-h-[520px] lg:min-h-[680px] lg:max-h-[760px] border-b lg:border-b-0 lg:border-r border-[#c2c6d8]/35 bg-white dark:bg-[#141936]">
           <div className="p-5 border-b border-[#c2c6d8]/30">
             <p className="text-xs text-[#727687]">Palavra-chave</p>
             <span className="inline-flex mt-1.5 px-3 py-1 rounded-full bg-[#0066ff] text-white text-xs font-semibold">{activeScan.keyword}</span>
@@ -668,8 +668,8 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
           </div>
         </aside>}
 
-        <section className="relative overflow-hidden bg-[#eef2f6] min-h-[680px]">
-          {activeScan && <div className="absolute z-10 top-4 left-1/2 -translate-x-1/2 px-4 py-2.5 rounded-2xl bg-white/95 shadow-xl border border-white flex items-center gap-2 text-xs font-medium whitespace-nowrap"><Clock3 className="w-4 h-4 text-[#0066ff]" />{new Date(activeScan.created_at).toLocaleString('pt-BR', { dateStyle: 'long', timeStyle: 'short' })}</div>}
+        <section className="relative overflow-hidden bg-[#eef2f6] min-h-[520px] sm:min-h-[680px]">
+          {activeScan && <div className="absolute z-10 top-3 sm:top-4 left-1/2 -translate-x-1/2 max-w-[calc(100%-1.5rem)] px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl bg-white/95 shadow-xl border border-white flex items-center gap-2 text-[10px] sm:text-xs font-medium whitespace-nowrap"><Clock3 className="w-4 h-4 text-[#0066ff]" />{new Date(activeScan.created_at).toLocaleString('pt-BR', { dateStyle: 'long', timeStyle: 'short' })}</div>}
           {activeScan && <div className="absolute z-10 top-4 right-4 hidden xl:flex flex-col gap-1.5 p-2 rounded-xl bg-white/95 shadow-lg text-[9px] font-semibold">
             <span className="text-emerald-700">● 1–3</span><span className="text-amber-600">● 4–10</span><span className="text-rose-500">● 11–20</span><span className="text-rose-800">● 20+</span>
           </div>}
@@ -704,8 +704,8 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
           })}
         </div>}
       </section>
-      {keywordManagerOpen && selected && <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-[#10142e]/55 backdrop-blur-sm">
-        <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-[#141936] border border-[#c2c6d8]/35 shadow-2xl overflow-hidden">
+      {keywordManagerOpen && selected && <div className="fixed inset-0 z-50 flex items-end sm:grid sm:place-items-center p-0 sm:p-4 bg-[#10142e]/55 backdrop-blur-sm">
+        <div className="w-full max-w-lg max-h-[92dvh] rounded-t-3xl sm:rounded-2xl bg-white dark:bg-[#141936] border border-[#c2c6d8]/35 shadow-2xl overflow-hidden mobile-safe-bottom">
           <div className="p-5 flex items-start justify-between border-b border-[#c2c6d8]/30">
             <div><h3 className="text-base font-semibold" style={{ fontFamily: "'Inter', sans-serif" }}>Gerenciar palavras-chave</h3><p className="text-xs text-[#727687] mt-1">Cada palavra-chave terá sua própria grade e histórico.</p></div>
             <button type="button" onClick={() => setKeywordManagerOpen(false)} className="p-2 rounded-lg hover:bg-[#f4f2fd] dark:hover:bg-[#10142e]" aria-label="Fechar"><X className="w-4 h-4" /></button>

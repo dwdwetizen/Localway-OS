@@ -193,12 +193,12 @@ export function AdminView({ onShowToast }: AdminViewProps) {
     () => history.filter(item => historyUserId === 'all' || activityOwnerKey(item) === historyUserId),
     [history, historyUserId],
   );
-  return <div className="space-y-6 animate-in fade-in duration-300">
-    <div className="bg-white dark:bg-[#141936] p-5 rounded-2xl border">
+  return <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-300">
+    <div className="bg-white dark:bg-[#141936] p-4 sm:p-5 rounded-2xl border">
       <h2 className="text-xl font-bold">Administração</h2>
       <p className="text-xs text-[#727687]">Cadastre serviços e controle os acessos da equipe.</p>
     </div>
-    <div className="flex gap-2 border-b pb-2">
+    <div className="flex gap-2 border-b pb-2 overflow-x-auto mobile-scroll">
       <Tab id="usuarios" label="Gestão de usuários"/>
       <Tab id="metas" label="Metas da equipe"/>
       <Tab id="historico" label="Histórico"/>
@@ -236,11 +236,11 @@ export function AdminView({ onShowToast }: AdminViewProps) {
             const isEditing = editingPermissionsId === profile.id;
             const isPasswordEditing = passwordUserId === profile.id;
             return <div key={profile.id} className="p-4">
-              <div className="flex gap-3 items-center">
+              <div className="flex flex-wrap gap-3 items-center">
                 <div className="w-11 h-11 rounded-full bg-[#0066ff]/10 overflow-hidden flex items-center justify-center font-bold">
                   {profile.photo_url ? <img src={profile.photo_url} className="w-full h-full object-cover" alt=""/> : (profile.nome || profile.username).slice(0,1)}
                 </div>
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-[170px]">
                   <p className="font-bold text-xs">{profile.nome || 'Sem nome'}</p>
                   <p className="text-[11px] text-[#727687] truncate">@{profile.username}</p>
                   <p className="text-[10px] text-[#0066ff] font-semibold mt-0.5">{profile.job_title || (isAdmin ? 'Administrador' : 'SDR / Colaborador')}</p>
@@ -248,7 +248,7 @@ export function AdminView({ onShowToast }: AdminViewProps) {
                     {(profile.permissions || []).includes('analises_solucoes') || isAdmin ? 'Soluções na análise: liberadas' : 'Soluções na análise: bloqueadas'}
                   </span>
                 </div>
-                <div className="flex flex-wrap items-center justify-end gap-2">
+                <div className="w-full sm:w-auto sm:ml-auto flex flex-wrap items-center justify-end gap-2">
                   {!isAdmin && <button onClick={() => isEditing ? setEditingPermissionsId(null) : startEditingPermissions(profile)} className="px-2 py-2 rounded-lg text-[#0066ff] hover:bg-blue-50 text-xs font-bold flex items-center gap-1" aria-label={`Editar acessos de ${profile.nome || profile.username}`} title="Editar acessos">
                     {isEditing ? <X className="w-4 h-4"/> : <Pencil className="w-4 h-4"/>}<span>{isEditing ? 'Fechar' : 'Acessos'}</span>
                   </button>}
@@ -378,7 +378,7 @@ export function AdminView({ onShowToast }: AdminViewProps) {
     {activeTab === 'servicos' && <section className="bg-white dark:bg-[#141936] p-6 rounded-2xl border"><h3 className="font-bold">Cadastrar novo serviço</h3><p className="text-xs text-[#727687] mt-1">Esta área foi movida para Administração.</p></section>}
     {activeTab === 'integracoes' && <section className="bg-white dark:bg-[#141936] p-6 rounded-2xl border"><Settings className="text-[#0066ff]"/><h3 className="font-bold mt-3">Integrações</h3><p className="text-xs text-[#727687] mt-1">Use duas chaves diferentes: uma para o servidor e outra para o navegador.</p><div className="mt-4 grid gap-3 md:grid-cols-2"><IntegrationStatus configured={placesConfigured} title="Servidor — Places API (New)" ready="Geração de leads, análises e ranking local prontos." missing="Cole abaixo a chave de servidor da Places API (New)."/><IntegrationStatus configured={mapsConfigured} title="Navegador — Maps JavaScript API" ready="Exibição do mapa e da grade pronta." missing="Cole abaixo a chave de navegador do Maps JavaScript."/></div><div className="mt-5 grid gap-4 md:grid-cols-2"><label className="text-xs font-bold">Chave de servidor — Google Places API (New)<input type="password" autoComplete="off" value={placesKeyInput} onChange={event => setPlacesKeyInput(event.target.value)} placeholder={placesConfigured ? 'Chave de servidor configurada — cole somente para substituir' : 'Cole a chave de servidor do Google Places'} className="input mt-1"/><span className="block text-[10px] font-normal text-[#727687] mt-1">Usada no servidor para buscar empresas, analisar perfis e calcular rankings. Restrinja somente à Places API (New).</span></label><label className="text-xs font-bold">Chave de navegador — Google Maps JavaScript API<input type="password" autoComplete="off" value={mapsKeyInput} onChange={event => setMapsKeyInput(event.target.value)} placeholder={mapsConfigured ? 'Chave de navegador configurada — cole somente para substituir' : 'Cole a chave de navegador do Google Maps'} className="input mt-1"/><span className="block text-[10px] font-normal text-[#727687] mt-1">Usada para exibir o mapa. Restrinja à Maps JavaScript API e aos domínios do aplicativo.</span></label></div><button disabled={savingIntegrations || (!placesKeyInput.trim() && !mapsKeyInput.trim())} onClick={() => void saveIntegrations()} className="mt-5 px-5 py-2.5 bg-[#0066ff] disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-2">{savingIntegrations ? <Loader2 className="w-4 h-4 animate-spin"/> : <Settings className="w-4 h-4"/>}Salvar integrações</button><GoogleCalendarIntegrationCard onShowToast={onShowToast}/><GoogleAdsIntegrationCard onShowToast={onShowToast}/><IntegrationGuide/></section>}
   </div>;
-  function Tab({ id, label }: { id: typeof activeTab; label: string }) { return <button onClick={() => setActiveTab(id)} className={`px-4 py-2 rounded-xl text-xs font-bold ${activeTab === id ? 'bg-[#0066ff] text-white' : 'text-[#727687]'}`}>{label}</button>; }
+  function Tab({ id, label }: { id: typeof activeTab; label: string }) { return <button onClick={() => setActiveTab(id)} className={`shrink-0 min-h-10 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap ${activeTab === id ? 'bg-[#0066ff] text-white' : 'text-[#727687]'}`}>{label}</button>; }
 }
 
 function GoalNumber({ label, value }: { label: string; value: number }) { return <div className="rounded-xl bg-[#f4f2fd] dark:bg-[#10142e] p-2"><p className="text-[10px] text-[#727687]">{label}</p><p className="font-bold text-sm">{value}</p></div>; }

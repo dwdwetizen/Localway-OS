@@ -30,7 +30,7 @@ export function PropostasView({ onShowToast }: PropostasViewProps) {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
+    <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-300">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-[#141936] p-5 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
         <div>
@@ -44,7 +44,7 @@ export function PropostasView({ onShowToast }: PropostasViewProps) {
 
         <button
           onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 bg-[#0066ff] hover:bg-[#0050cb] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition-all active:scale-95"
+          className="w-full md:w-auto min-h-11 flex items-center justify-center gap-2 bg-[#0066ff] hover:bg-[#0050cb] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition-all active:scale-95"
         >
           <Plus className="w-4 h-4" /> Nova Proposta Comercial
         </button>
@@ -52,7 +52,22 @@ export function PropostasView({ onShowToast }: PropostasViewProps) {
 
       {/* Proposal Table */}
       <div className="bg-white dark:bg-[#141936] rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] overflow-hidden shadow-sm">
-        <table className="w-full text-left text-xs">
+        <div className="md:hidden divide-y divide-[#c2c6d8]/20">
+          {proposals.map(prop => <article key={`mobile-${prop.id}`} className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div><p className="font-bold text-sm">{prop.lead}</p><p className="text-[10px] text-[#727687] mt-0.5">{prop.date}</p></div>
+              <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${prop.status === 'Aprovado' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>{prop.status}</span>
+            </div>
+            <div className="mt-3 flex items-center justify-between">
+              <strong className="text-emerald-600">{prop.value}</strong>
+              <div className="flex gap-1">
+                <button onClick={() => onShowToast(`Proposta em PDF baixada para ${prop.lead}`)} className="w-10 h-10 grid place-items-center text-[#0066ff] rounded-xl bg-[#0066ff]/5" title="Baixar PDF"><Download className="w-4 h-4" /></button>
+                <button onClick={() => onShowToast(`Link de proposta reenviado via WhatsApp para ${prop.lead}`)} className="w-10 h-10 grid place-items-center text-emerald-600 rounded-xl bg-emerald-50" title="Reenviar WhatsApp"><Send className="w-4 h-4" /></button>
+              </div>
+            </div>
+          </article>)}
+        </div>
+        <table className="hidden md:table w-full text-left text-xs">
           <thead className="bg-[#f4f2fd] dark:bg-[#10142e] text-[#727687] font-bold uppercase border-b border-[#c2c6d8]/30">
             <tr>
               <th className="p-4">Cliente / Lead</th>
@@ -103,8 +118,8 @@ export function PropostasView({ onShowToast }: PropostasViewProps) {
 
       {/* Modal Nova Proposta */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white dark:bg-[#141936] rounded-2xl border border-[#c2c6d8]/40 dark:border-[#2e366b] max-w-md w-full p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white dark:bg-[#141936] rounded-t-3xl sm:rounded-2xl border border-[#c2c6d8]/40 dark:border-[#2e366b] max-w-md w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6 shadow-2xl space-y-4 mobile-safe-bottom">
             <h3 className="font-bold font-poppins text-lg text-[#1a1b22] dark:text-[#f8f7ff]">
               Criar Nova Proposta Comercial
             </h3>

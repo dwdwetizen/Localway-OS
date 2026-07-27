@@ -169,12 +169,12 @@ export function KeywordOpportunityPanel({
   const lostRevenue = Math.max(topRevenue - currentRevenue, 0);
 
   return <section className="bg-white dark:bg-[#141936] rounded-2xl border border-[#c2c6d8]/35 overflow-hidden">
-    <div className="p-5 border-b border-[#c2c6d8]/30 flex items-start gap-3">
+    <div className="p-4 sm:p-5 border-b border-[#c2c6d8]/30 flex flex-wrap sm:flex-nowrap items-start gap-3">
       <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 grid place-items-center"><TrendingUp className="w-5 h-5"/></div>
       <div className="flex-1"><h3 className="font-semibold">Potencial de palavras-chave e faturamento</h3><p className="text-[11px] text-[#727687] mt-1">Volume oficial do Google Ads combinado com premissas comerciais transparentes.</p></div>
-      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${connected ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{connected === null ? 'Verificando…' : connected ? 'Google Ads conectado' : 'Google Ads pendente'}</span>
+      <span className={`ml-[3.25rem] sm:ml-0 px-2.5 py-1 rounded-full text-[10px] font-bold ${connected ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{connected === null ? 'Verificando…' : connected ? 'Google Ads conectado' : 'Google Ads pendente'}</span>
     </div>
-    <div className="p-5 grid lg:grid-cols-[1fr_1.1fr] gap-5">
+    <div className="p-4 sm:p-5 grid lg:grid-cols-[1fr_1.1fr] gap-5">
       <div>
         <div className="grid sm:grid-cols-2 gap-3">
           <label className="text-xs font-semibold">Segmento<select value={segment} onChange={event => changeSegment(event.target.value)} className="input mt-1">{segments.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
@@ -182,7 +182,7 @@ export function KeywordOpportunityPanel({
           {segment === 'outro' && <label className="text-xs font-semibold sm:col-span-2">Nome do segmento<input value={customSegment} onChange={event => setCustomSegment(event.target.value)} className="input mt-1" placeholder="Ex.: manutenção de ar-condicionado"/></label>}
           <label className="text-xs font-semibold sm:col-span-2">Palavras específicas — opcional<input value={keywordInput} onChange={event => setKeywordInput(event.target.value)} className="input mt-1" placeholder="Ex.: pizzaria, delivery de pizza — separe por vírgulas"/><span className="block text-[10px] font-normal text-[#727687] mt-1">Sem preencher, o Google Ads gera sugestões a partir do segmento.</span></label>
         </div>
-        <button disabled={loading || !connected} onClick={() => void research()} className="mt-3 px-4 py-2.5 rounded-xl bg-[#0066ff] text-white text-xs font-semibold flex items-center gap-2 disabled:opacity-50">{loading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Search className="w-4 h-4"/>}Buscar volume e sugestões</button>
+        <button disabled={loading || !connected} onClick={() => void research()} className="mt-3 w-full sm:w-auto min-h-11 px-4 py-2.5 rounded-xl bg-[#0066ff] text-white text-xs font-semibold flex justify-center items-center gap-2 disabled:opacity-50">{loading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Search className="w-4 h-4"/>}Buscar volume e sugestões</button>
         {!!ideas.length && <div className="mt-4 max-h-72 overflow-auto rounded-xl border divide-y">
           {ideas.slice(0, 30).map(item => <button key={item.keyword} onClick={() => setSelectedKeyword(item.keyword)} className={`w-full p-3 text-left flex items-center justify-between gap-3 ${selectedKeyword === item.keyword ? 'bg-blue-50' : 'hover:bg-[#f8f9fc]'}`}>
             <div><p className="text-xs font-semibold">{item.keyword}</p><p className="text-[10px] text-[#727687]">Concorrência {competitionLabel(item.competition)} • índice {item.competitionIndex}</p></div>
@@ -203,7 +203,7 @@ export function KeywordOpportunityPanel({
             <NumberField label="Ticket médio" value={ticket} onChange={setTicket} prefix="R$"/>
             <div className="rounded-xl border bg-white dark:bg-[#141936] p-3"><p className="text-[10px] text-[#727687]">CRM do segmento</p><p className="text-xs font-bold mt-1">{crmSample.total ? `${crmSample.won}/${crmSample.total} fechados • ${crmSample.rate.toFixed(1)}%` : 'Sem amostra'}</p><button onClick={applyCrmRate} disabled={crmSample.total < 5} className="text-[10px] text-[#0066ff] font-bold mt-1 disabled:opacity-40">Aplicar taxa real</button></div>
           </div>
-          <div className="grid grid-cols-3 gap-2 mt-3 text-center">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3 text-center">
             <Metric label="Faturamento atual" value={currency(currentRevenue)}/>
             <Metric label="Potencial Top 3" value={currency(topRevenue)}/>
             <Metric label="Oportunidade mensal" value={currency(lostRevenue)} accent/>

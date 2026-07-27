@@ -10,8 +10,8 @@ interface SupportModalProps {
 
 export function SupportModal({ onClose, onShowToast }: SupportModalProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-      <div className="bg-white dark:bg-[#141936] rounded-2xl border border-[#c2c6d8]/40 dark:border-[#2e366b] max-w-md w-full p-6 shadow-2xl space-y-4 relative">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+      <div className="bg-white dark:bg-[#141936] rounded-t-3xl sm:rounded-2xl border border-[#c2c6d8]/40 dark:border-[#2e366b] max-w-md w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6 shadow-2xl space-y-4 relative mobile-safe-bottom">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-1 text-gray-400 hover:text-gray-600 rounded-lg"

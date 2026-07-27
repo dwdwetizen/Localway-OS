@@ -281,7 +281,7 @@ export function RaioXView({ onShowToast, onOpenAiPitchModal }: RaioXViewProps) {
   };
 
   return (
-    <div className="space-y-5 animate-in fade-in duration-300" style={{ fontFamily: "'Inter', sans-serif" }}>
+    <div className="space-y-4 sm:space-y-5 animate-in fade-in duration-300" style={{ fontFamily: "'Inter', sans-serif" }}>
       <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-[#141936] p-5 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-2xl bg-[#0066ff]/10 text-[#0066ff] flex items-center justify-center">
@@ -416,7 +416,37 @@ export function RaioXView({ onShowToast, onOpenAiPitchModal }: RaioXViewProps) {
               <span className="px-2.5 py-1 rounded-lg bg-[#f4f2fd] text-[10px] font-semibold">{competitors.length} concorrentes</span>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="md:hidden divide-y divide-[#c2c6d8]/25">
+              {[currentProfile, ...competitors]
+                .sort((first, second) => profileScore(second) - profileScore(first))
+                .map(profile => {
+                  const isTarget = profile.google_place_id === currentProfile.google_place_id;
+                  return <article key={`mobile-${profile.google_place_id || profile.company_name}`} className={`p-4 ${isTarget ? 'bg-[#0066ff]/5' : ''}`}>
+                    <div className="flex items-center gap-3">
+                      <ProfilePhoto profile={profile} small />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-sm truncate">{profile.company_name}</p>
+                          {isTarget && <span className="shrink-0 px-1.5 py-0.5 rounded bg-[#0066ff] text-white text-[8px] font-bold uppercase">Analisada</span>}
+                        </div>
+                        <p className="text-[10px] text-[#727687] truncate">{profile.address || profile.category}</p>
+                      </div>
+                      <ScoreBadge score={profileScore(profile)} />
+                    </div>
+                    <div className="grid grid-cols-4 gap-2 mt-3 text-center">
+                      <MobileDatum label="Distância" value={profile.distance_km === null ? '—' : `${profile.distance_km.toFixed(1)} km`} />
+                      <MobileDatum label="Nota" value={profile.rating ? profile.rating.toFixed(1) : '—'} />
+                      <MobileDatum label="Avaliações" value={String(profile.review_count || 0)} />
+                      <MobileDatum label="Fotos" value={String(profile.photo_count || 0)} />
+                    </div>
+                    <div className="mt-3 flex items-center justify-between">
+                      <span className={`text-[10px] font-semibold ${profile.has_website ? 'text-emerald-700' : 'text-rose-600'}`}>{profile.has_website ? 'Possui site' : 'Sem site'}</span>
+                      {profile.google_maps_url && <a href={profile.google_maps_url} target="_blank" rel="noreferrer" className="min-h-10 px-3 rounded-xl bg-[#0066ff]/10 text-[#0066ff] inline-flex items-center gap-1.5 text-xs font-bold"><ExternalLink className="w-4 h-4" /> Google</a>}
+                    </div>
+                  </article>;
+                })}
+            </div>
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full min-w-[920px] text-left text-xs">
                 <thead className="bg-[#f8f9fc] dark:bg-[#10142e] text-[#727687]">
                   <tr>
@@ -569,6 +599,13 @@ function ScoreBadge({ score }: { score: number }) {
       ? 'bg-amber-50 text-amber-700'
       : 'bg-rose-50 text-rose-700';
   return <span className={`inline-flex px-2 py-1 rounded-lg text-[10px] font-bold ${className}`}>{score}/100</span>;
+}
+
+function MobileDatum({ label, value }: { label: string; value: string }) {
+  return <div className="min-w-0 rounded-xl bg-[#f4f2fd] dark:bg-[#10142e] p-2">
+    <p className="text-[8px] text-[#727687] uppercase truncate">{label}</p>
+    <p className="text-[11px] font-bold mt-0.5 truncate">{value}</p>
+  </div>;
 }
 
 function ProfilePhoto({ profile, small = false }: { profile: CompetitorProfile; small?: boolean }) {

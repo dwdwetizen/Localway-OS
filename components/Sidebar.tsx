@@ -14,7 +14,6 @@ import {
   Users,
   MessageSquare,
   Settings,
-  HelpCircle,
   LogOut,
   Sparkles,
   X,
@@ -39,7 +38,6 @@ interface SidebarProps {
   setActiveTab: (tab: TabType) => void;
   isOpenMobile: boolean;
   onCloseMobile: () => void;
-  onOpenSupport: () => void;
   onLogout: () => void;
   isLoggingOut: boolean;
   allowedTabs: TabType[];
@@ -50,7 +48,6 @@ export function Sidebar({
   setActiveTab,
   isOpenMobile,
   onCloseMobile,
-  onOpenSupport,
   onLogout,
   isLoggingOut,
   allowedTabs,
@@ -76,7 +73,7 @@ export function Sidebar({
   ];
 
   const content = (
-    <aside className="w-[280px] h-full bg-[#1a1b22] dark:bg-[#060919] text-[#e3e1ec] flex flex-col py-5 px-3 border-r border-[#2e366b]/30 shadow-xl select-none">
+    <aside className="w-[min(86vw,320px)] lg:w-[280px] h-[100dvh] bg-[#1a1b22] dark:bg-[#060919] text-[#e3e1ec] flex flex-col py-4 sm:py-5 px-3 border-r border-[#2e366b]/30 shadow-xl select-none mobile-safe-bottom">
       {/* Brand Header */}
       <div className="px-3 mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -112,7 +109,7 @@ export function Sidebar({
                 setActiveTab(item.id as TabType);
                 onCloseMobile();
               }}
-              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl font-medium text-xs transition-all ${
+              className={`w-full min-h-11 flex items-center justify-between px-3.5 py-2.5 rounded-xl font-medium text-xs transition-all ${
                 isActive
                   ? 'bg-[#0066ff] text-white shadow-md shadow-[#0066ff]/20 font-semibold'
                   : 'text-[#c2c6d8] hover:bg-white/5 hover:text-white'
@@ -138,19 +135,7 @@ export function Sidebar({
 
       {/* Footer Navigation */}
       <div className="pt-4 mt-2 border-t border-white/10 space-y-1">
-        <button
-          onClick={onOpenSupport}
-          className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium text-xs text-[#c2c6d8] hover:bg-white/5 hover:text-white transition-all"
-        >
-          <HelpCircle className="w-4 h-4 text-[#727687]" />
-          <span>Suporte & Ajuda</span>
-        </button>
-
-        <div className="p-3 bg-white/5 rounded-xl mt-3 flex items-center justify-between">
-          <div className="text-[11px]">
-            <p className="text-white font-semibold">Agência Scale Pro</p>
-            <p className="text-[#727687]">42 GBPs Ativos</p>
-          </div>
+        <div className="p-3 bg-white/5 rounded-xl mt-3 flex items-center justify-end">
           <button
             type="button"
             onClick={onLogout}
@@ -183,6 +168,30 @@ export function Sidebar({
           <div className="relative z-10">{content}</div>
         </div>
       )}
+
+      <nav className="lg:hidden fixed inset-x-0 bottom-0 z-40 bg-white/95 dark:bg-[#141936]/95 backdrop-blur-xl border-t border-[#c2c6d8]/40 dark:border-[#2e366b] px-1 pt-1 mobile-safe-bottom">
+        <div className="grid grid-cols-4">
+          {navItems
+            .filter(item => ['dashboard', 'prospeccao', 'followup', 'crm'].includes(item.id) && allowedTabs.includes(item.id))
+            .map(item => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={`mobile-${item.id}`}
+                  type="button"
+                  onClick={() => setActiveTab(item.id)}
+                  className={`min-h-14 rounded-xl flex flex-col items-center justify-center gap-1 text-[9px] font-bold transition-colors ${
+                    isActive ? 'text-[#0066ff] bg-[#0066ff]/8' : 'text-[#727687]'
+                  }`}
+                >
+                  <Icon className="w-5 h-5" />
+                  <span>{item.id === 'dashboard' ? 'Início' : item.label.replace(' (Vendas)', '')}</span>
+                </button>
+              );
+            })}
+        </div>
+      </nav>
     </>
   );
 }

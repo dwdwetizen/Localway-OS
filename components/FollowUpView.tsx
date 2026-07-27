@@ -171,13 +171,13 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
     return typeof days === 'number' && days >= 2 && days <= 3;
   };
 
-  return <div className="space-y-6 animate-in fade-in duration-300">
+  return <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-300">
     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-[#141936] p-5 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
       <div><h2 className="text-xl font-bold font-poppins">Follow-up</h2><p className="text-xs text-[#727687]">Leads com retorno, ligação ou reunião programada.</p></div>
-      <button onClick={() => setAddOpen(true)} className="h-10 px-4 flex items-center gap-2 rounded-xl bg-[#0066ff] text-white text-xs font-bold"><Plus className="w-4 h-4"/> Adicionar follow-up</button>
+      <button onClick={() => setAddOpen(true)} className="w-full md:w-auto h-11 px-4 flex items-center justify-center gap-2 rounded-xl bg-[#0066ff] text-white text-xs font-bold"><Plus className="w-4 h-4"/> Adicionar follow-up</button>
     </div>
     {error && <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800">{error}</div>}
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div className="grid grid-cols-3 gap-2 sm:gap-4">
       <Metric label="Agendados" value={list.length} />
       <Metric label="Urgentes: até amanhã" value={list.filter(isDue).length} warning />
       <Metric label="Atenção: 2 a 3 dias" value={list.filter(isNear).length} />
@@ -203,7 +203,7 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
             <p className="text-[10px] text-[#727687] truncate">
               Próximo contato: {lead.next_action_at ? new Date(lead.next_action_at).toLocaleString('pt-BR') : 'não agendado'} • ⭐ {lead.rating ?? '—'} ({lead.review_count ?? 0})
             </p>
-            <div className="flex items-center gap-0.5">
+            <div className="flex items-center gap-1 flex-wrap pt-1 lg:pt-0">
               {lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer" className="p-1.5 rounded-lg text-[#0066ff] hover:bg-[#0066ff]/10" title="Abrir perfil no Google Maps"><ExternalLink className="w-3.5 h-3.5" /></a>}
               {whatsApp && <a href={whatsApp} target="_blank" rel="noreferrer" className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50" title="WhatsApp"><MessageCircle className="w-3.5 h-3.5" /></a>}
               {lead.phone && <a href={`tel:${lead.phone.replace(/\D/g, '')}`} className="p-1.5 rounded-lg text-[#0066ff] hover:bg-[#0066ff]/10" title="Ligar"><PhoneCall className="w-3.5 h-3.5" /></a>}
@@ -221,8 +221,8 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
         </article>;
       })}
     </div>
-    {addOpen && <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-lg bg-white dark:bg-[#141936] rounded-2xl shadow-2xl border border-[#c2c6d8]/30 p-6 space-y-4">
+    {addOpen && <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm">
+      <div className="w-full max-w-lg max-h-[92dvh] overflow-y-auto bg-white dark:bg-[#141936] rounded-t-3xl sm:rounded-2xl shadow-2xl border border-[#c2c6d8]/30 p-4 sm:p-6 space-y-4 mobile-safe-bottom">
         <div className="flex items-start justify-between"><div><h3 className="font-bold text-lg">Adicionar follow-up</h3><p className="text-xs text-[#727687]">Escolha uma empresa já cadastrada e programe o próximo contato.</p></div><button onClick={() => setAddOpen(false)}><X className="w-5 h-5"/></button></div>
         <label className="text-xs font-bold block">Empresa<select value={newFollowUp.leadId} onChange={event => setNewFollowUp({ ...newFollowUp, leadId: event.target.value })} className="input mt-1"><option value="">Selecione uma empresa</option>{leads.filter(lead => lead.status !== 'perdido').map(lead => <option key={lead.id} value={lead.id}>{lead.company_name}</option>)}</select></label>
         <label className="text-xs font-bold block">Data e hora do retorno com o decisor<input type="datetime-local" value={newFollowUp.date} onChange={event => setNewFollowUp({ ...newFollowUp, date: event.target.value })} className="input mt-1"/></label>
@@ -234,5 +234,5 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
 }
 
 function Metric({ label, value, warning }: { label: string; value: number; warning?: boolean }) {
-  return <div className="bg-white dark:bg-[#141936] p-4 rounded-xl border border-[#c2c6d8]/30 dark:border-[#2e366b]"><span className="text-[10px] font-bold text-[#727687] uppercase">{label}</span><p className={`text-2xl font-bold mt-1 ${warning ? 'text-rose-600' : 'text-[#0066ff]'}`}>{value}</p></div>;
+  return <div className="min-w-0 bg-white dark:bg-[#141936] p-3 sm:p-4 rounded-xl border border-[#c2c6d8]/30 dark:border-[#2e366b]"><span className="block text-[9px] sm:text-[10px] leading-tight font-bold text-[#727687] uppercase">{label}</span><p className={`text-xl sm:text-2xl font-bold mt-1 ${warning ? 'text-rose-600' : 'text-[#0066ff]'}`}>{value}</p></div>;
 }

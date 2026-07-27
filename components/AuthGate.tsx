@@ -217,7 +217,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   return (
     <main className="min-h-screen grid place-items-center bg-[#fbf8ff] dark:bg-[#0a0e27] p-4">
-      <form onSubmit={submit} className="w-full max-w-sm bg-white dark:bg-[#141936] rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-xl p-7 space-y-5">
+      <form onSubmit={submit} className="w-full max-w-sm bg-white dark:bg-[#141936] rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-xl p-5 sm:p-7 space-y-5">
         <div className="text-center space-y-2">
           <div className="mx-auto w-11 h-11 grid place-items-center rounded-xl bg-[#0066ff] text-white"><Sparkles className="w-5 h-5" /></div>
           <h1 className="font-bold text-xl">Localway OS</h1>
@@ -246,7 +246,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
         {!supabase && <p className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">{supabaseConfigurationError()}</p>}
         <label className="block text-xs font-semibold">
-          Nome de usuário
+          Nome de usuário ou e-mail
           <input required autoComplete="username" value={username} onChange={event => setUsername(event.target.value.toLowerCase())} className="mt-1 w-full p-2.5 rounded-xl border border-[#c2c6d8]/40 bg-[#f4f2fd] text-sm" />
         </label>
         <label className="block text-xs font-semibold">

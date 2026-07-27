@@ -16,7 +16,7 @@ interface ToastProps {
 
 export function ToastContainer({ toasts, onDismiss }: ToastProps) {
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 max-w-md w-full pointer-events-none">
+    <div className="fixed bottom-20 lg:bottom-6 left-3 right-3 sm:left-auto sm:right-6 z-[60] flex flex-col gap-2 sm:max-w-md sm:w-full pointer-events-none">
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onDismiss={onDismiss} />
       ))}
@@ -45,10 +45,10 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
   };
 
   return (
-    <div className={`pointer-events-auto flex items-center justify-between gap-3 p-4 rounded-xl border backdrop-blur-md shadow-xl transition-all duration-300 animate-in fade-in slide-in-from-bottom-3 ${bgColors[toast.type]}`}>
+    <div className={`pointer-events-auto flex items-center justify-between gap-3 p-3 sm:p-4 rounded-xl border backdrop-blur-md shadow-xl transition-all duration-300 animate-in fade-in slide-in-from-bottom-3 ${bgColors[toast.type]}`}>
       <div className="flex items-center gap-3">
         {icons[toast.type]}
-        <p className="text-sm font-medium">{toast.message}</p>
+        <p className="text-xs sm:text-sm font-medium">{toast.message}</p>
       </div>
       <button
         onClick={() => onDismiss(toast.id)}

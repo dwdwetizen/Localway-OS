@@ -218,7 +218,7 @@ export function AnalisesView({ onShowToast }: AnalisesViewProps) {
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
+    <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-300">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-[#141936] p-5 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-2xl bg-[#0066ff]/10 text-[#0066ff] flex items-center justify-center"><Zap className="w-6 h-6" /></div>
@@ -227,8 +227,8 @@ export function AnalisesView({ onShowToast }: AnalisesViewProps) {
             <p className="text-xs text-[#727687]">Dados reais coletados pelo Google Places e salvos no histórico.</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <select value={selected?.id || ''} onChange={event => setSelectedId(event.target.value)} className="max-w-[290px] bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 text-xs font-bold px-4 py-2.5 rounded-xl">
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <select value={selected?.id || ''} onChange={event => setSelectedId(event.target.value)} className="min-w-0 flex-1 md:max-w-[290px] bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 text-xs font-bold px-4 py-2.5 rounded-xl">
             {!analyzable.length && <option value="">Nenhuma empresa do Google</option>}
             {analyzable.map(lead => <option key={lead.id} value={lead.id}>{lead.company_name} — Score {lead.health_score ?? '—'}</option>)}
           </select>
@@ -278,7 +278,7 @@ export function AnalisesView({ onShowToast }: AnalisesViewProps) {
       ) : (
         <>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <section className="lg:col-span-2 bg-white dark:bg-[#141936] p-6 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
+            <section className="lg:col-span-2 bg-white dark:bg-[#141936] p-4 sm:p-6 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
@@ -304,7 +304,7 @@ export function AnalisesView({ onShowToast }: AnalisesViewProps) {
               <p className="mt-5 p-4 rounded-xl bg-[#f4f2fd] dark:bg-[#10142e] text-xs leading-relaxed">{analysis.summary || selected.opportunity || 'Atualize a análise para gerar o diagnóstico detalhado.'}</p>
             </section>
 
-            <section className="bg-white dark:bg-[#141936] p-6 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm text-center">
+            <section className="bg-white dark:bg-[#141936] p-4 sm:p-6 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm text-center">
               <h3 className="font-bold">Health Score</h3>
               <div className="relative my-5 inline-flex items-center justify-center">
                 <svg className="w-40 h-40 gauge-svg" viewBox="0 0 160 160">
@@ -326,7 +326,7 @@ export function AnalisesView({ onShowToast }: AnalisesViewProps) {
 
           {canSeeSolutions ? (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <section className="bg-white dark:bg-[#141936] p-6 rounded-2xl border">
+              <section className="bg-white dark:bg-[#141936] p-4 sm:p-6 rounded-2xl border">
                 <div className="flex items-center gap-2 mb-4"><Sparkles className="w-5 h-5 text-[#0066ff]" /><h3 className="font-bold">Recomendações comerciais</h3></div>
                 <div className="space-y-3">
                   {(analysis.recommendations || []).map((item, index) => (
@@ -338,7 +338,7 @@ export function AnalisesView({ onShowToast }: AnalisesViewProps) {
                   {!analysis.recommendations?.length && <p className="text-xs text-[#727687]">Atualize a análise para gerar recomendações.</p>}
                 </div>
               </section>
-              <section className="bg-gradient-to-br from-[#0050cb] to-[#0066ff] text-white p-6 rounded-2xl">
+              <section className="bg-gradient-to-br from-[#0050cb] to-[#0066ff] text-white p-4 sm:p-6 rounded-2xl">
                 <h3 className="font-bold flex items-center gap-2"><TrendingUp className="w-5 h-5" /> Cenário comercial</h3>
                 <p className="text-xs text-white/75 mt-2">Simulação interna para apoiar a apresentação. Não representa dados oficiais do Google Business Profile.</p>
                 <label className="block text-xs font-bold mt-6">Crescimento estimado: +{roiGrowth}%<input type="range" min="5" max="100" value={roiGrowth} onChange={event => setRoiGrowth(Number(event.target.value))} className="w-full mt-3 accent-amber-300" /></label>
@@ -368,5 +368,5 @@ function MetricBar({ label, value }: { label: string; value: number }) {
 }
 
 function AnalysisList({ title, items, positive }: { title: string; items: string[]; positive: boolean }) {
-  return <section className="bg-white dark:bg-[#141936] p-6 rounded-2xl border"><h3 className="font-bold mb-4">{title}</h3><div className="space-y-2">{items.map((item, index) => <div key={`${item}-${index}`} className={`p-3 rounded-xl flex gap-2 text-xs ${positive ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-200' : 'bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200'}`}>{positive ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}<span>{item}</span></div>)}{!items.length && <p className="text-xs text-[#727687]">Atualize a análise para preencher esta seção.</p>}</div></section>;
+  return <section className="bg-white dark:bg-[#141936] p-4 sm:p-6 rounded-2xl border"><h3 className="font-bold mb-4">{title}</h3><div className="space-y-2">{items.map((item, index) => <div key={`${item}-${index}`} className={`p-3 rounded-xl flex gap-2 text-xs ${positive ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-200' : 'bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200'}`}>{positive ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}<span>{item}</span></div>)}{!items.length && <p className="text-xs text-[#727687]">Atualize a análise para preencher esta seção.</p>}</div></section>;
 }

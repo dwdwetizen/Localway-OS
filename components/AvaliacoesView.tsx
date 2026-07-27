@@ -42,7 +42,7 @@ export function AvaliacoesView({ onShowToast, onOpenAiReviewModal }: AvaliacoesV
   ];
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
+    <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-300">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-[#141936] p-5 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
         <div>
           <h2 className="text-xl font-bold font-poppins text-[#1a1b22] dark:text-[#f8f7ff]">
@@ -55,7 +55,7 @@ export function AvaliacoesView({ onShowToast, onOpenAiReviewModal }: AvaliacoesV
 
         <button
           onClick={() => onShowToast('Regras de auto-resposta por IA ativadas para todas as contas GBP!')}
-          className="flex items-center gap-2 bg-[#0066ff] hover:bg-[#0050cb] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition-all"
+          className="w-full md:w-auto min-h-11 flex items-center justify-center gap-2 bg-[#0066ff] hover:bg-[#0050cb] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition-all"
         >
           <Sparkles className="w-4 h-4" /> Ativar Auto-Resposta IA em Lote
         </button>
@@ -90,7 +90,7 @@ export function AvaliacoesView({ onShowToast, onOpenAiReviewModal }: AvaliacoesV
               {!rev.responded ? (
                 <button
                   onClick={() => onOpenAiReviewModal(rev.company, rev.reviewer, rev.text)}
-                  className="flex items-center gap-1.5 px-4 py-2.5 bg-[#0066ff] hover:bg-[#0050cb] text-white font-bold text-xs rounded-xl shadow transition-all"
+                  className="w-full md:w-auto min-h-11 flex items-center justify-center gap-1.5 px-4 py-2.5 bg-[#0066ff] hover:bg-[#0050cb] text-white font-bold text-xs rounded-xl shadow transition-all"
                 >
                   <Sparkles className="w-4 h-4" /> Responder com IA
                 </button>

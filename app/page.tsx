@@ -18,7 +18,6 @@ import { AdminView } from '@/components/AdminView';
 import { ToastContainer, ToastMessage } from '@/components/Toast';
 import { AiPitchModal } from '@/components/AiPitchModal';
 import { AiReviewModal } from '@/components/AiReviewModal';
-import { SupportModal } from '@/components/SupportModal';
 import { AuthGate, useAuthProfile } from '@/components/AuthGate';
 import { Lead } from '@/lib/leads';
 import { supabase, supabaseConfigurationError } from '@/lib/supabase';
@@ -83,7 +82,6 @@ function AuthenticatedHome() {
     reviewText: '',
   });
 
-  const [showSupportModal, setShowSupportModal] = useState(false);
   const isAdmin = ['admin', 'administrador'].includes((profile.role || '').trim().toLowerCase());
   const allowedTabs = useMemo<TabType[]>(() => {
     if (isAdmin) return allTabs;
@@ -171,14 +169,13 @@ function AuthenticatedHome() {
         setActiveTab={setActiveTab}
         isOpenMobile={isMobileSidebarOpen}
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
-        onOpenSupport={() => setShowSupportModal(true)}
         onLogout={() => void handleLogout()}
         isLoggingOut={isLoggingOut}
         allowedTabs={allowedTabs}
       />
 
       {/* Main Layout Area */}
-      <div className="lg:ml-[280px] flex flex-col min-h-screen transition-all">
+      <div className="lg:ml-[280px] flex flex-col min-h-screen min-w-0 transition-all">
         {/* Sticky Header */}
         <Header
           darkMode={darkMode}
@@ -186,13 +183,12 @@ function AuthenticatedHome() {
           onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
           searchTerm={searchTerm}
           setSearchTerm={setSearchTerm}
-          onOpenSupport={() => setShowSupportModal(true)}
           onSwitchAccount={() => void handleLogout()}
           isSwitchingAccount={isLoggingOut}
         />
 
         {/* Content Body */}
-        <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
+        <main className="flex-1 min-w-0 p-3 sm:p-4 md:p-6 lg:p-8 pb-24 sm:pb-24 lg:pb-8 max-w-7xl w-full mx-auto space-y-4 sm:space-y-6">
           {!allowedTabs.length && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
               Seu perfil ainda não possui módulos liberados. Fale com o administrador.
@@ -290,12 +286,6 @@ function AuthenticatedHome() {
         />
       )}
 
-      {showSupportModal && (
-        <SupportModal
-          onClose={() => setShowSupportModal(false)}
-          onShowToast={showToast}
-        />
-      )}
     </div>
   );
 }

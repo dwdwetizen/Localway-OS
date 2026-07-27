@@ -25,9 +25,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const username = payload.username?.trim().toLowerCase() || '';
+  const login = payload.username?.trim().toLowerCase() || '';
   const password = payload.password || '';
-  if (!username || !password) {
+  if (!login || !password) {
     return NextResponse.json(
       { error: 'Informe o nome de usuário e a senha.' },
       { status: 400, headers: noStoreHeaders },
@@ -37,11 +37,12 @@ export async function POST(request: NextRequest) {
   const admin = createClient(url, secretKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const { data: profile, error: profileError } = await admin
+  const profileQuery = admin
     .from('profiles')
-    .select('email, is_active')
-    .ilike('username', username)
-    .maybeSingle();
+    .select('email, is_active');
+  const { data: profile, error: profileError } = login.includes('@')
+    ? await profileQuery.ilike('email', login).maybeSingle()
+    : await profileQuery.ilike('username', login).maybeSingle();
 
   if (profileError || !profile?.is_active) {
     return NextResponse.json(

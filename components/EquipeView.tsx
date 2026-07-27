@@ -54,7 +54,7 @@ export function EquipeView({ onShowToast }: EquipeViewProps) {
   }), [teamMembers]);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
+    <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-300">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-[#141936] p-5 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
         <div>
           <h2 className="text-xl font-bold font-poppins text-[#1a1b22] dark:text-[#f8f7ff]">
@@ -64,12 +64,12 @@ export function EquipeView({ onShowToast }: EquipeViewProps) {
             Ranking real dos usuários ativos, calculado pelo histórico individual de prospecção, reuniões e vendas pagas.
           </p>
         </div>
-        <button type="button" onClick={() => void loadTeam()} disabled={loading} className="px-4 py-2.5 rounded-xl border border-[#0066ff]/35 text-[#0066ff] text-xs font-bold disabled:opacity-50">
+        <button type="button" onClick={() => void loadTeam()} disabled={loading} className="w-full md:w-auto min-h-11 px-4 py-2.5 rounded-xl border border-[#0066ff]/35 text-[#0066ff] text-xs font-bold disabled:opacity-50">
           Atualizar ranking
         </button>
       </header>
 
-      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <section className="grid grid-cols-2 xl:grid-cols-4 gap-2 sm:gap-4">
         <Metric icon={Users} label="Usuários ativos" value={teamMembers.length} />
         <Metric icon={PhoneCall} label="Leads abordados" value={totals.leads} />
         <Metric icon={CalendarCheck} label="Reuniões marcadas" value={totals.meetings} />
@@ -86,7 +86,37 @@ export function EquipeView({ onShowToast }: EquipeViewProps) {
             <p className="text-xs text-[#727687] mt-1">Crie os colaboradores em Administração → Gestão de usuários.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          <div className="md:hidden divide-y divide-[#c2c6d8]/20">
+            {teamMembers.map((member, index) => {
+              const rank = index + 1;
+              const memberName = member.name || member.username || 'Colaborador';
+              return (
+                <article key={`mobile-${member.user_id}`} className="p-4">
+                  <div className="flex items-center gap-3">
+                    <span className={`w-9 h-9 rounded-full grid place-items-center font-black text-xs ${
+                      rank === 1 ? 'bg-amber-100 text-amber-700' : rank === 2 ? 'bg-slate-100 text-slate-600' : rank === 3 ? 'bg-orange-100 text-orange-700' : 'bg-[#f4f2fd] text-[#727687]'
+                    }`}>
+                      {rank <= 3 ? <Award className="w-4 h-4" /> : `#${rank}`}
+                    </span>
+                    <span className="w-10 h-10 rounded-full bg-[#0066ff]/10 text-[#0066ff] grid place-items-center font-bold">
+                      {memberName.slice(0, 1).toUpperCase()}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-sm truncate">{memberName}</p>
+                      <p className="text-[10px] text-[#727687] truncate">@{member.username} • {member.job_title}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 mt-3 text-center">
+                    <TeamNumber label="Leads" value={member.leads_approached} />
+                    <TeamNumber label="Reuniões" value={member.meetings_scheduled} accent="text-purple-600" />
+                    <TeamNumber label="Vendas" value={member.sales_converted} accent="text-emerald-600" />
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full min-w-[760px] text-left text-xs">
               <thead className="bg-[#f4f2fd] dark:bg-[#10142e] text-[#727687] font-bold uppercase border-b border-[#c2c6d8]/30">
                 <tr>
@@ -119,7 +149,7 @@ export function EquipeView({ onShowToast }: EquipeViewProps) {
                       <td className="p-4">
                         <div className="flex items-center gap-3">
                           <span className="w-9 h-9 rounded-full bg-[#0066ff]/10 text-[#0066ff] grid place-items-center font-bold">
-                            {member.name.slice(0, 1).toUpperCase()}
+                            {(member.name || member.username || 'C').slice(0, 1).toUpperCase()}
                           </span>
                           <div>
                             <p className="font-bold text-[#1a1b22] dark:text-[#f8f7ff]">{member.name}</p>
@@ -137,6 +167,7 @@ export function EquipeView({ onShowToast }: EquipeViewProps) {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </section>
     </div>
@@ -155,5 +186,12 @@ function Metric({
   return <div className="bg-white dark:bg-[#141936] p-4 rounded-xl border border-[#c2c6d8]/30 dark:border-[#2e366b]">
     <div className="flex items-center gap-2 text-[#727687]"><Icon className="w-4 h-4 text-[#0066ff]" /><span className="text-[10px] font-bold uppercase">{label}</span></div>
     <p className="text-2xl font-bold mt-2 text-[#1a1b22] dark:text-[#f8f7ff]">{value}</p>
+  </div>;
+}
+
+function TeamNumber({ label, value, accent = '' }: { label: string; value: number; accent?: string }) {
+  return <div className="rounded-xl bg-[#f4f2fd] dark:bg-[#10142e] p-2">
+    <p className="text-[9px] text-[#727687] uppercase">{label}</p>
+    <p className={`font-bold text-base mt-0.5 ${accent}`}>{value}</p>
   </div>;
 }

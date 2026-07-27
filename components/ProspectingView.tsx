@@ -239,16 +239,16 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
     return true;
   };
 
-  return <div className="space-y-6 animate-in fade-in duration-300">
+  return <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-300">
     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-[#141936] p-5 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
       <div><h2 className="text-xl font-bold font-poppins text-[#1a1b22] dark:text-[#f8f7ff]">Prospecção</h2><p className="text-xs text-[#727687]">Organize separadamente os contatos presenciais e os leads gerados online.</p></div>
-      {prospectingMode === 'presencial' && <button aria-label="Adicionar empresa presencial" title="Adicionar empresa presencial" onClick={() => setManualOpen(true)} className="px-4 h-10 flex items-center gap-2 bg-[#0066ff] hover:bg-[#0050cb] text-white rounded-xl shadow text-xs font-bold"><Plus className="w-4 h-4" /> Adicionar presencial</button>}
+      {prospectingMode === 'presencial' && <button aria-label="Adicionar empresa presencial" title="Adicionar empresa presencial" onClick={() => setManualOpen(true)} className="w-full md:w-auto px-4 h-11 flex items-center justify-center gap-2 bg-[#0066ff] hover:bg-[#0050cb] text-white rounded-xl shadow text-xs font-bold"><Plus className="w-4 h-4" /> Adicionar presencial</button>}
     </div>
 
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-2xl bg-white dark:bg-[#141936] p-2 border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
-      <button onClick={() => { setProspectingMode('presencial'); setSelected([]); }} className={`h-12 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-colors ${prospectingMode === 'presencial' ? 'bg-[#0066ff] text-white shadow' : 'text-[#727687] hover:bg-[#f4f2fd] dark:hover:bg-[#10142e]'}`}><Building2 className="w-4 h-4" /> Prospecção presencial</button>
-      <button onClick={() => { setProspectingMode('online'); setSelected([]); }} className={`h-12 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-colors ${prospectingMode === 'online' ? 'bg-[#0066ff] text-white shadow' : 'text-[#727687] hover:bg-[#f4f2fd] dark:hover:bg-[#10142e]'}`}><Globe2 className="w-4 h-4" /> Prospecção online</button>
-      <button onClick={() => { setProspectingMode('arquivados'); setSelected([]); }} className={`h-12 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-colors ${prospectingMode === 'arquivados' ? 'bg-[#1a1b22] text-white shadow dark:bg-[#f8f7ff] dark:text-[#1a1b22]' : 'text-[#727687] hover:bg-[#f4f2fd] dark:hover:bg-[#10142e]'}`}><Archive className="w-4 h-4" /> Arquivados ({archivedLeads.length})</button>
+    <div className="flex sm:grid sm:grid-cols-3 gap-2 overflow-x-auto mobile-scroll rounded-2xl bg-white dark:bg-[#141936] p-2 border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
+      <button onClick={() => { setProspectingMode('presencial'); setSelected([]); }} className={`min-w-[165px] sm:min-w-0 h-12 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-colors ${prospectingMode === 'presencial' ? 'bg-[#0066ff] text-white shadow' : 'text-[#727687] hover:bg-[#f4f2fd] dark:hover:bg-[#10142e]'}`}><Building2 className="w-4 h-4" /> Prospecção presencial</button>
+      <button onClick={() => { setProspectingMode('online'); setSelected([]); }} className={`min-w-[155px] sm:min-w-0 h-12 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-colors ${prospectingMode === 'online' ? 'bg-[#0066ff] text-white shadow' : 'text-[#727687] hover:bg-[#f4f2fd] dark:hover:bg-[#10142e]'}`}><Globe2 className="w-4 h-4" /> Prospecção online</button>
+      <button onClick={() => { setProspectingMode('arquivados'); setSelected([]); }} className={`min-w-[135px] sm:min-w-0 h-12 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-colors ${prospectingMode === 'arquivados' ? 'bg-[#1a1b22] text-white shadow dark:bg-[#f8f7ff] dark:text-[#1a1b22]' : 'text-[#727687] hover:bg-[#f4f2fd] dark:hover:bg-[#10142e]'}`}><Archive className="w-4 h-4" /> Arquivados ({archivedLeads.length})</button>
     </div>
 
     {prospectingMode === 'online' && <div className="bg-white dark:bg-[#141936] p-4 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-4 items-end">
@@ -275,7 +275,7 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
       </div>
     </div>}
 
-    {manualOpen && <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"><form onSubmit={saveManual} className="w-full max-w-2xl bg-white dark:bg-[#141936] rounded-2xl shadow-2xl border border-[#c2c6d8]/30 p-6 space-y-4"><div className="flex justify-between items-center"><div><h3 className="font-bold text-lg">Adicionar empresa</h3><p className="text-xs text-[#727687]">Para uma visita presencial ou indicação.</p></div><button type="button" onClick={() => setManualOpen(false)}><X className="w-5 h-5" /></button></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><Field label="Empresa *" value={manual.companyName} onChange={value => setManual({ ...manual, companyName: value })} /><Field label="Segmento" value={manual.category} onChange={value => setManual({ ...manual, category: value })} /><Field label="Cidade" value={manual.city} onChange={value => setManual({ ...manual, city: value })} /><Field label="Telefone / WhatsApp" value={manual.phone} onChange={value => setManual({ ...manual, phone: value, whatsapp: value })} /><Field label="Nome do decisor" value={manual.decisionMaker} onChange={value => setManual({ ...manual, decisionMaker: value })} /><Field label="Nome da atendente" value={manual.receptionist} onChange={value => setManual({ ...manual, receptionist: value })} /><Field label="E-mail" value={manual.email} onChange={value => setManual({ ...manual, email: value })} /><Field label="Endereço" value={manual.address} onChange={value => setManual({ ...manual, address: value })} /></div><label className="text-xs font-semibold block">Observações<textarea value={manual.notes} onChange={event => setManual({ ...manual, notes: event.target.value })} className="mt-1 w-full p-2 rounded-xl border border-[#c2c6d8]/40 bg-[#f4f2fd]" rows={3} /></label><button className="w-full py-2.5 rounded-xl bg-[#0066ff] text-white text-xs font-bold">Adicionar à prospecção</button></form></div>}
+    {manualOpen && <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm"><form onSubmit={saveManual} className="w-full max-w-2xl max-h-[92dvh] overflow-y-auto bg-white dark:bg-[#141936] rounded-t-3xl sm:rounded-2xl shadow-2xl border border-[#c2c6d8]/30 p-4 sm:p-6 space-y-4 mobile-safe-bottom"><div className="flex justify-between items-center"><div><h3 className="font-bold text-lg">Adicionar empresa</h3><p className="text-xs text-[#727687]">Para uma visita presencial ou indicação.</p></div><button type="button" onClick={() => setManualOpen(false)} className="w-10 h-10 grid place-items-center rounded-xl"><X className="w-5 h-5" /></button></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><Field label="Empresa *" value={manual.companyName} onChange={value => setManual({ ...manual, companyName: value })} /><Field label="Segmento" value={manual.category} onChange={value => setManual({ ...manual, category: value })} /><Field label="Cidade" value={manual.city} onChange={value => setManual({ ...manual, city: value })} /><Field label="Telefone / WhatsApp" value={manual.phone} onChange={value => setManual({ ...manual, phone: value, whatsapp: value })} /><Field label="Nome do decisor" value={manual.decisionMaker} onChange={value => setManual({ ...manual, decisionMaker: value })} /><Field label="Nome da atendente" value={manual.receptionist} onChange={value => setManual({ ...manual, receptionist: value })} /><Field label="E-mail" value={manual.email} onChange={value => setManual({ ...manual, email: value })} /><Field label="Endereço" value={manual.address} onChange={value => setManual({ ...manual, address: value })} /></div><label className="text-xs font-semibold block">Observações<textarea value={manual.notes} onChange={event => setManual({ ...manual, notes: event.target.value })} className="mt-1 w-full p-2 rounded-xl border border-[#c2c6d8]/40 bg-[#f4f2fd]" rows={3} /></label><button className="w-full min-h-11 py-2.5 rounded-xl bg-[#0066ff] text-white text-xs font-bold">Adicionar à prospecção</button></form></div>}
   </div>;
 }
 
@@ -321,9 +321,21 @@ function LeadRow({ lead, selected, toggle, updateStep, archiveLead, onPitch }: {
         <p className="text-[10px] text-[#727687] truncate">
           {[lead.address, `⭐ ${lead.rating ?? '—'} (${lead.review_count ?? 0})`, lead.has_website ? 'Tem site' : 'Sem site'].filter(Boolean).join(' • ')}
         </p>
-        <div className="flex items-center gap-0.5 flex-wrap shrink-0">
+        <div className="flex items-center gap-1 flex-wrap shrink-0 pt-1 lg:pt-0">
           {lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer" title="Abrir perfil no Google Maps" className="p-1.5 text-[#0066ff] hover:bg-[#0066ff]/10 rounded-lg"><ExternalLink className="w-3.5 h-3.5" /></a>}
-          {wa && <a href={wa} target="_blank" rel="noreferrer" title="Abrir WhatsApp" className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg"><MessageCircle className="w-3.5 h-3.5" /></a>}
+          {wa && (
+            <a
+              href={wa}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`Abrir WhatsApp de ${lead.company_name}`}
+              aria-label={`Abrir WhatsApp de ${lead.company_name}`}
+              className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded-lg flex items-center gap-1.5 transition-colors"
+            >
+              <MessageCircle className="w-3.5 h-3.5" />
+              WhatsApp
+            </a>
+          )}
           {lead.phone && <a href={`tel:${lead.phone.replace(/\D/g, '')}`} title="Ligar" className="p-1.5 text-[#0066ff] hover:bg-[#0066ff]/10 rounded-lg"><PhoneCall className="w-3.5 h-3.5" /></a>}
           <button onClick={() => onPitch(lead.company_name, lead)} className="px-2 py-1.5 bg-[#0066ff] hover:bg-[#0050cb] text-white text-[10px] font-bold rounded-lg flex items-center gap-1"><Sparkles className="w-3 h-3" /> IA</button>
           <button type="button" onClick={() => setExpanded(current => !current)} className="px-2 py-1.5 border border-[#c2c6d8]/40 text-[10px] font-bold rounded-lg flex items-center gap-1">
@@ -333,7 +345,7 @@ function LeadRow({ lead, selected, toggle, updateStep, archiveLead, onPitch }: {
         </div>
       </div>
     </div>
-    {expanded && <div className="mt-2 ml-6 pt-2 border-t border-[#c2c6d8]/20">
+    {expanded && <div className="mt-2 sm:ml-6 pt-2 border-t border-[#c2c6d8]/20">
       {lead.opportunity && <p className="mb-2 text-[10px] text-amber-700">{lead.opportunity}</p>}
       <div className="grid grid-cols-1 md:grid-cols-[180px_1fr_auto] gap-2 items-end">
       <label className="text-[10px] font-bold text-[#727687]">RESULTADO<select value={nextSteps.includes(status) ? status : ''} onChange={event => { const nextStatus = event.target.value as LeadStatus; setStatus(nextStatus); if (nextStatus === 'nao_atendeu') setNextActionAt(tomorrowReturnValue()); if (nextStatus === 'reuniao_marcada') setNextActionAt(''); setReturnPickerOpen(nextStatus === 'retornar_depois' || nextStatus === 'ligar_depois'); }} className="mt-1 w-full px-2 py-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl"><option value="" disabled>Escolha o resultado</option>{nextSteps.map(item => <option key={item} value={item}>{statusLabel[item]}</option>)}</select></label>
@@ -341,7 +353,7 @@ function LeadRow({ lead, selected, toggle, updateStep, archiveLead, onPitch }: {
       <button disabled={saving || !nextSteps.includes(status)} onClick={() => void register()} className="px-4 py-2.5 rounded-xl bg-[#0066ff] disabled:opacity-50 text-white text-xs font-bold">{saving ? 'Salvando…' : 'Registrar'}</button>
       {(status === 'retornar_depois' || status === 'ligar_depois') && <div className="md:col-start-1 md:col-span-2 relative">
         <p className="text-[10px] font-bold text-[#727687]">DIA DO RETORNO</p>
-        <button type="button" onClick={() => setReturnPickerOpen(current => !current)} className="mt-1 w-full sm:w-auto min-w-52 px-3 py-2 text-xs font-bold flex items-center justify-between gap-3 bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl">
+        <button type="button" onClick={() => setReturnPickerOpen(current => !current)} className="mt-1 w-full sm:w-auto sm:min-w-52 px-3 py-2 text-xs font-bold flex items-center justify-between gap-3 bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl">
           <span>{nextActionAt ? new Date(nextActionAt).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' }) : 'Escolher o dia'}</span>
           <CalendarDays className="w-4 h-4 text-[#0066ff]" />
         </button>

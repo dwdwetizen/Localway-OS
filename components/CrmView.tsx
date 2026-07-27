@@ -89,7 +89,7 @@ export function CrmView({ onShowToast, onOpenAiPitchModal }: CrmViewProps) {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
+    <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-300">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-[#141936] p-5 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
         <div>
           <h2 className="text-xl font-bold font-poppins text-[#1a1b22] dark:text-[#f8f7ff]">CRM & Pipeline de Vendas</h2>
@@ -99,7 +99,7 @@ export function CrmView({ onShowToast, onOpenAiPitchModal }: CrmViewProps) {
               : 'Acompanhe aqui o andamento dos seus leads. As etapas são atualizadas pela gestão.'}
           </p>
         </div>
-        <div className="flex bg-[#f4f2fd] dark:bg-[#10142e] p-1 rounded-xl border border-[#c2c6d8]/30 dark:border-[#2e366b]">
+        <div className="w-full md:w-auto grid grid-cols-2 md:flex bg-[#f4f2fd] dark:bg-[#10142e] p-1 rounded-xl border border-[#c2c6d8]/30 dark:border-[#2e366b]">
           <button
             onClick={() => setViewMode('kanban')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold ${viewMode === 'kanban' ? 'bg-white dark:bg-[#1d234a] text-[#0066ff] shadow-sm' : 'text-[#727687]'}`}
@@ -122,7 +122,7 @@ export function CrmView({ onShowToast, onOpenAiPitchModal }: CrmViewProps) {
         </div>
       )}
 
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <section className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4">
         <Metric label="Pipeline total" value={formatCurrency(pipelineTotal)} />
         <Metric
           label="Negócios ativos"
@@ -139,7 +139,7 @@ export function CrmView({ onShowToast, onOpenAiPitchModal }: CrmViewProps) {
           <Loader2 className="w-6 h-6 animate-spin text-[#0066ff]" />
         </div>
       ) : viewMode === 'kanban' ? (
-        <div className="flex gap-4 overflow-x-auto pb-6 pt-1">
+        <div className="flex gap-3 sm:gap-4 overflow-x-auto mobile-scroll snap-x snap-mandatory pb-4 sm:pb-6 pt-1 -mx-3 px-3 sm:mx-0 sm:px-0">
           {stages.map(stage => {
             const cards = deals.filter(lead => dealStage(lead) === stage.id);
             return (
@@ -149,7 +149,7 @@ export function CrmView({ onShowToast, onOpenAiPitchModal }: CrmViewProps) {
                   if (canManageCrm) event.preventDefault();
                 }}
                 onDrop={event => dropOnStage(event, stage.id)}
-                className="w-80 shrink-0 bg-[#f4f2fd]/60 dark:bg-[#10142e]/60 p-3 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] min-h-[420px]"
+                className="w-[calc(100vw-2.5rem)] max-w-80 sm:w-80 shrink-0 snap-center bg-[#f4f2fd]/60 dark:bg-[#10142e]/60 p-3 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] min-h-[360px] sm:min-h-[420px]"
               >
                 <div className={`p-3 rounded-xl bg-white dark:bg-[#141936] border-l-4 ${stage.color} shadow-sm mb-3`}>
                   <h3 className="font-bold text-xs text-[#1a1b22] dark:text-[#f8f7ff]">{stage.label}</h3>
@@ -167,6 +167,7 @@ export function CrmView({ onShowToast, onOpenAiPitchModal }: CrmViewProps) {
                       onDragStart={() => {
                         if (canManageCrm) setDraggedId(lead.id);
                       }}
+                      onMove={stageId => void move(lead, stageId)}
                       onPitch={() => onOpenAiPitchModal(lead.company_name, lead)}
                     />
                   ))}
@@ -181,7 +182,21 @@ export function CrmView({ onShowToast, onOpenAiPitchModal }: CrmViewProps) {
           })}
         </div>
       ) : (
-        <div className="bg-white dark:bg-[#141936] rounded-2xl border border-[#c2c6d8]/30 overflow-x-auto">
+        <div className="bg-white dark:bg-[#141936] rounded-2xl border border-[#c2c6d8]/30 overflow-hidden">
+          <div className="md:hidden divide-y divide-[#c2c6d8]/20">
+            {deals.map(lead => (
+              <div key={`mobile-table-${lead.id}`} className="p-3">
+                <LeadCard
+                  lead={lead}
+                  canManageCrm={canManageCrm}
+                  onMove={stageId => void move(lead, stageId)}
+                  onPitch={() => onOpenAiPitchModal(lead.company_name, lead)}
+                />
+              </div>
+            ))}
+            {!deals.length && <p className="p-8 text-center text-xs text-[#727687]">Nenhum negócio no CRM.</p>}
+          </div>
+          <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-[#f4f2fd] dark:bg-[#10142e] text-[#727687]">
               <tr>
@@ -212,6 +227,7 @@ export function CrmView({ onShowToast, onOpenAiPitchModal }: CrmViewProps) {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>
@@ -220,9 +236,9 @@ export function CrmView({ onShowToast, onOpenAiPitchModal }: CrmViewProps) {
 
 function Metric({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
   return (
-    <div className="bg-white dark:bg-[#141936] p-4 rounded-xl border border-[#c2c6d8]/30 dark:border-[#2e366b]">
+    <div className="min-w-0 bg-white dark:bg-[#141936] p-3 sm:p-4 rounded-xl border border-[#c2c6d8]/30 dark:border-[#2e366b]">
       <span className="text-[10px] font-bold text-[#727687] uppercase">{label}</span>
-      <p className={`text-xl font-bold font-poppins mt-0.5 ${accent ? 'text-emerald-600' : 'text-[#1a1b22] dark:text-[#f8f7ff]'}`}>
+      <p className={`text-base sm:text-xl break-words font-bold font-poppins mt-0.5 ${accent ? 'text-emerald-600' : 'text-[#1a1b22] dark:text-[#f8f7ff]'}`}>
         {value}
       </p>
     </div>
@@ -233,11 +249,13 @@ function LeadCard({
   lead,
   onPitch,
   canManageCrm,
+  onMove,
   ...dragProps
 }: {
   lead: Lead;
   onPitch: () => void;
   canManageCrm: boolean;
+  onMove: (stage: CrmStage) => void;
   draggable?: boolean;
   onDragStart?: () => void;
 }) {
@@ -270,14 +288,27 @@ function LeadCard({
         <p className="flex gap-1 items-center"><CalendarClock className="w-3 h-3" /> {formatDate(lead.next_action_at)}</p>
       </div>
 
+      {canManageCrm && (
+        <label className="lg:hidden block text-[10px] font-bold text-[#727687]">
+          MOVER PARA
+          <select
+            value={dealStage(lead)}
+            onChange={event => onMove(event.target.value as CrmStage)}
+            className="mt-1 w-full min-h-11 px-3 rounded-xl bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 font-semibold text-[#1a1b22] dark:text-[#f8f7ff]"
+          >
+            {stages.map(stage => <option key={stage.id} value={stage.id}>{stage.label}</option>)}
+          </select>
+        </label>
+      )}
+
       <div className="flex items-center justify-between pt-2 border-t border-[#c2c6d8]/20">
         <strong className="text-xs text-emerald-600">{formatCurrency(lead.estimated_value)}</strong>
         <div className="flex gap-1">
-          {lead.calendar_event_url && <a href={lead.calendar_event_url} target="_blank" rel="noreferrer" className="p-1.5 text-amber-600" title="Abrir reunião no Google Agenda"><CalendarClock className="w-3.5 h-3.5" /></a>}
-          {lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer" className="p-1.5 text-[#0066ff]" title="Abrir no Maps"><MapPin className="w-3.5 h-3.5" /></a>}
-          {whatsApp && <a href={whatsApp} target="_blank" rel="noreferrer" className="p-1.5 text-emerald-600" title="WhatsApp"><Phone className="w-3.5 h-3.5" /></a>}
-          {lead.website_url && <a href={lead.website_url} target="_blank" rel="noreferrer" className="p-1.5 text-[#0066ff]" title="Site"><Globe2 className="w-3.5 h-3.5" /></a>}
-          <button onClick={onPitch} className="p-1.5 text-purple-600" title="Gerar pitch"><Sparkles className="w-3.5 h-3.5" /></button>
+          {lead.calendar_event_url && <a href={lead.calendar_event_url} target="_blank" rel="noreferrer" className="w-9 h-9 grid place-items-center text-amber-600" title="Abrir reunião no Google Agenda"><CalendarClock className="w-4 h-4" /></a>}
+          {lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer" className="w-9 h-9 grid place-items-center text-[#0066ff]" title="Abrir no Maps"><MapPin className="w-4 h-4" /></a>}
+          {whatsApp && <a href={whatsApp} target="_blank" rel="noreferrer" className="w-9 h-9 grid place-items-center text-emerald-600" title="WhatsApp"><Phone className="w-4 h-4" /></a>}
+          {lead.website_url && <a href={lead.website_url} target="_blank" rel="noreferrer" className="w-9 h-9 grid place-items-center text-[#0066ff]" title="Site"><Globe2 className="w-4 h-4" /></a>}
+          <button onClick={onPitch} className="w-9 h-9 grid place-items-center text-purple-600" title="Gerar pitch"><Sparkles className="w-4 h-4" /></button>
         </div>
       </div>
     </article>
