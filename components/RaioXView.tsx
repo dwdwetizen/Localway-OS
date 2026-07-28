@@ -57,6 +57,60 @@ type CompetitorScan = {
   created_at: string;
 };
 
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function nullableText(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function nullableNumber(value: unknown) {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeCompetitor(value: unknown): CompetitorProfile {
+  const item = recordValue(value);
+  return {
+    google_place_id: nullableText(item.google_place_id),
+    company_name: nullableText(item.company_name) || 'Empresa sem nome',
+    category: nullableText(item.category),
+    address: nullableText(item.address),
+    phone: nullableText(item.phone),
+    google_maps_url: nullableText(item.google_maps_url),
+    website_url: nullableText(item.website_url),
+    rating: nullableNumber(item.rating),
+    review_count: nullableNumber(item.review_count) ?? 0,
+    photo_count: nullableNumber(item.photo_count) ?? 0,
+    has_website: item.has_website === true,
+    health_score: nullableNumber(item.health_score) ?? 0,
+    latitude: nullableNumber(item.latitude),
+    longitude: nullableNumber(item.longitude),
+    photo_name: nullableText(item.photo_name),
+    distance_km: nullableNumber(item.distance_km),
+  };
+}
+
+function normalizeScan(value: unknown): CompetitorScan | null {
+  const item = recordValue(value);
+  const id = nullableText(item.id);
+  const leadId = nullableText(item.lead_id);
+  if (!id || !leadId) return null;
+  const rawCompetitors = Array.isArray(item.competitors) ? item.competitors : [];
+  return {
+    id,
+    lead_id: leadId,
+    radius_m: nullableNumber(item.radius_m) ?? 3000,
+    category: nullableText(item.category) || 'Segmento não informado',
+    target: normalizeCompetitor(item.target),
+    competitors: rawCompetitors.map(normalizeCompetitor),
+    created_at: nullableText(item.created_at) || new Date().toISOString(),
+  };
+}
+
 const radiusOptions = [
   { value: 1000, label: '1 km' },
   { value: 3000, label: '3 km' },
@@ -72,7 +126,9 @@ function profileScore(profile: CompetitorProfile) {
 }
 
 function formatDate(value: string) {
-  return new Date(value).toLocaleString('pt-BR', {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'data não informada';
+  return date.toLocaleString('pt-BR', {
     dateStyle: 'short',
     timeStyle: 'short',
   });
@@ -120,7 +176,9 @@ export function RaioXView({ onShowToast, onOpenAiPitchModal }: RaioXViewProps) {
       if (!active) return;
       if (requestError) onShowToast(requestError.message, 'error');
       else {
-        const scans = (data || []) as CompetitorScan[];
+        const scans = (data || [])
+          .map(normalizeScan)
+          .filter((scan): scan is CompetitorScan => Boolean(scan));
         setHistory(scans);
         setActiveScan(scans[0] || null);
         if (scans[0]) {
@@ -272,7 +330,8 @@ export function RaioXView({ onShowToast, onOpenAiPitchModal }: RaioXViewProps) {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Não foi possível analisar os concorrentes.');
-      const scan = result.scan as CompetitorScan;
+      const scan = normalizeScan(result.scan);
+      if (!scan) throw new Error('O Google retornou uma comparação incompleta. Tente novamente.');
       setActiveScan(scan);
       setHistory(current => [scan, ...current.filter(item => item.id !== scan.id)].slice(0, 30));
       onShowToast(`${scan.competitors.length} concorrentes encontrados com dados reais do Google.`, 'success');
