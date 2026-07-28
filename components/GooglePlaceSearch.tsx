@@ -50,27 +50,35 @@ export function GooglePlaceSearch({ module, onSelect, disabled = false }: Google
       if (!supabase) return;
       setLoading(true);
       setMessage('');
-      const { data } = await supabase.auth.getSession();
-      const response = await fetch('/api/places', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${data.session?.access_token || ''}`,
-        },
-        body: JSON.stringify({ action: 'suggest', module, query: term }),
-      });
-      const result = await response.json().catch(() => ({ error: 'A busca não respondeu corretamente.' }));
-      if (sequence !== requestSequence.current) return;
-      setLoading(false);
-      if (!response.ok) {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const response = await fetch('/api/places', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${data.session?.access_token || ''}`,
+          },
+          body: JSON.stringify({ action: 'suggest', module, query: term }),
+        });
+        const result = await response.json().catch(() => ({ error: 'A busca não respondeu corretamente.' }));
+        if (sequence !== requestSequence.current) return;
+        if (!response.ok) {
+          setSuggestions([]);
+          setMessage(result.error || 'Não foi possível buscar empresas.');
+          return;
+        }
+        const rows = (result.suggestions || []) as GooglePlaceSuggestion[];
+        setSuggestions(rows);
+        setMessage(rows.length ? '' : 'Nenhuma empresa encontrada. Tente incluir o bairro ou a cidade.');
+        setOpen(true);
+      } catch {
+        if (sequence !== requestSequence.current) return;
         setSuggestions([]);
-        setMessage(result.error || 'Não foi possível buscar empresas.');
-        return;
+        setMessage('Não foi possível buscar empresas agora. Tente novamente.');
+        setOpen(true);
+      } finally {
+        if (sequence === requestSequence.current) setLoading(false);
       }
-      const rows = (result.suggestions || []) as GooglePlaceSuggestion[];
-      setSuggestions(rows);
-      setMessage(rows.length ? '' : 'Nenhuma empresa encontrada. Tente incluir o bairro ou a cidade.');
-      setOpen(true);
     }, 380);
     return () => window.clearTimeout(timer);
   }, [disabled, module, query]);

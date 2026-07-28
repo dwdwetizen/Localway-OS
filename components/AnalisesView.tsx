@@ -129,6 +129,74 @@ export function AnalisesView({ onShowToast }: AnalisesViewProps) {
     }
   };
 
+  const saveAnalyzedPlace = async (
+    place: Partial<Lead>,
+    source: 'google_places_search' | 'google_places_link',
+    fallbackUrl = '',
+  ) => {
+    if (!supabase) throw new Error('O banco de dados não está disponível.');
+    const placeId = place.google_place_id;
+    if (!placeId) throw new Error('O Google não retornou a identificação dessa empresa.');
+
+    const existing = leads.find(lead => lead.google_place_id === placeId);
+    const nextAnalysis = (place.analysis_data || {}) as LeadAnalysisData;
+    let savedLead: Lead;
+    if (existing) {
+      const updated = await updateLead(existing.id, {
+        ...place,
+        analysis_data: nextAnalysis,
+      });
+      if (updated.error || !updated.data) throw new Error(updated.error || 'Não foi possível salvar a análise.');
+      savedLead = updated.data;
+    } else {
+      const created = await createLead({
+        company_name: place.company_name || 'Empresa do Google',
+        category: place.category || null,
+        address: place.address || null,
+        city: place.city || null,
+        decision_maker_name: null,
+        receptionist_name: null,
+        phone: place.phone || null,
+        whatsapp: place.whatsapp || place.phone || null,
+        email: null,
+        notes: null,
+        google_place_id: placeId,
+        google_maps_url: place.google_maps_url || fallbackUrl,
+        website_url: place.website_url || null,
+        rating: place.rating ?? null,
+        review_count: place.review_count ?? null,
+        photo_count: place.photo_count ?? null,
+        has_website: place.has_website ?? null,
+        health_score: place.health_score ?? null,
+        opportunity: place.opportunity || null,
+        latitude: place.latitude ?? null,
+        longitude: place.longitude ?? null,
+        analysis_data: nextAnalysis,
+        analysed_at: place.analysed_at || new Date().toISOString(),
+        source: 'manual',
+        status: 'novo',
+        next_action_at: null,
+      });
+      if (created.error || !created.data) throw new Error(created.error || 'Não foi possível salvar a análise.');
+      savedLead = created.data;
+    }
+
+    const { error: snapshotError } = await supabase.from('lead_analyses').insert({
+      lead_id: savedLead.id,
+      score: savedLead.health_score ?? 0,
+      summary: nextAnalysis.summary || savedLead.opportunity || 'Análise do perfil',
+      strengths: nextAnalysis.strengths || [],
+      weaknesses: nextAnalysis.weaknesses || [],
+      recommendations: nextAnalysis.recommendations || [],
+      metrics: nextAnalysis.metrics || {},
+      source,
+    });
+    if (snapshotError) throw new Error(`A empresa foi analisada, mas o histórico não pôde ser salvo: ${snapshotError.message}`);
+    setSelectedId(savedLead.id);
+    setGoogleMapsUrl('');
+    return savedLead;
+  };
+
   const analyzeGoogleMapsUrl = async (selectedUrl?: string) => {
     const mapsUrl = selectedUrl?.trim() || googleMapsUrl.trim();
     if (!mapsUrl || !supabase) {
@@ -148,65 +216,7 @@ export function AnalisesView({ onShowToast }: AnalisesViewProps) {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Não foi possível analisar esse link.');
       const place = result.place as Partial<Lead>;
-      const placeId = place.google_place_id;
-      if (!placeId) throw new Error('O Google não retornou a identificação dessa empresa.');
-
-      const existing = leads.find(lead => lead.google_place_id === placeId);
-      const nextAnalysis = (place.analysis_data || {}) as LeadAnalysisData;
-      let savedLead: Lead;
-      if (existing) {
-        const updated = await updateLead(existing.id, {
-          ...place,
-          analysis_data: nextAnalysis,
-        });
-        if (updated.error || !updated.data) throw new Error(updated.error || 'Não foi possível salvar a análise.');
-        savedLead = updated.data;
-      } else {
-        const created = await createLead({
-          company_name: place.company_name || 'Empresa do Google',
-          category: place.category || null,
-          address: place.address || null,
-          city: place.city || null,
-          decision_maker_name: null,
-          receptionist_name: null,
-          phone: place.phone || null,
-          whatsapp: place.whatsapp || place.phone || null,
-          email: null,
-          notes: null,
-          google_place_id: placeId,
-          google_maps_url: place.google_maps_url || mapsUrl,
-          website_url: place.website_url || null,
-          rating: place.rating ?? null,
-          review_count: place.review_count ?? null,
-          photo_count: place.photo_count ?? null,
-          has_website: place.has_website ?? null,
-          health_score: place.health_score ?? null,
-          opportunity: place.opportunity || null,
-          latitude: place.latitude ?? null,
-          longitude: place.longitude ?? null,
-          analysis_data: nextAnalysis,
-          analysed_at: place.analysed_at || new Date().toISOString(),
-          source: 'manual',
-          status: 'novo',
-          next_action_at: null,
-        });
-        if (created.error || !created.data) throw new Error(created.error || 'Não foi possível salvar a análise.');
-        savedLead = created.data;
-      }
-
-      const { error: snapshotError } = await supabase.from('lead_analyses').insert({
-        lead_id: savedLead.id,
-        score: savedLead.health_score ?? 0,
-        summary: nextAnalysis.summary || savedLead.opportunity || 'Análise do perfil',
-        strengths: nextAnalysis.strengths || [],
-        weaknesses: nextAnalysis.weaknesses || [],
-        recommendations: nextAnalysis.recommendations || [],
-        metrics: nextAnalysis.metrics || {},
-        source: 'google_places_link',
-      });
-      if (snapshotError) throw new Error(`A empresa foi analisada, mas o histórico não pôde ser salvo: ${snapshotError.message}`);
-      setSelectedId(savedLead.id);
-      setGoogleMapsUrl('');
+      await saveAnalyzedPlace(place, 'google_places_link', mapsUrl);
       onShowToast('Empresa analisada e salva com sucesso.', 'success');
     } catch (requestError) {
       onShowToast(requestError instanceof Error ? requestError.message : 'Erro ao analisar o link.', 'error');
@@ -216,8 +226,15 @@ export function AnalisesView({ onShowToast }: AnalisesViewProps) {
   };
 
   const chooseSuggestion = async (place: GooglePlaceSuggestion) => {
-    setGoogleMapsUrl(place.google_maps_url);
-    await analyzeGoogleMapsUrl(place.google_maps_url);
+    setAnalyzingUrl(true);
+    try {
+      await saveAnalyzedPlace(place as unknown as Partial<Lead>, 'google_places_search', place.google_maps_url);
+      onShowToast('Empresa encontrada, analisada e salva com sucesso.', 'success');
+    } catch (requestError) {
+      onShowToast(requestError instanceof Error ? requestError.message : 'Erro ao analisar a empresa.', 'error');
+    } finally {
+      setAnalyzingUrl(false);
+    }
   };
 
   if (loading) {
