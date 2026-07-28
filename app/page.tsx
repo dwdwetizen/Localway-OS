@@ -7,6 +7,7 @@ import { DashboardView } from '@/components/DashboardView';
 import { AnalisesView } from '@/components/AnalisesView';
 import { HeatmapView } from '@/components/HeatmapView';
 import { RaioXView } from '@/components/RaioXView';
+import { ModuleErrorBoundary } from '@/components/ModuleErrorBoundary';
 import { ProspectingView } from '@/components/ProspectingView';
 import { FollowUpView } from '@/components/FollowUpView';
 import { CrmView } from '@/components/CrmView';
@@ -212,10 +213,12 @@ function AuthenticatedHome() {
           {visibleTab === 'mapa' && <HeatmapView onShowToast={showToast} />}
 
           {visibleTab === 'raiox' && (
-            <RaioXView
-              onShowToast={showToast}
-              onOpenAiPitchModal={handleOpenAiPitchModal}
-            />
+            <ModuleErrorBoundary moduleName="a Análise de Concorrentes">
+              <RaioXView
+                onShowToast={showToast}
+                onOpenAiPitchModal={handleOpenAiPitchModal}
+              />
+            </ModuleErrorBoundary>
           )}
 
           {visibleTab === 'prospeccao' && (

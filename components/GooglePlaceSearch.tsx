@@ -8,14 +8,26 @@ export type GooglePlaceSuggestion = {
   google_place_id: string;
   company_name: string;
   category: string | null;
+  city?: string | null;
   address: string | null;
+  phone?: string | null;
+  whatsapp?: string | null;
   google_maps_url: string;
+  website_url?: string | null;
   rating: number | null;
   review_count: number;
+  photo_count?: number | null;
+  has_website?: boolean | null;
+  health_score?: number | null;
+  opportunity?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  analysis_data?: unknown;
+  analysed_at?: string | null;
 };
 
 interface GooglePlaceSearchProps {
-  module: 'analises' | 'mapa';
+  module: 'analises' | 'mapa' | 'raiox';
   onSelect: (place: GooglePlaceSuggestion) => void | Promise<void>;
   disabled?: boolean;
 }

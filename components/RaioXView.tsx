@@ -10,7 +10,6 @@ import {
   Globe2,
   History,
   ImageIcon,
-  Link2,
   Loader2,
   MapPin,
   Search,
@@ -22,6 +21,7 @@ import { useLeads } from '@/hooks/use-leads';
 import { Lead, LeadAnalysisData } from '@/lib/leads';
 import { supabase } from '@/lib/supabase';
 import { useAuthProfile } from '@/components/AuthGate';
+import { GooglePlaceSearch, GooglePlaceSuggestion } from '@/components/GooglePlaceSearch';
 
 interface RaioXViewProps {
   onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
@@ -167,26 +167,36 @@ export function RaioXView({ onShowToast, onOpenAiPitchModal }: RaioXViewProps) {
     }
     let active = true;
     const load = async () => {
-      const { data, error: requestError } = await supabase!
-        .from('local_competitor_scans')
-        .select('*')
-        .eq('created_by', profile.id)
-        .order('created_at', { ascending: false })
-        .limit(30);
-      if (!active) return;
-      if (requestError) onShowToast(requestError.message, 'error');
-      else {
-        const scans = (data || [])
-          .map(normalizeScan)
-          .filter((scan): scan is CompetitorScan => Boolean(scan));
-        setHistory(scans);
-        setActiveScan(scans[0] || null);
-        if (scans[0]) {
-          setSelectedId(scans[0].lead_id);
-          setRadius(scans[0].radius_m);
+      try {
+        const { data, error: requestError } = await supabase!
+          .from('local_competitor_scans')
+          .select('*')
+          .eq('created_by', profile.id)
+          .order('created_at', { ascending: false })
+          .limit(30);
+        if (!active) return;
+        if (requestError) onShowToast(requestError.message, 'error');
+        else {
+          const scans = (Array.isArray(data) ? data : [])
+            .map(normalizeScan)
+            .filter((scan): scan is CompetitorScan => Boolean(scan));
+          setHistory(scans);
+          setActiveScan(scans[0] || null);
+          if (scans[0]) {
+            setSelectedId(scans[0].lead_id);
+            setRadius(scans[0].radius_m);
+          }
         }
+      } catch (requestError) {
+        if (active) {
+          onShowToast(
+            requestError instanceof Error ? requestError.message : 'Não foi possível carregar o histórico.',
+            'error',
+          );
+        }
+      } finally {
+        if (active) setHistoryLoading(false);
       }
-      setHistoryLoading(false);
     };
     void load();
     return () => {
@@ -218,9 +228,76 @@ export function RaioXView({ onShowToast, onOpenAiPitchModal }: RaioXViewProps) {
     if (latest) setRadius(latest.radius_m);
   };
 
+  const saveGoogleProfile = async (place: Partial<Lead>, sourceValue: string) => {
+    if (!place.google_place_id) throw new Error('O Google não retornou a identificação da empresa.');
+    if (typeof place.latitude !== 'number' || typeof place.longitude !== 'number') {
+      throw new Error('O Google não retornou a localização exata da empresa.');
+    }
+
+    const existing = leads.find(lead => lead.google_place_id === place.google_place_id);
+    let saved: Lead;
+    if (existing) {
+      const updated = await updateLead(existing.id, {
+        ...place,
+        analysis_data: (place.analysis_data || existing.analysis_data || {}) as LeadAnalysisData,
+        archived_at: null,
+        archived_by: null,
+      });
+      if (updated.error || !updated.data) throw new Error(updated.error || 'Não foi possível atualizar a empresa.');
+      saved = updated.data;
+    } else {
+      const created = await createLead({
+        company_name: place.company_name || 'Empresa do Google',
+        category: place.category || null,
+        address: place.address || null,
+        city: place.city || null,
+        decision_maker_name: null,
+        receptionist_name: null,
+        phone: place.phone || null,
+        whatsapp: place.whatsapp || place.phone || null,
+        email: null,
+        notes: null,
+        google_place_id: place.google_place_id,
+        google_maps_url: place.google_maps_url || sourceValue,
+        website_url: place.website_url || null,
+        rating: place.rating ?? null,
+        review_count: place.review_count ?? null,
+        photo_count: place.photo_count ?? null,
+        has_website: place.has_website ?? null,
+        health_score: place.health_score ?? null,
+        opportunity: place.opportunity || null,
+        latitude: place.latitude,
+        longitude: place.longitude,
+        analysis_data: (place.analysis_data || {}) as LeadAnalysisData,
+        analysed_at: place.analysed_at || new Date().toISOString(),
+        source: 'manual',
+        status: 'novo',
+        next_action_at: null,
+      });
+      if (created.error || !created.data) throw new Error(created.error || 'Não foi possível salvar a empresa.');
+      saved = created.data;
+    }
+
+    setSelectedId(saved.id);
+    setActiveScan(history.find(scan => scan.lead_id === saved.id) || null);
+    setGoogleMapsUrl('');
+    onShowToast(`${saved.company_name} carregada. Agora clique em “Analisar concorrentes”.`, 'success');
+  };
+
+  const selectGoogleSuggestion = async (suggestion: GooglePlaceSuggestion) => {
+    setResolving(true);
+    try {
+      await saveGoogleProfile(suggestion as Partial<Lead>, suggestion.google_maps_url);
+    } catch (requestError) {
+      onShowToast(requestError instanceof Error ? requestError.message : 'Erro ao carregar o perfil.', 'error');
+    } finally {
+      setResolving(false);
+    }
+  };
+
   const resolveGoogleProfile = async () => {
     if (!googleMapsUrl.trim() || !supabase) {
-      onShowToast('Cole o link do perfil da empresa no Google Maps.', 'error');
+      onShowToast('Cole o link do perfil da empresa no Google Maps ou pesquise pelo nome.', 'error');
       return;
     }
     setResolving(true);
@@ -240,59 +317,7 @@ export function RaioXView({ onShowToast, onOpenAiPitchModal }: RaioXViewProps) {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Não foi possível carregar esse perfil.');
       const place = result.place as Partial<Lead>;
-      if (!place.google_place_id) throw new Error('O Google não retornou a identificação da empresa.');
-      if (typeof place.latitude !== 'number' || typeof place.longitude !== 'number') {
-        throw new Error('O Google não retornou a localização exata da empresa.');
-      }
-
-      const existing = leads.find(lead => lead.google_place_id === place.google_place_id);
-      let saved: Lead;
-      if (existing) {
-        const updated = await updateLead(existing.id, {
-          ...place,
-          analysis_data: (place.analysis_data || existing.analysis_data || {}) as LeadAnalysisData,
-          archived_at: null,
-          archived_by: null,
-        });
-        if (updated.error || !updated.data) throw new Error(updated.error || 'Não foi possível atualizar a empresa.');
-        saved = updated.data;
-      } else {
-        const created = await createLead({
-          company_name: place.company_name || 'Empresa do Google',
-          category: place.category || null,
-          address: place.address || null,
-          city: place.city || null,
-          decision_maker_name: null,
-          receptionist_name: null,
-          phone: place.phone || null,
-          whatsapp: place.whatsapp || place.phone || null,
-          email: null,
-          notes: null,
-          google_place_id: place.google_place_id,
-          google_maps_url: place.google_maps_url || googleMapsUrl.trim(),
-          website_url: place.website_url || null,
-          rating: place.rating ?? null,
-          review_count: place.review_count ?? null,
-          photo_count: place.photo_count ?? null,
-          has_website: place.has_website ?? null,
-          health_score: place.health_score ?? null,
-          opportunity: place.opportunity || null,
-          latitude: place.latitude,
-          longitude: place.longitude,
-          analysis_data: (place.analysis_data || {}) as LeadAnalysisData,
-          analysed_at: place.analysed_at || new Date().toISOString(),
-          source: 'manual',
-          status: 'novo',
-          next_action_at: null,
-        });
-        if (created.error || !created.data) throw new Error(created.error || 'Não foi possível salvar a empresa.');
-        saved = created.data;
-      }
-
-      setSelectedId(saved.id);
-      setActiveScan(history.find(scan => scan.lead_id === saved.id) || null);
-      setGoogleMapsUrl('');
-      onShowToast(`${saved.company_name} carregada. Agora clique em “Analisar concorrentes”.`, 'success');
+      await saveGoogleProfile(place, googleMapsUrl.trim());
     } catch (requestError) {
       onShowToast(requestError instanceof Error ? requestError.message : 'Erro ao carregar o perfil.', 'error');
     } finally {
@@ -374,9 +399,22 @@ export function RaioXView({ onShowToast, onOpenAiPitchModal }: RaioXViewProps) {
       </header>
 
       <section className="p-5 rounded-2xl bg-white dark:bg-[#141936] border border-[#c2c6d8]/35 dark:border-[#2e366b] shadow-sm space-y-4">
+        <div>
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#727687]">Buscar empresa pelo nome</p>
+          <GooglePlaceSearch
+            module="raiox"
+            disabled={resolving}
+            onSelect={selectGoogleSuggestion}
+          />
+        </div>
+        <div className="flex items-center gap-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#9a9dad]">
+          <span className="h-px flex-1 bg-[#c2c6d8]/30" />
+          ou cole o link
+          <span className="h-px flex-1 bg-[#c2c6d8]/30" />
+        </div>
         <div className="flex flex-col md:flex-row gap-2">
           <div className="relative flex-1">
-            <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#727687]" />
+            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#727687]" />
             <input
               type="url"
               value={googleMapsUrl}
@@ -384,7 +422,7 @@ export function RaioXView({ onShowToast, onOpenAiPitchModal }: RaioXViewProps) {
               onKeyDown={event => {
                 if (event.key === 'Enter') void resolveGoogleProfile();
               }}
-              placeholder="Cole o link curto ou completo do perfil no Google Maps"
+              placeholder="Cole o link curto ou completo do Google Maps"
               className="w-full pl-9 pr-3 py-3 rounded-xl bg-[#f8f9fc] dark:bg-[#10142e] border border-[#c2c6d8]/50 text-sm outline-none focus:border-[#0066ff] focus:ring-2 focus:ring-[#0066ff]/10"
             />
           </div>
@@ -437,7 +475,7 @@ export function RaioXView({ onShowToast, onOpenAiPitchModal }: RaioXViewProps) {
           <div>
             <Building2 className="w-10 h-10 mx-auto text-[#0066ff]/70" />
             <p className="font-semibold mt-3">Pronto para comparar</p>
-            <p className="text-xs text-[#727687] mt-1 max-w-md">Cole o perfil do Google, escolha o raio e gere uma comparação com empresas reais do mesmo segmento.</p>
+            <p className="text-xs text-[#727687] mt-1 max-w-md">Pesquise pelo nome ou cole o perfil do Google, escolha o raio e gere uma comparação com empresas reais do mesmo segmento.</p>
           </div>
         </div>
       )}
