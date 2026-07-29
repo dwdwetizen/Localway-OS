@@ -674,6 +674,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
       </section>
 
       {selected && <KeywordOpportunityPanel
+        key={selected.id}
         selectedLead={selected}
         leads={leads}
         currentPosition={activeScan?.average_position || null}

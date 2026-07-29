@@ -9,6 +9,33 @@ import {
 
 type AdsError = { error?: { message?: string; details?: Array<{ errors?: Array<{ message?: string }> }> } };
 
+const ignoredRelevanceTokens = new Set([
+  'para', 'como', 'com', 'sem', 'sobre', 'outro', 'segmento', 'empresa',
+  'loja', 'grupo', 'brasil', 'fortaleza',
+]);
+
+function relevanceTokens(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(/\s+/)
+    .map(token => token.length > 5 && token.endsWith('s') ? token.slice(0, -1) : token)
+    .filter(token => token.length >= 4 && !ignoredRelevanceTokens.has(token));
+}
+
+function isRelevantKeyword(keyword: string, expectedTokens: string[]) {
+  const ideaTokens = relevanceTokens(keyword);
+  return ideaTokens.some(ideaToken => expectedTokens.some(expected =>
+    ideaToken === expected
+    || (ideaToken.length >= 6 && expected.length >= 6 && (
+      ideaToken.startsWith(expected.slice(0, 6))
+      || expected.startsWith(ideaToken.slice(0, 6))
+    )),
+  ));
+}
+
 function adsErrorMessage(result: AdsError) {
   const message = result.error?.details?.flatMap(detail => detail.errors || [])[0]?.message
     || result.error?.message
@@ -64,13 +91,16 @@ export async function POST(request: NextRequest) {
   }
   const body = await request.json();
   const segment = String(body.segment || '').trim();
+  const businessName = String(body.businessName || '').trim();
   const location = String(body.location || 'Fortaleza').trim();
   const keywords = (Array.isArray(body.keywords) ? body.keywords : [])
     .map((value: unknown) => String(value).trim())
     .filter((value: string) => value.length >= 2)
     .slice(0, 20);
-  const seeds = keywords.length ? keywords : [segment];
+  const businessContext = [businessName.replace(/[|•]/g, ' '), segment].filter(Boolean).join(' ').trim();
+  const seeds = keywords.length ? keywords : [businessContext || segment];
   if (!seeds[0]) return NextResponse.json({ error: 'Selecione um segmento ou informe uma palavra-chave.' }, { status: 400 });
+  const expectedTokens = Array.from(new Set(relevanceTokens(keywords.length ? keywords.join(' ') : businessContext)));
 
   try {
     const accessToken = await googleAdsAccessToken(configuration);
@@ -98,7 +128,7 @@ export async function POST(request: NextRequest) {
     );
     const result = await response.json();
     if (!response.ok) return NextResponse.json({ error: adsErrorMessage(result) }, { status: response.status });
-    const ideas = (Array.isArray(result.results) ? result.results : []).map((item: Record<string, unknown>) => {
+    const unfilteredIdeas = (Array.isArray(result.results) ? result.results : []).map((item: Record<string, unknown>) => {
       const metrics = (item.keywordIdeaMetrics || {}) as Record<string, unknown>;
       const monthly = Array.isArray(metrics.monthlySearchVolumes) ? metrics.monthlySearchVolumes : [];
       return {
@@ -112,10 +142,15 @@ export async function POST(request: NextRequest) {
       };
     }).sort((a: { avgMonthlySearches: number }, b: { avgMonthlySearches: number }) =>
       b.avgMonthlySearches - a.avgMonthlySearches);
+    const ideas = expectedTokens.length
+      ? unfilteredIdeas.filter((idea: { keyword: string }) => isRelevantKeyword(idea.keyword, expectedTokens))
+      : unfilteredIdeas;
     return NextResponse.json({
       ideas,
       location,
       geoTarget,
+      searchBasis: seeds.join(', '),
+      filteredIdeas: unfilteredIdeas.length - ideas.length,
       disclaimer: 'Volumes do Google Ads são arredondados, incluem variantes próximas e não representam exclusivamente buscas no Google Maps.',
     });
   } catch (error) {
