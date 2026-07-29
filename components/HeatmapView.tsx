@@ -19,6 +19,7 @@ type MapInstance = {
   fitBounds: (bounds: BoundsInstance) => void;
   setCenter: (center: LatLng) => void;
   setZoom: (zoom: number) => void;
+  getZoom: () => number | undefined;
   addListener?: (eventName: string, handler: () => void) => { remove?: () => void };
 };
 type BoundsInstance = {
@@ -234,22 +235,29 @@ function GridMapCanvas({ scan, mapsKey, targetPlaceId, focusedPlaceId, focusedPl
     if (!node.current || !mapsKey || !scan.points.length) return;
     let active = true;
     let loadTimer: number | null = null;
+    let wheelFrame: number | null = null;
+    let accumulatedWheelDelta = 0;
     let tilesListener: { remove?: () => void } | null = null;
+    let mapElement: HTMLDivElement | null = null;
+    let wheelHandler: ((event: WheelEvent) => void) | null = null;
     const markers: MarkerInstance[] = [];
     const circles: CircleInstance[] = [];
     setMapError('');
     setMapReady(false);
     void loadGoogleMaps(mapsKey).then(maps => {
       if (!active || !node.current) return;
-      const map = new maps.Map(node.current, {
+      mapElement = node.current;
+      const map = new maps.Map(mapElement, {
         center: { lat: scan.center_latitude, lng: scan.center_longitude },
         zoom: 13,
+        isFractionalZoomEnabled: true,
         mapTypeControl: false,
         streetViewControl: false,
         fullscreenControl: false,
         zoomControl: true,
         clickableIcons: false,
         gestureHandling: 'greedy',
+        scrollwheel: false,
         styles: [
           { elementType: 'geometry', stylers: [{ color: '#f4f4f1' }] },
           { elementType: 'labels.text.fill', stylers: [{ color: '#989b96' }] },
@@ -264,6 +272,21 @@ function GridMapCanvas({ scan, mapsKey, targetPlaceId, focusedPlaceId, focusedPl
           { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#e4ecec' }] },
         ],
       });
+      wheelHandler = event => {
+        event.preventDefault();
+        accumulatedWheelDelta += event.deltaY;
+        if (wheelFrame !== null) return;
+        wheelFrame = window.requestAnimationFrame(() => {
+          wheelFrame = null;
+          const zoomChange = Math.max(-0.35, Math.min(0.35, accumulatedWheelDelta / 500));
+          if (Math.abs(zoomChange) < 0.025) return;
+          accumulatedWheelDelta = 0;
+          const currentZoom = map.getZoom();
+          if (typeof currentZoom !== 'number') return;
+          map.setZoom(Math.max(3, Math.min(20, currentZoom - zoomChange)));
+        });
+      };
+      mapElement.addEventListener('wheel', wheelHandler, { passive: false });
       tilesListener = map.addListener?.('tilesloaded', () => {
         if (!active) return;
         if (loadTimer !== null) window.clearTimeout(loadTimer);
@@ -379,6 +402,8 @@ function GridMapCanvas({ scan, mapsKey, targetPlaceId, focusedPlaceId, focusedPl
     return () => {
       active = false;
       if (loadTimer !== null) window.clearTimeout(loadTimer);
+      if (wheelFrame !== null) window.cancelAnimationFrame(wheelFrame);
+      if (mapElement && wheelHandler) mapElement.removeEventListener('wheel', wheelHandler);
       tilesListener?.remove?.();
       markers.forEach(marker => {
         if (marker.setMap) marker.setMap(null);
