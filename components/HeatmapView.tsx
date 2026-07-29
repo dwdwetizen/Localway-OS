@@ -337,9 +337,9 @@ function GridMapCanvas({ scan, mapsKey, targetPlaceId, focusedPlaceId, focusedPl
             position,
             title: markerTitle,
             label: {
-              text: focusedPosition ? String(focusedPosition) : '?',
+              text: focusedPosition ? String(focusedPosition) : '20+',
               color: '#ffffff',
-              fontSize: '12px',
+              fontSize: focusedPosition ? '12px' : '9px',
               fontWeight: '700',
             },
             icon: {
@@ -356,7 +356,7 @@ function GridMapCanvas({ scan, mapsKey, targetPlaceId, focusedPlaceId, focusedPl
           marker.addListener?.('click', selectPoint);
         } else if (maps.AdvancedMarkerElement) {
           const content = document.createElement('div');
-          content.textContent = focusedPosition ? String(focusedPosition) : '?';
+          content.textContent = focusedPosition ? String(focusedPosition) : '20+';
           content.title = markerTitle;
           Object.assign(content.style, {
             width: '31px',
@@ -367,7 +367,7 @@ function GridMapCanvas({ scan, mapsKey, targetPlaceId, focusedPlaceId, focusedPl
             border: '2.25px solid #ffffff',
             background: colorForPosition(focusedPosition),
             color: '#ffffff',
-            fontSize: '12px',
+            fontSize: focusedPosition ? '12px' : '9px',
             fontWeight: '700',
             lineHeight: '1',
             boxShadow: '0 1px 4px rgba(31, 41, 55, 0.28)',
@@ -427,7 +427,7 @@ function GridMapCanvas({ scan, mapsKey, targetPlaceId, focusedPlaceId, focusedPl
       <p className="mt-1 text-[11px] text-[#6e7179]">
         {selectedPoint.position
           ? `Posição ${selectedPoint.position} neste ponto da grade.`
-          : 'Não apareceu entre os resultados armazenados neste ponto.'}
+          : 'Posição 20+: não apareceu entre os 20 primeiros resultados neste ponto.'}
       </p>
     </div>}
   </div>;
@@ -860,7 +860,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
         key={selected.id}
         selectedLead={selected}
         leads={leads}
-        currentPosition={activeScan?.average_position || null}
+        currentPosition={activeScan ? centerPosition ?? 21 : null}
         rankedKeyword={activeScan?.keyword || ''}
         onUseKeyword={useKeywordFromResearch}
         onShowToast={onShowToast}

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BarChart3, Calculator, Info, Loader2, Search, TrendingUp } from 'lucide-react';
 import { Lead } from '@/lib/leads';
 import { supabase } from '@/lib/supabase';
@@ -99,6 +99,7 @@ export function KeywordOpportunityPanel({
   const [ticket, setTicket] = useState(inferredSegment.ticket);
   const [targetCtr, setTargetCtr] = useState(20);
   const [usingCrmRate, setUsingCrmRate] = useState(false);
+  const automaticResearchKey = useRef('');
 
   useEffect(() => {
     const check = async () => {
@@ -130,12 +131,14 @@ export function KeywordOpportunityPanel({
     };
   }, [leads, selectedSegment.aliases]);
 
-  const research = async () => {
+  const research = useCallback(async (forcedKeyword?: string) => {
     if (!supabase) return;
     if (!connected) return onShowToast('O administrador precisa conectar o Google Ads primeiro.', 'error');
     const seed = segment === 'outro' ? customSegment.trim() : segment;
     if (!seed) return onShowToast('Informe o segmento.', 'error');
-    const keywords = keywordInput.split(/[,;\n]/).map(value => value.trim()).filter(Boolean);
+    const keywords = forcedKeyword
+      ? [forcedKeyword.trim()].filter(Boolean)
+      : keywordInput.split(/[,;\n]/).map(value => value.trim()).filter(Boolean);
     setLoading(true);
     const { data } = await supabase.auth.getSession();
     const response = await fetch('/api/google-ads/keywords', {
@@ -154,11 +157,34 @@ export function KeywordOpportunityPanel({
     const result = await response.json();
     setLoading(false);
     if (!response.ok) return onShowToast(result.error || 'Não foi possível consultar o volume.', 'error');
+    const rows = (result.ideas || []) as KeywordIdea[];
+    const preferredKeyword = rows.find(item =>
+      normalize(item.keyword) === normalize(forcedKeyword || rankedKeyword))?.keyword
+      || rows[0]?.keyword
+      || '';
     setApiValidated(true);
-    setIdeas(result.ideas || []);
-    setSelectedKeyword(result.ideas?.[0]?.keyword || '');
-    if (!result.ideas?.length) onShowToast('O Google Ads não encontrou volume para essa combinação.', 'info');
-  };
+    setIdeas(rows);
+    setSelectedKeyword(preferredKeyword);
+    if (!rows.length) onShowToast('O Google Ads não encontrou volume para essa combinação.', 'info');
+  }, [
+    connected,
+    customSegment,
+    keywordInput,
+    location,
+    onShowToast,
+    rankedKeyword,
+    segment,
+    selectedLead.company_name,
+  ]);
+
+  useEffect(() => {
+    const measuredKeyword = rankedKeyword.trim();
+    if (!measuredKeyword || currentPosition === null || connected !== true) return;
+    const researchKey = `${selectedLead.id}:${normalize(measuredKeyword)}`;
+    if (automaticResearchKey.current === researchKey) return;
+    automaticResearchKey.current = researchKey;
+    void research(measuredKeyword);
+  }, [connected, currentPosition, rankedKeyword, research, selectedLead.id]);
 
   const changeSegment = (value: string) => {
     setSegment(value);
@@ -186,6 +212,11 @@ export function KeywordOpportunityPanel({
   const currentRevenue = salesCurrent * ticket;
   const topRevenue = salesTop * ticket;
   const lostRevenue = positionMeasured ? Math.max(topRevenue - currentRevenue, 0) : 0;
+  const currentPositionLabel = effectivePosition === null
+    ? 'não medida'
+    : effectivePosition > 20
+      ? '20+'
+      : effectivePosition.toFixed(1);
 
   return <section className="bg-white dark:bg-[#141936] rounded-2xl border border-[#c2c6d8]/35 overflow-hidden">
     <div className="p-4 sm:p-5 border-b border-[#c2c6d8]/30 flex flex-wrap sm:flex-nowrap items-start gap-3">
@@ -219,7 +250,7 @@ export function KeywordOpportunityPanel({
         {!idea ? <div className="py-12 text-center text-xs text-[#727687]"><BarChart3 className="w-8 h-8 mx-auto mb-2 opacity-50"/>Consulte e selecione uma palavra-chave para calcular.</div> : <>
           <div className="mt-3 p-3 rounded-xl bg-white dark:bg-[#141936] border"><p className="text-[10px] text-[#727687]">Palavra selecionada</p><div className="flex items-center justify-between gap-2 mt-1"><strong className="text-sm">{idea.keyword}</strong><button onClick={() => void onUseKeyword(idea.keyword)} className="text-[10px] font-bold text-[#0066ff]">Usar no mapa</button></div><p className="text-[11px] mt-1">{volume.toLocaleString('pt-BR')} buscas/mês • CPC topo {currency(idea.lowTopOfPageBid)}–{currency(idea.highTopOfPageBid)}</p><p className="text-[9px] text-[#727687] mt-1">CPC é quanto anunciantes podem pagar por clique para aparecer no topo. Não é uma cobrança deste sistema.</p></div>
           <div className="grid grid-cols-2 gap-3 mt-3">
-            <NumberField label={`CTR atual • posição ${effectivePosition ? effectivePosition.toFixed(1) : 'não medida'}`} help={positionMeasured ? 'Estimativa de quantas pessoas clicam ao ver a empresa na posição atual.' : 'Gere o mapa para esta palavra-chave antes de calcular o cenário atual.'} value={currentCtr} displayValue={positionMeasured ? undefined : 'Não medido'} disabled suffix={positionMeasured ? '%' : ''}/>
+            <NumberField label={`CTR atual • posição ${currentPositionLabel}`} help={positionMeasured ? 'Estimativa de quantas pessoas clicam ao ver a empresa na posição atual.' : 'Gere o mapa para esta palavra-chave antes de calcular o cenário atual.'} value={currentCtr} displayValue={positionMeasured ? undefined : 'Não medido'} disabled suffix={positionMeasured ? '%' : ''}/>
             <NumberField label="CTR desejado no Top 3" help="Meta de cliques se a empresa aparecer entre os primeiros resultados." value={targetCtr} onChange={setTargetCtr} suffix="%"/>
             <NumberField label="Cliques que viram leads" help="De cada 100 cliques, quantos viram contatos interessados." value={clickToLeadRate} onChange={setClickToLeadRate} suffix="%"/>
             <NumberField label="Leads que viram vendas" help="De cada 100 contatos, quantos realmente compram." value={closeRate} onChange={value => { setCloseRate(value); setUsingCrmRate(false); }} suffix="%"/>
