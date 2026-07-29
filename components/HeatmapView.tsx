@@ -96,13 +96,23 @@ function loadGoogleMaps(key: string) {
   if (mapsPromise) return mapsPromise;
   mapsPromise = new Promise((resolve, reject) => {
     let settled = false;
+    const callbackName = '__localwayGoogleMapsReady';
+    const callbackHost = window as unknown as Record<string, unknown>;
     const previous = document.querySelector<HTMLScriptElement>('script[data-localway-google-maps]');
-    const fail = () => {
+    const loadTimeout = window.setTimeout(() => {
+      fail('O Google Maps demorou demais para responder.');
+    }, 15_000);
+    const cleanup = () => {
+      window.clearTimeout(loadTimeout);
+      if (callbackHost[callbackName]) delete callbackHost[callbackName];
+    };
+    function fail(message = 'Falha ao carregar o Google Maps.') {
       if (settled) return;
       settled = true;
+      cleanup();
       mapsPromise = null;
-      reject(new Error('Falha ao carregar o Google Maps.'));
-    };
+      reject(new Error(message));
+    }
     const finish = async () => {
       if (settled) return;
       try {
@@ -129,30 +139,36 @@ function loadGoogleMaps(key: string) {
           || (typeof completeMaps.AdvancedMarkerElement !== 'function' && typeof completeMaps.Marker !== 'function')
           || typeof completeMaps.Circle !== 'function'
         ) {
-          throw new Error('A biblioteca do mapa não foi carregada por completo.');
+          const missing = [
+            typeof completeMaps.Map !== 'function' ? 'mapa-base' : '',
+            typeof completeMaps.Circle !== 'function' ? 'áreas' : '',
+            typeof completeMaps.AdvancedMarkerElement !== 'function' && typeof completeMaps.Marker !== 'function'
+              ? 'marcadores'
+              : '',
+          ].filter(Boolean);
+          throw new Error(`O Google Maps não liberou: ${missing.join(', ')}.`);
         }
         settled = true;
+        cleanup();
         resolve(completeMaps);
       } catch (error) {
         settled = true;
+        cleanup();
         mapsPromise = null;
         reject(error);
       }
     };
+    callbackHost[callbackName] = () => void finish();
     if (previous) {
       if (window.google?.maps) void finish();
-      else {
-        previous.addEventListener('load', () => void finish(), { once: true });
-        previous.addEventListener('error', fail, { once: true });
-      }
+      else previous.addEventListener('error', () => fail(), { once: true });
       return;
     }
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&loading=async&v=weekly&libraries=maps,marker&language=pt-BR&region=BR`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&loading=async&v=weekly&libraries=maps,marker&callback=${callbackName}&language=pt-BR&region=BR`;
     script.async = true;
     script.dataset.localwayGoogleMaps = 'true';
-    script.addEventListener('load', () => void finish(), { once: true });
-    script.addEventListener('error', fail, { once: true });
+    script.addEventListener('error', () => fail(), { once: true });
     document.head.appendChild(script);
   });
   return mapsPromise;
