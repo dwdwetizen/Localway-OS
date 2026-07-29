@@ -85,6 +85,7 @@ export function GooglePlaceSearch({ module, onSelect, disabled = false }: Google
 
   const choose = async (place: GooglePlaceSuggestion) => {
     requestSequence.current += 1;
+    setLoading(false);
     setQuery(place.company_name);
     setSuggestions([]);
     setMessage('');

@@ -431,6 +431,54 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
     setKeywordManagerOpen(false);
     onShowToast('Palavras-chave atualizadas.', 'success');
   };
+  const selectResolvedPlace = async (place: Partial<Lead> | GooglePlaceSuggestion, fallbackMapsUrl: string) => {
+    if (!place.google_place_id || typeof place.latitude !== 'number' || typeof place.longitude !== 'number') {
+      throw new Error('O Google não retornou a identificação e as coordenadas dessa empresa.');
+    }
+
+    const existing = leads.find(lead => lead.google_place_id === place.google_place_id);
+    if (existing) {
+      setSelectedId(existing.id);
+      setActiveKeyword(existing.analysis_data?.visibility_keywords?.[0] || existing.category || existing.company_name);
+    } else {
+      const created = await createLead({
+        company_name: place.company_name || 'Empresa do Google',
+        category: place.category || null,
+        address: place.address || null,
+        city: place.city || null,
+        decision_maker_name: null,
+        receptionist_name: null,
+        phone: place.phone || null,
+        whatsapp: place.whatsapp || place.phone || null,
+        email: null,
+        notes: null,
+        google_place_id: place.google_place_id,
+        google_maps_url: place.google_maps_url || fallbackMapsUrl,
+        website_url: place.website_url || null,
+        rating: place.rating ?? null,
+        review_count: place.review_count ?? null,
+        photo_count: place.photo_count ?? null,
+        has_website: place.has_website ?? null,
+        health_score: place.health_score ?? null,
+        opportunity: place.opportunity || null,
+        latitude: place.latitude,
+        longitude: place.longitude,
+        analysis_data: place.analysis_data && typeof place.analysis_data === 'object'
+          ? place.analysis_data as Lead['analysis_data']
+          : {},
+        analysed_at: place.analysed_at || new Date().toISOString(),
+        source: 'manual',
+        status: 'novo',
+        next_action_at: null,
+      });
+      if (created.error || !created.data) throw new Error(created.error || 'Não foi possível salvar a empresa.');
+      setSelectedId(created.data.id);
+      setActiveKeyword(created.data.category || created.data.company_name);
+    }
+
+    setGoogleMapsUrl(place.google_maps_url || fallbackMapsUrl);
+    setActiveScan(null);
+  };
   const resolveGoogleProfile = async (selectedUrl?: string) => {
     if (resolvingProfileRef.current) return;
     const mapsUrl = selectedUrl?.trim() || googleMapsUrl.trim();
@@ -455,48 +503,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Não foi possível localizar esse perfil.');
       const place = result.place as Partial<Lead>;
-      if (!place.google_place_id || typeof place.latitude !== 'number' || typeof place.longitude !== 'number') {
-        throw new Error('O Google não retornou a identificação e as coordenadas dessa empresa.');
-      }
-
-      const existing = leads.find(lead => lead.google_place_id === place.google_place_id);
-      if (existing) {
-        setSelectedId(existing.id);
-        setActiveKeyword(existing.analysis_data?.visibility_keywords?.[0] || existing.category || existing.company_name);
-      } else {
-        const created = await createLead({
-          company_name: place.company_name || 'Empresa do Google',
-          category: place.category || null,
-          address: place.address || null,
-          city: place.city || null,
-          decision_maker_name: null,
-          receptionist_name: null,
-          phone: place.phone || null,
-          whatsapp: place.whatsapp || place.phone || null,
-          email: null,
-          notes: null,
-          google_place_id: place.google_place_id,
-          google_maps_url: place.google_maps_url || mapsUrl,
-          website_url: place.website_url || null,
-          rating: place.rating ?? null,
-          review_count: place.review_count ?? null,
-          photo_count: place.photo_count ?? null,
-          has_website: place.has_website ?? null,
-          health_score: place.health_score ?? null,
-          opportunity: place.opportunity || null,
-          latitude: place.latitude,
-          longitude: place.longitude,
-          analysis_data: place.analysis_data || {},
-          analysed_at: place.analysed_at || new Date().toISOString(),
-          source: 'manual',
-          status: 'novo',
-          next_action_at: null,
-        });
-        if (created.error || !created.data) throw new Error(created.error || 'Não foi possível salvar a empresa.');
-        setSelectedId(created.data.id);
-        setActiveKeyword(created.data.category || created.data.company_name);
-      }
-      setActiveScan(null);
+      await selectResolvedPlace(place, mapsUrl);
       onShowToast('Perfil carregado. O segmento foi identificado automaticamente.', 'success');
     } catch (requestError) {
       onShowToast(requestError instanceof Error ? requestError.message : 'Erro ao carregar o perfil.', 'error');
@@ -507,8 +514,18 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
   };
 
   const chooseSuggestion = async (place: GooglePlaceSuggestion) => {
-    setGoogleMapsUrl(place.google_maps_url);
-    await resolveGoogleProfile(place.google_maps_url);
+    if (resolvingProfileRef.current) return;
+    resolvingProfileRef.current = true;
+    setResolvingProfile(true);
+    try {
+      await selectResolvedPlace(place, place.google_maps_url);
+      onShowToast(`${place.company_name} selecionada.`, 'success');
+    } catch (selectionError) {
+      onShowToast(selectionError instanceof Error ? selectionError.message : 'Erro ao selecionar a empresa.', 'error');
+    } finally {
+      resolvingProfileRef.current = false;
+      setResolvingProfile(false);
+    }
   };
 
   const runVisibilityGrid = async () => {
