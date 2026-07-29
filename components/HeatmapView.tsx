@@ -25,7 +25,8 @@ type BoundsInstance = {
   extend: (position: LatLng) => void;
 };
 type MarkerInstance = {
-  setMap: (map: MapInstance | null) => void;
+  setMap?: (map: MapInstance | null) => void;
+  map?: MapInstance | null;
 };
 type CircleInstance = {
   setMap: (map: MapInstance | null) => void;
@@ -33,9 +34,10 @@ type CircleInstance = {
 type MapsNamespace = {
   Map: new (element: HTMLElement, options: Record<string, unknown>) => MapInstance;
   LatLngBounds: new () => BoundsInstance;
-  Marker: new (options: Record<string, unknown>) => MarkerInstance;
+  Marker?: new (options: Record<string, unknown>) => MarkerInstance;
+  AdvancedMarkerElement?: new (options: Record<string, unknown>) => MarkerInstance;
   Circle: new (options: Record<string, unknown>) => CircleInstance;
-  SymbolPath: { CIRCLE: number };
+  SymbolPath?: { CIRCLE: number };
   importLibrary?: (library: string) => Promise<unknown>;
 };
 type RankedPlace = {
@@ -83,7 +85,12 @@ let mapsPromise: Promise<MapsNamespace> | null = null;
 
 function loadGoogleMaps(key: string) {
   const readyMaps = window.google?.maps;
-  if (readyMaps && typeof readyMaps.Map === 'function' && typeof readyMaps.Marker === 'function' && typeof readyMaps.Circle === 'function') {
+  if (
+    readyMaps
+    && typeof readyMaps.Map === 'function'
+    && (typeof readyMaps.AdvancedMarkerElement === 'function' || typeof readyMaps.Marker === 'function')
+    && typeof readyMaps.Circle === 'function'
+  ) {
     return Promise.resolve(readyMaps);
   }
   if (mapsPromise) return mapsPromise;
@@ -112,11 +119,16 @@ function loadGoogleMaps(key: string) {
           Map: mapLibrary.Map || maps.Map,
           LatLngBounds: mapLibrary.LatLngBounds || maps.LatLngBounds,
           Marker: markerLibrary.Marker || maps.Marker,
+          AdvancedMarkerElement: markerLibrary.AdvancedMarkerElement || maps.AdvancedMarkerElement,
           Circle: mapLibrary.Circle || maps.Circle,
           SymbolPath: maps.SymbolPath,
           importLibrary: maps.importLibrary,
         };
-        if (typeof completeMaps.Map !== 'function' || typeof completeMaps.Marker !== 'function' || typeof completeMaps.Circle !== 'function') {
+        if (
+          typeof completeMaps.Map !== 'function'
+          || (typeof completeMaps.AdvancedMarkerElement !== 'function' && typeof completeMaps.Marker !== 'function')
+          || typeof completeMaps.Circle !== 'function'
+        ) {
           throw new Error('A biblioteca do mapa não foi carregada por completo.');
         }
         settled = true;
@@ -162,6 +174,17 @@ function keywordKey(value: string) {
   return value.trim().toLocaleLowerCase('pt-BR');
 }
 
+function registeredVisibilityKeywords(lead: Lead) {
+  const values = Array.isArray(lead.analysis_data?.visibility_keywords)
+    ? lead.analysis_data.visibility_keywords
+    : [];
+  return values
+    .map(value => value.trim())
+    .filter(value => value.length >= 2)
+    .filter((value, index, keywords) =>
+      keywords.findIndex(item => keywordKey(item) === keywordKey(value)) === index);
+}
+
 function GridMapCanvas({ scan, mapsKey, onError }: {
   scan: VisibilityScan;
   mapsKey: string;
@@ -185,6 +208,7 @@ function GridMapCanvas({ scan, mapsKey, onError }: {
       const map = new maps.Map(node.current, {
         center: { lat: scan.center_latitude, lng: scan.center_longitude },
         zoom: 13,
+        mapId: 'DEMO_MAP_ID',
         mapTypeControl: false,
         streetViewControl: false,
         fullscreenControl: false,
@@ -233,27 +257,59 @@ function GridMapCanvas({ scan, mapsKey, onError }: {
           strokeWeight: 0.5,
           clickable: false,
         });
-        const marker = new maps.Marker({
-          map,
-          position,
-          title: point.position ? `Posição estimada: ${point.position}` : 'Posição estimada: 20+',
-          label: {
-            text: point.position ? String(point.position) : '?',
+        const markerTitle = point.position ? `Posição estimada: ${point.position}` : 'Posição estimada: 20+';
+        const markerZIndex = point.position === null ? 1 : Math.max(2, 30 - point.position);
+        let marker: MarkerInstance;
+        if (maps.AdvancedMarkerElement) {
+          const content = document.createElement('div');
+          content.textContent = point.position ? String(point.position) : '?';
+          content.title = markerTitle;
+          Object.assign(content.style, {
+            width: '31px',
+            height: '31px',
+            display: 'grid',
+            placeItems: 'center',
+            borderRadius: '999px',
+            border: '2.25px solid #ffffff',
+            background: colorForPosition(point.position),
             color: '#ffffff',
             fontSize: '12px',
             fontWeight: '700',
-          },
-          icon: {
-            path: maps.SymbolPath.CIRCLE,
-            fillColor: colorForPosition(point.position),
-            fillOpacity: 1,
-            strokeColor: '#ffffff',
-            strokeOpacity: 1,
-            strokeWeight: 2.25,
-            scale: 15.5,
-          },
-          zIndex: point.position === null ? 1 : Math.max(2, 30 - point.position),
-        });
+            lineHeight: '1',
+            boxShadow: '0 1px 4px rgba(31, 41, 55, 0.28)',
+          });
+          marker = new maps.AdvancedMarkerElement({
+            map,
+            position,
+            title: markerTitle,
+            content,
+            zIndex: markerZIndex,
+          });
+        } else if (maps.Marker && maps.SymbolPath) {
+          marker = new maps.Marker({
+            map,
+            position,
+            title: markerTitle,
+            label: {
+              text: point.position ? String(point.position) : '?',
+              color: '#ffffff',
+              fontSize: '12px',
+              fontWeight: '700',
+            },
+            icon: {
+              path: maps.SymbolPath.CIRCLE,
+              fillColor: colorForPosition(point.position),
+              fillOpacity: 1,
+              strokeColor: '#ffffff',
+              strokeOpacity: 1,
+              strokeWeight: 2.25,
+              scale: 15.5,
+            },
+            zIndex: markerZIndex,
+          });
+        } else {
+          throw new Error('A biblioteca de marcadores do mapa não foi carregada.');
+        }
         circles.push(circle);
         markers.push(marker);
       });
@@ -268,7 +324,10 @@ function GridMapCanvas({ scan, mapsKey, onError }: {
       active = false;
       if (loadTimer !== null) window.clearTimeout(loadTimer);
       tilesListener?.remove?.();
-      markers.forEach(marker => marker.setMap(null));
+      markers.forEach(marker => {
+        if (marker.setMap) marker.setMap(null);
+        else marker.map = null;
+      });
       circles.forEach(circle => circle.setMap(null));
     };
   }, [mapsKey, onError, scan]);
@@ -342,11 +401,10 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
   const activeScanLead = activeScan ? leads.find(lead => lead.id === activeScan.lead_id) || null : null;
   const keywordTabs = useMemo(() => {
     if (!selected) return [];
-    const stored = selected.analysis_data?.visibility_keywords || [];
-    const scanned = scanHistory.filter(scan => scan.lead_id === selected.id).map(scan => scan.keyword);
-    const values = (stored.length ? stored : [selected.category || '', ...scanned]).map(value => value.trim()).filter(Boolean);
-    return values.filter((value, index) => values.findIndex(item => keywordKey(item) === keywordKey(value)) === index);
-  }, [scanHistory, selected]);
+    return registeredVisibilityKeywords(selected);
+  }, [selected]);
+  const activeRegisteredKeyword = keywordTabs.find(keyword =>
+    keywordKey(keyword) === keywordKey(activeKeyword));
   const competitors = useMemo(() => {
     if (!activeScan) return [];
     const targetPlaceId = activeScanLead?.google_place_id;
@@ -396,7 +454,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
   };
   const openKeywordManager = () => {
     if (!selected) return;
-    setKeywordDrafts(keywordTabs.length ? keywordTabs : [selected.category || selected.company_name]);
+    setKeywordDrafts(keywordTabs.length ? keywordTabs : ['']);
     setNewKeyword('');
     setKeywordManagerOpen(true);
   };
@@ -438,7 +496,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
     const existing = leads.find(lead => lead.google_place_id === place.google_place_id);
     if (existing) {
       setSelectedId(existing.id);
-      setActiveKeyword(existing.analysis_data?.visibility_keywords?.[0] || existing.category || existing.company_name);
+      setActiveKeyword(registeredVisibilityKeywords(existing)[0] || '');
     } else {
       const created = await createLead({
         company_name: place.company_name || 'Empresa do Google',
@@ -472,7 +530,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
       });
       if (created.error || !created.data) throw new Error(created.error || 'Não foi possível salvar a empresa.');
       setSelectedId(created.data.id);
-      setActiveKeyword(created.data.category || created.data.company_name);
+      setActiveKeyword(registeredVisibilityKeywords(created.data)[0] || '');
     }
 
     setGoogleMapsUrl(place.google_maps_url || fallbackMapsUrl);
@@ -563,8 +621,14 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
     if (!selected.google_place_id || typeof selected.latitude !== 'number' || typeof selected.longitude !== 'number') {
       return onShowToast('Selecione uma empresa gerada pelo Google e com coordenadas válidas.', 'error');
     }
-    const searchKeyword = activeKeyword.trim() || selected.category?.trim() || selected.company_name.trim();
-    if (searchKeyword.length < 2) return onShowToast('Selecione ou cadastre uma palavra-chave válida.', 'error');
+    const searchKeyword = activeKeyword.trim();
+    const registeredKeyword = activeRegisteredKeyword
+      && keywordKey(activeRegisteredKeyword) === keywordKey(searchKeyword)
+      ? activeRegisteredKeyword
+      : null;
+    if (!registeredKeyword) {
+      return onShowToast('Selecione uma palavra-chave cadastrada antes de gerar o mapa.', 'error');
+    }
     setGeneratingGrid(true);
     const { data } = await supabase.auth.getSession();
     const response = await fetch('/api/places', {
@@ -577,7 +641,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
         action: 'grid',
         leadId: selected.id,
         placeId: selected.google_place_id,
-        keyword: searchKeyword,
+        keyword: registeredKeyword,
         latitude: selected.latitude,
         longitude: selected.longitude,
         radiusMeters: 2000,
@@ -651,6 +715,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
         {selected && <div className="flex flex-wrap items-center gap-2">
           <span className="mr-1 text-[10px] uppercase tracking-[0.12em] font-semibold text-[#727687]">Palavras-chave</span>
           {keywordTabs.map(keyword => <button key={keyword} type="button" onClick={() => selectKeyword(keyword)} className={`px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors ${keywordKey(activeKeyword) === keywordKey(keyword) ? 'bg-[#0066ff] border-[#0066ff] text-white shadow-sm' : 'bg-white dark:bg-[#10142e] border-[#c2c6d8]/45 hover:border-[#0066ff] text-[#424656] dark:text-[#dfe3f4]'}`}>{keyword}</button>)}
+          {!keywordTabs.length && <span className="text-xs text-amber-700">Cadastre uma palavra-chave para gerar o mapa.</span>}
           <button type="button" onClick={openKeywordManager} className="w-full sm:w-auto sm:ml-auto px-3 py-2 sm:py-1.5 rounded-xl sm:rounded-full border border-[#c2c6d8]/45 text-xs font-semibold text-[#0066ff] hover:bg-[#0066ff]/5 flex justify-center items-center gap-1.5"><Pencil className="w-3 h-3" /> Gerenciar palavras-chave</button>
         </div>}
 
@@ -665,7 +730,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
             <select aria-label="Tamanho da grade" value={gridSize} onChange={event => setGridSize(Number(event.target.value))} className="min-w-0 px-3 py-2 rounded-xl bg-white dark:bg-[#141936] border border-[#c2c6d8]/50 text-xs font-medium">
               {[3, 4, 5, 6, 7].map(size => <option key={size} value={size}>{size}×{size} ({size * size} pontos)</option>)}
             </select>
-            <button disabled={generatingGrid} onClick={() => void runVisibilityGrid()} className="col-span-2 md:col-span-1 min-h-11 px-5 py-2 rounded-xl bg-[#0066ff] hover:bg-[#0050cb] disabled:opacity-50 text-white text-xs font-semibold flex justify-center items-center gap-2">
+            <button disabled={generatingGrid || !activeRegisteredKeyword} onClick={() => void runVisibilityGrid()} className="col-span-2 md:col-span-1 min-h-11 px-5 py-2 rounded-xl bg-[#0066ff] hover:bg-[#0050cb] disabled:opacity-50 text-white text-xs font-semibold flex justify-center items-center gap-2">
               {generatingGrid ? <Loader2 className="w-4 h-4 animate-spin"/> : <Grid3X3 className="w-4 h-4"/>}
               {generatingGrid ? `Consultando ${gridSize * gridSize} pontos…` : 'Gerar mapa de calor'}
             </button>

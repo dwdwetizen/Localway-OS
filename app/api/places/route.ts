@@ -859,6 +859,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'A empresa selecionada não possui coordenadas válidas.' }, { status: 400 });
     }
 
+    const { data: lead, error: leadError } = await authorization.client!
+      .from('leads')
+      .select('analysis_data, google_place_id')
+      .eq('id', leadId)
+      .eq('created_by', authorization.userId!)
+      .single();
+    if (leadError || !lead || lead.google_place_id !== targetPlaceId) {
+      return NextResponse.json({ error: 'A empresa selecionada não foi encontrada na sua conta.' }, { status: 404 });
+    }
+    const analysisData = lead.analysis_data && typeof lead.analysis_data === 'object'
+      ? lead.analysis_data as Record<string, unknown>
+      : {};
+    const registeredKeywords = Array.isArray(analysisData.visibility_keywords)
+      ? analysisData.visibility_keywords
+        .filter((value): value is string => typeof value === 'string')
+        .map(value => value.trim())
+        .filter(value => value.length >= 2)
+      : [];
+    const registeredKeyword = registeredKeywords.find(value =>
+      value.localeCompare(keyword, 'pt-BR', { sensitivity: 'base' }) === 0);
+    if (!registeredKeyword) {
+      return NextResponse.json(
+        { error: 'Essa palavra-chave não está cadastrada para esta empresa. Selecione uma palavra-chave da lista.' },
+        { status: 400 },
+      );
+    }
+
     const { points: gridPoints, stepMeters } = createGrid(
       centerLatitude,
       centerLongitude,
@@ -884,7 +911,7 @@ export async function POST(request: NextRequest) {
           ].join(','),
         },
         body: JSON.stringify({
-          textQuery: keyword,
+          textQuery: registeredKeyword,
           languageCode: 'pt-BR',
           regionCode: 'BR',
           pageSize: 20,
@@ -944,7 +971,7 @@ export async function POST(request: NextRequest) {
 
     const scanPayload = {
         lead_id: leadId,
-        keyword,
+        keyword: registeredKeyword,
         grid_size: gridSize,
         radius_m: radiusMeters,
         center_latitude: centerLatitude,
