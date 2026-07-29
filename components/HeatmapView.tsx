@@ -27,6 +27,7 @@ type BoundsInstance = {
 type MarkerInstance = {
   setMap?: (map: MapInstance | null) => void;
   map?: MapInstance | null;
+  addListener?: (eventName: string, handler: () => void) => { remove?: () => void };
 };
 type CircleInstance = {
   setMap: (map: MapInstance | null) => void;
@@ -186,6 +187,17 @@ function scanGridSize(scan: VisibilityScan) {
   return Number.isInteger(sizeFromPoints) ? sizeFromPoints : scan.grid_size;
 }
 
+function centerPointForScan(scan: VisibilityScan) {
+  return scan.points.reduce<VisibilityPoint | null>((closest, point) => {
+    if (!closest) return point;
+    const pointDistance = ((point.latitude - scan.center_latitude) ** 2)
+      + ((point.longitude - scan.center_longitude) ** 2);
+    const closestDistance = ((closest.latitude - scan.center_latitude) ** 2)
+      + ((closest.longitude - scan.center_longitude) ** 2);
+    return pointDistance < closestDistance ? point : closest;
+  }, null);
+}
+
 function keywordKey(value: string) {
   return value.trim().toLocaleLowerCase('pt-BR');
 }
@@ -201,14 +213,22 @@ function registeredVisibilityKeywords(lead: Lead) {
       keywords.findIndex(item => keywordKey(item) === keywordKey(value)) === index);
 }
 
-function GridMapCanvas({ scan, mapsKey, onError }: {
+function GridMapCanvas({ scan, mapsKey, targetPlaceId, focusedPlaceId, focusedPlaceName, onError }: {
   scan: VisibilityScan;
   mapsKey: string;
+  targetPlaceId: string | null;
+  focusedPlaceId: string | null;
+  focusedPlaceName: string;
   onError: (message: string) => void;
 }) {
   const node = useRef<HTMLDivElement>(null);
   const [mapError, setMapError] = useState('');
   const [mapReady, setMapReady] = useState(false);
+  const [selectedPoint, setSelectedPoint] = useState<{
+    row: number;
+    column: number;
+    position: number | null;
+  } | null>(null);
 
   useEffect(() => {
     if (!node.current || !mapsKey || !scan.points.length) return;
@@ -224,7 +244,6 @@ function GridMapCanvas({ scan, mapsKey, onError }: {
       const map = new maps.Map(node.current, {
         center: { lat: scan.center_latitude, lng: scan.center_longitude },
         zoom: 13,
-        mapId: 'DEMO_MAP_ID',
         mapTypeControl: false,
         streetViewControl: false,
         fullscreenControl: false,
@@ -232,17 +251,17 @@ function GridMapCanvas({ scan, mapsKey, onError }: {
         clickableIcons: false,
         gestureHandling: 'greedy',
         styles: [
-          { elementType: 'geometry', stylers: [{ color: '#e9e8e2' }] },
-          { elementType: 'labels.text.fill', stylers: [{ color: '#8a8d88' }] },
+          { elementType: 'geometry', stylers: [{ color: '#f4f4f1' }] },
+          { elementType: 'labels.text.fill', stylers: [{ color: '#989b96' }] },
           { elementType: 'labels.text.stroke', stylers: [{ color: '#ffffff' }, { weight: 3 }] },
-          { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#d1d1cb' }] },
-          { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#ecebe6' }] },
-          { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#e1e5dd' }] },
-          { featureType: 'poi', elementType: 'labels.icon', stylers: [{ saturation: -80 }, { lightness: 18 }] },
-          { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#f7f6f2' }] },
-          { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#deddd7' }] },
-          { featureType: 'transit', stylers: [{ saturation: -75 }, { lightness: 18 }] },
-          { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#d7e3e5' }] },
+          { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#deded9' }] },
+          { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#f5f5f2' }] },
+          { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#eeeeea' }] },
+          { featureType: 'poi', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: 32 }] },
+          { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
+          { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#e9e9e4' }] },
+          { featureType: 'transit', stylers: [{ saturation: -100 }, { lightness: 35 }] },
+          { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#e4ecec' }] },
         ],
       });
       tilesListener = map.addListener?.('tilesloaded', () => {
@@ -261,6 +280,12 @@ function GridMapCanvas({ scan, mapsKey, onError }: {
       const pointRadius = Math.max(190, gridStep * 0.48);
       scan.points.forEach(point => {
         const position = { lat: point.latitude, lng: point.longitude };
+        const focusedPosition = !focusedPlaceId || focusedPlaceId === targetPlaceId
+          ? point.position
+          : (() => {
+              const index = (point.top_places || []).findIndex(place => place.id === focusedPlaceId);
+              return index >= 0 ? index + 1 : null;
+            })();
         bounds.extend(position);
         const circle = new maps.Circle({
           map,
@@ -273,12 +298,42 @@ function GridMapCanvas({ scan, mapsKey, onError }: {
           strokeWeight: 0.5,
           clickable: false,
         });
-        const markerTitle = point.position ? `Posição estimada: ${point.position}` : 'Posição estimada: 20+';
-        const markerZIndex = point.position === null ? 1 : Math.max(2, 30 - point.position);
+        const markerTitle = focusedPosition
+          ? `${focusedPlaceName}: posição ${focusedPosition} neste ponto`
+          : `${focusedPlaceName}: fora dos resultados armazenados neste ponto`;
+        const markerZIndex = focusedPosition === null ? 1 : Math.max(2, 30 - focusedPosition);
+        const selectPoint = () => setSelectedPoint({
+          row: point.row,
+          column: point.column,
+          position: focusedPosition,
+        });
         let marker: MarkerInstance;
-        if (maps.AdvancedMarkerElement) {
+        if (maps.Marker && maps.SymbolPath) {
+          marker = new maps.Marker({
+            map,
+            position,
+            title: markerTitle,
+            label: {
+              text: focusedPosition ? String(focusedPosition) : '?',
+              color: '#ffffff',
+              fontSize: '12px',
+              fontWeight: '700',
+            },
+            icon: {
+              path: maps.SymbolPath.CIRCLE,
+              fillColor: colorForPosition(focusedPosition),
+              fillOpacity: 1,
+              strokeColor: '#ffffff',
+              strokeOpacity: 1,
+              strokeWeight: 2.25,
+              scale: 15.5,
+            },
+            zIndex: markerZIndex,
+          });
+          marker.addListener?.('click', selectPoint);
+        } else if (maps.AdvancedMarkerElement) {
           const content = document.createElement('div');
-          content.textContent = point.position ? String(point.position) : '?';
+          content.textContent = focusedPosition ? String(focusedPosition) : '?';
           content.title = markerTitle;
           Object.assign(content.style, {
             width: '31px',
@@ -287,40 +342,25 @@ function GridMapCanvas({ scan, mapsKey, onError }: {
             placeItems: 'center',
             borderRadius: '999px',
             border: '2.25px solid #ffffff',
-            background: colorForPosition(point.position),
+            background: colorForPosition(focusedPosition),
             color: '#ffffff',
             fontSize: '12px',
             fontWeight: '700',
             lineHeight: '1',
             boxShadow: '0 1px 4px rgba(31, 41, 55, 0.28)',
+            cursor: 'pointer',
+          });
+          content.setAttribute('role', 'button');
+          content.setAttribute('tabindex', '0');
+          content.addEventListener('click', selectPoint);
+          content.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') selectPoint();
           });
           marker = new maps.AdvancedMarkerElement({
             map,
             position,
             title: markerTitle,
             content,
-            zIndex: markerZIndex,
-          });
-        } else if (maps.Marker && maps.SymbolPath) {
-          marker = new maps.Marker({
-            map,
-            position,
-            title: markerTitle,
-            label: {
-              text: point.position ? String(point.position) : '?',
-              color: '#ffffff',
-              fontSize: '12px',
-              fontWeight: '700',
-            },
-            icon: {
-              path: maps.SymbolPath.CIRCLE,
-              fillColor: colorForPosition(point.position),
-              fillOpacity: 1,
-              strokeColor: '#ffffff',
-              strokeOpacity: 1,
-              strokeWeight: 2.25,
-              scale: 15.5,
-            },
             zIndex: markerZIndex,
           });
         } else {
@@ -346,7 +386,7 @@ function GridMapCanvas({ scan, mapsKey, onError }: {
       });
       circles.forEach(circle => circle.setMap(null));
     };
-  }, [mapsKey, onError, scan]);
+  }, [focusedPlaceId, focusedPlaceName, mapsKey, onError, scan, targetPlaceId]);
 
   return <div className="relative w-full h-[520px] sm:h-[680px] bg-[#e9e8e2] overflow-hidden">
     <div ref={node} className={`absolute inset-0 w-full h-full transition-opacity duration-700 ease-out ${mapReady ? 'opacity-100' : 'opacity-0'}`} />
@@ -355,6 +395,15 @@ function GridMapCanvas({ scan, mapsKey, onError }: {
     </div>}
     {mapError && <div className="absolute inset-0 z-10 grid place-items-center bg-gradient-to-br from-[#f8fafc] to-[#eef2f6] p-8 text-center">
       <div><MapPin className="w-10 h-10 mx-auto text-rose-500" /><p className="font-semibold mt-3">Não foi possível exibir o mapa</p><p className="text-xs text-[#727687] mt-1 max-w-md">{mapError}</p></div>
+    </div>}
+    {mapReady && selectedPoint && <div className="absolute z-20 left-1/2 bottom-5 -translate-x-1/2 max-w-[calc(100%-2rem)] rounded-xl border border-white/90 bg-white/95 px-4 py-3 shadow-[0_8px_30px_rgba(31,41,55,0.22)] backdrop-blur-sm">
+      <button type="button" onClick={() => setSelectedPoint(null)} className="absolute right-2 top-2 text-[#8a8d94] hover:text-[#34363e]" aria-label="Fechar detalhe"><X className="w-3.5 h-3.5" /></button>
+      <p className="pr-5 text-xs font-semibold text-[#34363e]">{focusedPlaceName}</p>
+      <p className="mt-1 text-[11px] text-[#6e7179]">
+        {selectedPoint.position
+          ? `Posição ${selectedPoint.position} neste ponto da grade.`
+          : 'Não apareceu entre os resultados armazenados neste ponto.'}
+      </p>
     </div>}
   </div>;
 }
@@ -370,6 +419,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
   const [generatingGrid, setGeneratingGrid] = useState(false);
   const [scanHistory, setScanHistory] = useState<VisibilityScan[]>([]);
   const [activeScan, setActiveScan] = useState<VisibilityScan | null>(null);
+  const [focusedPlaceId, setFocusedPlaceId] = useState('');
   const [activeKeyword, setActiveKeyword] = useState('');
   const [keywordManagerOpen, setKeywordManagerOpen] = useState(false);
   const [keywordDrafts, setKeywordDrafts] = useState<string[]>([]);
@@ -415,6 +465,16 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
   );
   const selected = located.find(lead => lead.id === selectedId) || null;
   const activeScanLead = activeScan ? leads.find(lead => lead.id === activeScan.lead_id) || null : null;
+  const centerPoint = activeScan ? centerPointForScan(activeScan) : null;
+  const centerPosition = centerPoint?.position ?? null;
+  const targetPlace = (() => {
+    if (!activeScan || !activeScanLead?.google_place_id) return null;
+    for (const point of activeScan.points) {
+      const match = (point.top_places || []).find(place => place.id === activeScanLead.google_place_id);
+      if (match) return match;
+    }
+    return null;
+  })();
   const keywordTabs = useMemo(() => {
     if (!selected) return [];
     return registeredVisibilityKeywords(selected);
@@ -448,10 +508,21 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
       });
     });
     return Array.from(grouped.values())
-      .map(place => ({ ...place, average_position: place.total_position / place.appearances }))
+      .map(place => ({
+        ...place,
+        average_position: place.total_position / place.appearances,
+        center_position: centerPoint
+          ? (() => {
+              const index = (centerPoint.top_places || []).findIndex(item => item.id === place.id);
+              return index >= 0 ? index + 1 : null;
+            })()
+          : null,
+      }))
       .sort((a, b) => b.appearances - a.appearances || a.average_position - b.average_position)
       .slice(0, 20);
-  }, [activeScan, activeScanLead?.google_place_id]);
+  }, [activeScan, activeScanLead?.google_place_id, centerPoint]);
+  const focusedCompetitor = competitors.find(place => place.id === focusedPlaceId) || null;
+  const displayedPlaceName = focusedCompetitor?.name || activeScanLead?.company_name || 'Empresa analisada';
   const areaDifficulty = !activeScan
     ? null
     : competitors.length >= 12 || activeScan.visibility_percentage < 25
@@ -464,6 +535,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
   const handleMapError = useCallback((message: string) => onShowToast(message, 'error'), [onShowToast]);
   const selectKeyword = (keyword: string) => {
     if (!selected) return;
+    setFocusedPlaceId('');
     setActiveKeyword(keyword);
     const scan = scanHistory.find(item => item.lead_id === selected.id && keywordKey(item.keyword) === keywordKey(keyword));
     setActiveScan(scan || null);
@@ -500,6 +572,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
     if (result.error) return onShowToast(result.error, 'error');
     const nextKeyword = cleaned.some(item => keywordKey(item) === keywordKey(activeKeyword)) ? activeKeyword : cleaned[0];
     setActiveKeyword(nextKeyword);
+    setFocusedPlaceId('');
     setActiveScan(scanHistory.find(item => item.lead_id === selected.id && keywordKey(item.keyword) === keywordKey(nextKeyword)) || null);
     setKeywordManagerOpen(false);
     onShowToast('Palavras-chave atualizadas.', 'success');
@@ -550,6 +623,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
     }
 
     setGoogleMapsUrl(place.google_maps_url || fallbackMapsUrl);
+    setFocusedPlaceId('');
     setActiveScan(null);
   };
   const resolveGoogleProfile = async (selectedUrl?: string) => {
@@ -628,6 +702,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
       setActiveScan(null);
       setSelectedId('');
       setActiveKeyword('');
+      setFocusedPlaceId('');
     }
     onShowToast('Análise apagada.', 'success');
   };
@@ -670,6 +745,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
     const scan = result.scan as VisibilityScan;
     setActiveKeyword(scan.keyword);
     setActiveScan(scan);
+    setFocusedPlaceId('');
     setScanHistory(current => [scan, ...current.filter(item => item.id !== scan.id)].slice(0, 20));
     onShowToast(`Grade ${gridSize}×${gridSize} calculada e salva no histórico.`);
   };
@@ -690,6 +766,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
       }
     }
     setActiveKeyword(keyword);
+    setFocusedPlaceId('');
     setActiveScan(scanHistory.find(item =>
       item.lead_id === selected.id && keywordKey(item.keyword) === keywordKey(keyword)) || null);
     onShowToast(`“${keyword}” adicionada ao mapa de calor.`, 'success');
@@ -771,23 +848,25 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
             <span className="inline-flex mt-2 max-w-full truncate px-3 py-1.5 rounded-full bg-[#3978d4] text-white text-[12px] font-medium shadow-[0_1px_2px_rgba(25,75,145,0.25)]">{activeScan.keyword}</span>
 
             <div className="mt-5">
-              <p className="text-[11px] font-semibold text-[#579663]">Rank {activeScan.average_position ? Math.round(activeScan.average_position) : '20+'}</p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-[11px] font-semibold text-[#579663]">Rank {centerPosition || '20+'} no centro</p>
+                <InfoTip text={`Posição no ponto central da grade. Média nos ${activeScan.points.length} pontos: ${activeScan.average_position ? activeScan.average_position.toFixed(1).replace('.', ',') : '20+'}.`} />
+              </div>
               <div className="mt-1.5 flex items-start gap-3">
-                <div className="shrink-0 w-14 h-14 rounded-[3px] bg-gradient-to-br from-[#d9e1ea] to-[#b8c6d4] text-[#3978d4] grid place-items-center font-semibold text-sm shadow-inner">
-                  {(activeScanLead?.company_name || 'EA').slice(0, 2).toUpperCase()}
-                </div>
+                <CompetitorPhoto photoName={targetPlace?.photo_name || null} companyName={activeScanLead?.company_name || 'Empresa analisada'} size="large" />
                 <div className="min-w-0 flex-1">
                   <p className="text-[14px] font-medium leading-[1.25] text-[#34363e]">{activeScanLead?.company_name || 'Empresa analisada'}</p>
                   <p className="text-[11px] leading-4 text-[#777a83] mt-0.5 line-clamp-2">{activeScanLead?.category || activeScanLead?.address}</p>
                   <div className="mt-2">
-                    <div className="flex items-center gap-1 text-[11px] text-[#6e7179]"><span>Visibilidade do negócio</span><Info className="w-3 h-3 text-[#9a9ca3]" /><strong className="ml-auto text-[#579663]">{Math.round(activeScan.visibility_percentage)}%</strong></div>
+                    <div className="flex items-center gap-1 text-[11px] text-[#6e7179]"><span>Visibilidade do negócio</span><InfoTip text="Percentual de pontos da grade em que a empresa apareceu entre os 20 primeiros resultados do Google." /><strong className="ml-auto text-[#579663]">{Math.round(activeScan.visibility_percentage)}%</strong></div>
                     <div className="h-1.5 mt-1 rounded-full bg-[#d8dadd] overflow-hidden"><div className="h-full rounded-full bg-[#579663] transition-[width] duration-700 ease-out" style={{ width: `${Math.max(activeScan.visibility_percentage, 2)}%` }} /></div>
                   </div>
                   <div className="mt-2">
-                    <div className="flex items-center gap-1 text-[11px] text-[#6e7179]"><span>Dificuldade da área</span><Info className="w-3 h-3 text-[#9a9ca3]" /><strong className={`ml-auto uppercase text-[10px] ${areaDifficulty === 'Alta' ? 'text-[#c96050]' : areaDifficulty === 'Média' ? 'text-[#b8813e]' : 'text-[#579663]'}`}>{areaDifficulty}</strong></div>
+                    <div className="flex items-center gap-1 text-[11px] text-[#6e7179]"><span>Dificuldade da área</span><InfoTip text="Estimativa baseada na quantidade de concorrentes encontrados e na visibilidade da empresa em toda a grade." /><strong className={`ml-auto uppercase text-[10px] ${areaDifficulty === 'Alta' ? 'text-[#c96050]' : areaDifficulty === 'Média' ? 'text-[#b8813e]' : 'text-[#579663]'}`}>{areaDifficulty}</strong></div>
                     <div className="h-1.5 mt-1 rounded-full bg-[#d8dadd] overflow-hidden"><div className="h-full rounded-full bg-[#a8aaad] transition-[width] duration-700 ease-out" style={{ width: `${areaDifficultyPercentage}%` }} /></div>
                   </div>
-                  {activeScanLead?.google_maps_url && <a href={activeScanLead.google_maps_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 mt-2.5 text-[11px] font-medium text-[#3978d4] hover:text-[#245fae] transition-colors">Abrir no Google <ExternalLink className="w-3 h-3" /></a>}
+                  <button type="button" onClick={() => setFocusedPlaceId('')} className={`mt-2.5 text-[11px] font-medium transition-colors ${!focusedPlaceId ? 'text-[#579663]' : 'text-[#3978d4] hover:text-[#245fae]'}`}>{!focusedPlaceId ? 'Exibindo no mapa' : 'Ver meu ranking no mapa'}</button>
+                  {activeScanLead?.google_maps_url && <a href={activeScanLead.google_maps_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 mt-2.5 ml-3 text-[11px] font-medium text-[#3978d4] hover:text-[#245fae] transition-colors">Abrir no Google <ExternalLink className="w-3 h-3" /></a>}
                 </div>
               </div>
             </div>
@@ -795,23 +874,25 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
 
           <div className="px-5 py-3 flex items-center gap-1.5 border-b border-[#e5e6ea]">
             <p className="text-[12px] font-medium">Concorrentes ({competitors.length})</p>
-            <Info className="w-3 h-3 text-[#9a9ca3]" />
+            <InfoTip text="Empresas encontradas pelo Google nesta grade. Clique em um concorrente para ver a posição dele em cada ponto do mapa." />
           </div>
           <div className="flex-1 overflow-y-auto divide-y divide-[#e8e9ec]">
             {!competitors.length && <div className="p-6 text-center text-xs text-[#727687]">Gere uma nova grade para carregar os concorrentes encontrados pelo Google.</div>}
             {competitors.map(competitor => {
-              const displayPosition = Math.max(1, Math.round(competitor.average_position));
-              return <article key={competitor.id} className="group px-5 py-3.5 transition-colors duration-200 hover:bg-[#f7f8fa]">
-                <p className={`text-[10px] font-semibold ${displayPosition <= 3 ? 'text-[#579663]' : displayPosition <= 10 ? 'text-[#c47735]' : 'text-[#c75a58]'}`}>Rank {displayPosition}</p>
+              const displayPosition = competitor.center_position || Math.max(1, Math.round(competitor.average_position));
+              const isFocused = competitor.id === focusedPlaceId;
+              return <button type="button" key={competitor.id} onClick={() => setFocusedPlaceId(competitor.id)} className={`group w-full px-5 py-3.5 text-left transition-colors duration-200 hover:bg-[#f3f6f8] ${isFocused ? 'bg-[#3978d4]/8 ring-1 ring-inset ring-[#3978d4]/20' : ''}`}>
+                <p className={`text-[10px] font-semibold ${displayPosition <= 3 ? 'text-[#579663]' : displayPosition <= 10 ? 'text-[#c47735]' : 'text-[#c75a58]'}`}>Rank {displayPosition}{competitor.center_position ? ' no centro' : ' em média'}</p>
                 <div className="mt-1.5 flex gap-3">
                   <CompetitorPhoto photoName={competitor.photo_name} companyName={competitor.name} />
                   <div className="min-w-0 flex-1">
                     <p className="text-[13px] font-medium leading-[1.25] line-clamp-2 text-[#34363e]">{competitor.name}</p>
                     <p className="text-[10px] text-[#777a83] mt-0.5 line-clamp-1">{competitor.category || activeScan.keyword}</p>
                     {competitor.rating !== null && <p className="flex items-center gap-1 text-[10px] mt-1 text-[#d29138]"><Star className="w-3 h-3 fill-current" /><strong>{competitor.rating.toFixed(1)}</strong><span className="text-[#777a83]">({competitor.review_count})</span></p>}
+                    {isFocused && <p className="mt-1 text-[10px] font-semibold text-[#3978d4]">Exibindo posições no mapa</p>}
                   </div>
                 </div>
-              </article>;
+              </button>;
             })}
           </div>
         </aside>}
@@ -822,7 +903,14 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
           {!mapsKey
             ? <EmptyMap title="Chave do mapa ainda não configurada" detail="O administrador pode cadastrar a chave em Administração → Integrações." />
             : activeScan
-              ? <GridMapCanvas scan={activeScan} mapsKey={mapsKey} onError={handleMapError}/>
+              ? <GridMapCanvas
+                  scan={activeScan}
+                  mapsKey={mapsKey}
+                  targetPlaceId={activeScanLead?.google_place_id || null}
+                  focusedPlaceId={focusedPlaceId || activeScanLead?.google_place_id || null}
+                  focusedPlaceName={displayedPlaceName}
+                  onError={handleMapError}
+                />
               : <EmptyMap title="Pronto para analisar" detail="Cole o link do perfil do Google Maps acima. O sistema identifica a empresa e o segmento automaticamente." />}
         </section>
       </div>
@@ -841,7 +929,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
             const lead = leads.find(item => item.id === scan.lead_id);
             const historyGridSize = scanGridSize(scan);
             return <div key={scan.id} className={`flex items-stretch hover:bg-[#f8f9fc] dark:hover:bg-[#10142e] transition-colors ${activeScan?.id === scan.id ? 'bg-[#0066ff]/5' : ''}`}>
-              <button type="button" onClick={() => { setActiveScan(scan); setSelectedId(scan.lead_id); setActiveKeyword(scan.keyword); setGridSize(historyGridSize); }} className="min-w-0 flex-1 p-4 text-left flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <button type="button" onClick={() => { setActiveScan(scan); setSelectedId(scan.lead_id); setActiveKeyword(scan.keyword); setFocusedPlaceId(''); setGridSize(historyGridSize); }} className="min-w-0 flex-1 p-4 text-left flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
                   <p className="text-xs font-semibold">{lead?.company_name || 'Empresa'} <span className="font-normal text-[#727687]">• {scan.keyword}</span></p>
                   <p className="text-[10px] text-[#727687] mt-0.5">{new Date(scan.created_at).toLocaleString('pt-BR')} • Grade {historyGridSize}×{historyGridSize} • Raio de 2 km</p>
@@ -882,8 +970,24 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
   );
 }
 
-function CompetitorPhoto({ photoName, companyName }: { photoName: string | null; companyName: string }) {
+function InfoTip({ text }: { text: string }) {
+  return <span className="group/info relative inline-flex shrink-0">
+    <button type="button" aria-label={text} className="rounded-full text-[#9a9ca3] hover:text-[#3978d4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3978d4]/40">
+      <Info className="w-3 h-3" />
+    </button>
+    <span role="tooltip" className="pointer-events-none invisible absolute z-50 left-1/2 bottom-[calc(100%+7px)] w-56 -translate-x-1/2 rounded-lg bg-[#252832] px-3 py-2 text-[10px] font-normal leading-4 text-white opacity-0 shadow-xl transition-opacity group-hover/info:visible group-hover/info:opacity-100 group-focus-within/info:visible group-focus-within/info:opacity-100">
+      {text}
+    </span>
+  </span>;
+}
+
+function CompetitorPhoto({ photoName, companyName, size = 'normal' }: {
+  photoName: string | null;
+  companyName: string;
+  size?: 'normal' | 'large';
+}) {
   const [photoUrl, setPhotoUrl] = useState('');
+  const sizeClass = size === 'large' ? 'w-14 h-14' : 'w-12 h-12';
 
   useEffect(() => {
     if (!photoName || !supabase) return;
@@ -911,8 +1015,8 @@ function CompetitorPhoto({ photoName, companyName }: { photoName: string | null;
   }, [photoName]);
 
   return photoUrl
-    ? <Image src={photoUrl} alt="" width={48} height={48} unoptimized className="shrink-0 w-12 h-12 rounded-[3px] object-cover bg-[#e8ebee]" />
-    : <div className="shrink-0 w-12 h-12 rounded-[3px] bg-gradient-to-br from-[#d9e1ea] to-[#b8c6d4] text-[#3978d4] grid place-items-center font-semibold text-sm">{companyName.slice(0, 2).toUpperCase()}</div>;
+    ? <Image src={photoUrl} alt="" width={size === 'large' ? 56 : 48} height={size === 'large' ? 56 : 48} unoptimized className={`shrink-0 ${sizeClass} rounded-[3px] object-cover bg-[#e8ebee]`} />
+    : <div className={`shrink-0 ${sizeClass} rounded-[3px] bg-gradient-to-br from-[#d9e1ea] to-[#b8c6d4] text-[#3978d4] grid place-items-center font-semibold text-sm`}>{companyName.slice(0, 2).toUpperCase()}</div>;
 }
 
 function EmptyMap({ title, detail }: { title: string; detail: string }) {

@@ -938,7 +938,7 @@ export async function POST(request: NextRequest) {
         position: index >= 0 ? index + 1 : null,
         found: index >= 0,
         top_place_ids: ids.slice(0, 3),
-        top_places: places.slice(0, 5).flatMap(place => {
+        top_places: places.slice(0, 20).flatMap(place => {
           const id = readText(place.id);
           if (!id) return [];
           return [{
