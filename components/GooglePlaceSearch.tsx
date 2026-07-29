@@ -39,9 +39,15 @@ export function GooglePlaceSearch({ module, onSelect, disabled = false }: Google
   const [message, setMessage] = useState('');
   const [open, setOpen] = useState(false);
   const requestSequence = useRef(0);
+  const selectedQuery = useRef('');
 
   useEffect(() => {
     const term = query.trim();
+    if (term && term === selectedQuery.current) {
+      setLoading(false);
+      setOpen(false);
+      return;
+    }
     if (term.length < 2 || disabled) {
       return;
     }
@@ -85,6 +91,7 @@ export function GooglePlaceSearch({ module, onSelect, disabled = false }: Google
 
   const choose = async (place: GooglePlaceSuggestion) => {
     requestSequence.current += 1;
+    selectedQuery.current = place.company_name.trim();
     setLoading(false);
     setQuery(place.company_name);
     setSuggestions([]);
@@ -101,6 +108,7 @@ export function GooglePlaceSearch({ module, onSelect, disabled = false }: Google
         disabled={disabled}
         onChange={event => {
           const value = event.target.value;
+          selectedQuery.current = '';
           setQuery(value);
           setOpen(true);
           if (value.trim().length < 2) {
@@ -110,7 +118,9 @@ export function GooglePlaceSearch({ module, onSelect, disabled = false }: Google
             setLoading(false);
           }
         }}
-        onFocus={() => setOpen(true)}
+        onFocus={() => {
+          if (query.trim() !== selectedQuery.current) setOpen(true);
+        }}
         onBlur={() => window.setTimeout(() => setOpen(false), 120)}
         onKeyDown={event => {
           if (event.key === 'Escape') setOpen(false);
