@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
-import { Clock3, ExternalLink, Grid3X3, History, Info, Layers, Link2, Loader2, MapPin, Pencil, Plus, Star, Trash2, X } from 'lucide-react';
+import { ChevronDown, Clock3, ExternalLink, Grid3X3, History, Info, Layers, Link2, Loader2, MapPin, Pencil, Plus, Star, Trash2, X } from 'lucide-react';
 import { useLeads } from '@/hooks/use-leads';
 import { Lead } from '@/lib/leads';
 import { supabase } from '@/lib/supabase';
@@ -300,6 +300,8 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
   const [keywordDrafts, setKeywordDrafts] = useState<string[]>([]);
   const [newKeyword, setNewKeyword] = useState('');
   const [savingKeywords, setSavingKeywords] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [deletingScanId, setDeletingScanId] = useState('');
   const resolvingProfileRef = useRef(false);
 
   useEffect(() => {
@@ -326,9 +328,6 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
       if (active && !scansRequest.error) {
         const rows = (scansRequest.data || []) as VisibilityScan[];
         setScanHistory(rows);
-        setActiveScan(rows[0] || null);
-        setSelectedId(rows[0]?.lead_id || '');
-        setActiveKeyword(rows[0]?.keyword || '');
       }
     };
     void loadConfiguration();
@@ -527,6 +526,37 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
       setResolvingProfile(false);
     }
   };
+  const deleteHistoryScan = async (scan: VisibilityScan) => {
+    if (!supabase || deletingScanId) return;
+    const confirmed = window.confirm(`Apagar a análise de “${scan.keyword}”? Essa ação não pode ser desfeita.`);
+    if (!confirmed) return;
+
+    setDeletingScanId(scan.id);
+    const { data, error: deleteError } = await supabase
+      .from('local_visibility_scans')
+      .delete()
+      .eq('id', scan.id)
+      .eq('created_by', profile.id)
+      .select('id');
+    setDeletingScanId('');
+
+    if (deleteError) {
+      onShowToast(deleteError.message || 'Não foi possível apagar a análise.', 'error');
+      return;
+    }
+    if (!data?.length) {
+      onShowToast('A análise não foi encontrada ou você não tem permissão para apagá-la.', 'error');
+      return;
+    }
+
+    setScanHistory(current => current.filter(item => item.id !== scan.id));
+    if (activeScan?.id === scan.id) {
+      setActiveScan(null);
+      setSelectedId('');
+      setActiveKeyword('');
+    }
+    onShowToast('Análise apagada.', 'success');
+  };
 
   const runVisibilityGrid = async () => {
     if (!supabase || !selected) return;
@@ -716,26 +746,32 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
       </div>
 
       <section className="rounded-2xl bg-white dark:bg-[#141936] border border-[#c2c6d8]/35 overflow-hidden shadow-sm">
-        <div className="p-4 border-b border-[#c2c6d8]/30 flex items-center gap-2">
+        <button type="button" onClick={() => setHistoryOpen(current => !current)} className="w-full p-4 flex items-center gap-2 text-left hover:bg-[#f8f9fc] dark:hover:bg-[#10142e] transition-colors" aria-expanded={historyOpen}>
           <History className="w-4 h-4 text-[#0066ff]"/>
-          <div>
+          <div className="flex-1">
             <h3 className="font-semibold text-sm tracking-tight" style={{ fontFamily: "'Inter', sans-serif" }}>Histórico de mapas</h3>
-            <p className="text-[10px] text-[#727687]">Análises anteriores desta conta.</p>
+            <p className="text-[10px] text-[#727687]">{scanHistory.length ? `${scanHistory.length} análise${scanHistory.length === 1 ? '' : 's'} anterior${scanHistory.length === 1 ? '' : 'es'}.` : 'Nenhuma análise anterior.'}</p>
           </div>
-        </div>
-        {!scanHistory.length ? <div className="p-8 text-center text-xs text-[#727687]">Nenhum mapa gerado ainda.</div> : <div className="divide-y divide-[#c2c6d8]/25">
+          <ChevronDown className={`w-4 h-4 text-[#727687] transition-transform duration-200 ${historyOpen ? 'rotate-180' : ''}`} />
+        </button>
+        {historyOpen && (!scanHistory.length ? <div className="p-8 border-t border-[#c2c6d8]/30 text-center text-xs text-[#727687]">Nenhum mapa gerado ainda.</div> : <div className="border-t border-[#c2c6d8]/30 divide-y divide-[#c2c6d8]/25">
           {scanHistory.map(scan => {
             const lead = leads.find(item => item.id === scan.lead_id);
             const historyGridSize = scanGridSize(scan);
-            return <button key={scan.id} onClick={() => { setActiveScan(scan); setSelectedId(scan.lead_id); setActiveKeyword(scan.keyword); setGridSize(historyGridSize); }} className={`w-full p-4 text-left flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-[#f8f9fc] dark:hover:bg-[#10142e] ${activeScan?.id === scan.id ? 'bg-[#0066ff]/5' : ''}`}>
-              <div>
-                <p className="text-xs font-semibold">{lead?.company_name || 'Empresa'} <span className="font-normal text-[#727687]">• {scan.keyword}</span></p>
-                <p className="text-[10px] text-[#727687] mt-0.5">{new Date(scan.created_at).toLocaleString('pt-BR')} • Grade {historyGridSize}×{historyGridSize} • Raio de 2 km</p>
-              </div>
-              <div className="flex gap-2 text-[10px] font-semibold"><span className="px-2 py-1 rounded-lg bg-blue-50 text-blue-700">Presença {Math.round(scan.visibility_percentage)}%</span><span className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700">Melhor {scan.best_position || '20+'}</span></div>
-            </button>;
+            return <div key={scan.id} className={`flex items-stretch hover:bg-[#f8f9fc] dark:hover:bg-[#10142e] transition-colors ${activeScan?.id === scan.id ? 'bg-[#0066ff]/5' : ''}`}>
+              <button type="button" onClick={() => { setActiveScan(scan); setSelectedId(scan.lead_id); setActiveKeyword(scan.keyword); setGridSize(historyGridSize); }} className="min-w-0 flex-1 p-4 text-left flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold">{lead?.company_name || 'Empresa'} <span className="font-normal text-[#727687]">• {scan.keyword}</span></p>
+                  <p className="text-[10px] text-[#727687] mt-0.5">{new Date(scan.created_at).toLocaleString('pt-BR')} • Grade {historyGridSize}×{historyGridSize} • Raio de 2 km</p>
+                </div>
+                <div className="flex gap-2 text-[10px] font-semibold"><span className="px-2 py-1 rounded-lg bg-blue-50 text-blue-700">Presença {Math.round(scan.visibility_percentage)}%</span><span className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700">Melhor {scan.best_position || '20+'}</span></div>
+              </button>
+              <button type="button" disabled={Boolean(deletingScanId)} onClick={() => void deleteHistoryScan(scan)} className="shrink-0 w-12 grid place-items-center text-[#9a9daa] hover:text-rose-600 hover:bg-rose-50 disabled:opacity-40 transition-colors" aria-label={`Apagar análise de ${scan.keyword}`} title="Apagar análise">
+                {deletingScanId === scan.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              </button>
+            </div>;
           })}
-        </div>}
+        </div>)}
       </section>
       {keywordManagerOpen && selected && <div className="fixed inset-0 z-50 flex items-end sm:grid sm:place-items-center p-0 sm:p-4 bg-[#10142e]/55 backdrop-blur-sm">
         <div className="w-full max-w-lg max-h-[92dvh] rounded-t-3xl sm:rounded-2xl bg-white dark:bg-[#141936] border border-[#c2c6d8]/35 shadow-2xl overflow-hidden mobile-safe-bottom">
