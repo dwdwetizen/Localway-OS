@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
-import { Clock3, Grid3X3, History, Layers, Link2, Loader2, MapPin, Pencil, Plus, Star, Trash2, X } from 'lucide-react';
+import { Clock3, ExternalLink, Grid3X3, History, Info, Layers, Link2, Loader2, MapPin, Pencil, Plus, Star, Trash2, X } from 'lucide-react';
 import { useLeads } from '@/hooks/use-leads';
 import { Lead } from '@/lib/leads';
 import { supabase } from '@/lib/supabase';
@@ -147,10 +147,10 @@ function loadGoogleMaps(key: string) {
 }
 
 function colorForPosition(position: number | null) {
-  if (position === null) return '#9f1239';
-  if (position <= 3) return '#10b981';
-  if (position <= 10) return '#f59e0b';
-  return '#fb5b6d';
+  if (position === null) return '#2877d3';
+  if (position <= 3) return '#5aa56a';
+  if (position <= 10) return '#d67935';
+  return '#d45757';
 }
 
 function scanGridSize(scan: VisibilityScan) {
@@ -187,21 +187,22 @@ function GridMapCanvas({ scan, mapsKey, onError }: {
         zoom: 13,
         mapTypeControl: false,
         streetViewControl: false,
-        fullscreenControl: true,
+        fullscreenControl: false,
+        zoomControl: true,
         clickableIcons: false,
         gestureHandling: 'greedy',
         styles: [
-          { elementType: 'geometry', stylers: [{ color: '#f4f6f8' }] },
-          { elementType: 'labels.text.fill', stylers: [{ color: '#667085' }] },
+          { elementType: 'geometry', stylers: [{ color: '#e9e8e2' }] },
+          { elementType: 'labels.text.fill', stylers: [{ color: '#8a8d88' }] },
           { elementType: 'labels.text.stroke', stylers: [{ color: '#ffffff' }, { weight: 3 }] },
-          { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#d7dce2' }] },
-          { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#f7f8fa' }] },
-          { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#eef1f4' }] },
-          { featureType: 'poi', elementType: 'labels.icon', stylers: [{ saturation: -70 }, { lightness: 25 }] },
-          { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-          { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#e4e7ec' }] },
-          { featureType: 'transit', stylers: [{ saturation: -70 }, { lightness: 20 }] },
-          { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#dcecf5' }] },
+          { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#d1d1cb' }] },
+          { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#ecebe6' }] },
+          { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#e1e5dd' }] },
+          { featureType: 'poi', elementType: 'labels.icon', stylers: [{ saturation: -80 }, { lightness: 18 }] },
+          { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#f7f6f2' }] },
+          { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#deddd7' }] },
+          { featureType: 'transit', stylers: [{ saturation: -75 }, { lightness: 18 }] },
+          { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#d7e3e5' }] },
         ],
       });
       tilesListener = map.addListener?.('tilesloaded', () => {
@@ -217,7 +218,7 @@ function GridMapCanvas({ scan, mapsKey, onError }: {
       }, 12_000);
       const bounds = new maps.LatLngBounds();
       const gridStep = scan.radius_m / Math.max((scanGridSize(scan) - 1) / 2, 1);
-      const pointRadius = Math.max(180, gridStep * 0.42);
+      const pointRadius = Math.max(190, gridStep * 0.48);
       scan.points.forEach(point => {
         const position = { lat: point.latitude, lng: point.longitude };
         bounds.extend(position);
@@ -225,11 +226,11 @@ function GridMapCanvas({ scan, mapsKey, onError }: {
           map,
           center: position,
           radius: pointRadius,
-          fillColor: '#22c55e',
-          fillOpacity: 0.16,
-          strokeColor: '#16a34a',
-          strokeOpacity: 0.28,
-          strokeWeight: 1,
+          fillColor: '#67ad75',
+          fillOpacity: 0.18,
+          strokeColor: '#67ad75',
+          strokeOpacity: 0.08,
+          strokeWeight: 0.5,
           clickable: false,
         });
         const marker = new maps.Marker({
@@ -237,20 +238,21 @@ function GridMapCanvas({ scan, mapsKey, onError }: {
           position,
           title: point.position ? `Posição estimada: ${point.position}` : 'Posição estimada: 20+',
           label: {
-            text: point.position ? String(point.position) : '20+',
+            text: point.position ? String(point.position) : '?',
             color: '#ffffff',
-            fontSize: point.position ? '11px' : '9px',
-            fontWeight: '800',
+            fontSize: '12px',
+            fontWeight: '700',
           },
           icon: {
             path: maps.SymbolPath.CIRCLE,
             fillColor: colorForPosition(point.position),
-            fillOpacity: 0.95,
+            fillOpacity: 1,
             strokeColor: '#ffffff',
             strokeOpacity: 1,
-            strokeWeight: 2,
-            scale: 19,
+            strokeWeight: 2.25,
+            scale: 15.5,
           },
+          zIndex: point.position === null ? 1 : Math.max(2, 30 - point.position),
         });
         circles.push(circle);
         markers.push(marker);
@@ -271,9 +273,9 @@ function GridMapCanvas({ scan, mapsKey, onError }: {
     };
   }, [mapsKey, onError, scan]);
 
-  return <div className="relative w-full h-[520px] sm:h-[680px] bg-[#eef2f6]">
-    <div ref={node} className="absolute inset-0 w-full h-full" />
-    {!mapReady && !mapError && <div className="absolute inset-0 z-10 grid place-items-center bg-[#eef2f6]">
+  return <div className="relative w-full h-[520px] sm:h-[680px] bg-[#e9e8e2] overflow-hidden">
+    <div ref={node} className={`absolute inset-0 w-full h-full transition-opacity duration-700 ease-out ${mapReady ? 'opacity-100' : 'opacity-0'}`} />
+    {!mapReady && !mapError && <div className="absolute inset-0 z-10 grid place-items-center bg-[#e9e8e2] transition-opacity duration-300">
       <div className="text-center"><Loader2 className="w-7 h-7 animate-spin text-[#0066ff] mx-auto" /><p className="text-xs font-semibold mt-2">Carregando mapa…</p></div>
     </div>}
     {mapError && <div className="absolute inset-0 z-10 grid place-items-center bg-gradient-to-br from-[#f8fafc] to-[#eef2f6] p-8 text-center">
@@ -384,6 +386,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
       : competitors.length >= 6 || activeScan.visibility_percentage < 60
         ? 'Média'
         : 'Baixa';
+  const areaDifficultyPercentage = areaDifficulty === 'Alta' ? 88 : areaDifficulty === 'Média' ? 58 : 30;
 
   const handleMapError = useCallback((message: string) => onShowToast(message, 'error'), [onShowToast]);
   const selectKeyword = (keyword: string) => {
@@ -632,59 +635,60 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
         onShowToast={onShowToast}
       />}
 
-      <div className={`grid grid-cols-1 overflow-hidden rounded-2xl border border-[#c2c6d8]/45 bg-white dark:bg-[#141936] shadow-sm ${activeScan ? 'lg:grid-cols-[350px_1fr]' : ''}`}>
-        {activeScan && <aside className="flex flex-col min-h-0 max-h-[520px] lg:min-h-[680px] lg:max-h-[760px] border-b lg:border-b-0 lg:border-r border-[#c2c6d8]/35 bg-white dark:bg-[#141936]">
-          <div className="p-5 border-b border-[#c2c6d8]/30">
-            <p className="text-xs text-[#727687]">Palavra-chave</p>
-            <span className="inline-flex mt-1.5 px-3 py-1 rounded-full bg-[#0066ff] text-white text-xs font-semibold">{activeScan.keyword}</span>
-            <div className="mt-4 p-4 rounded-2xl bg-[#f0f3ff] dark:bg-[#10142e]">
-              <div className="flex items-start gap-3">
-                <span className="shrink-0 px-2 py-1 rounded-lg bg-white text-rose-600 text-[10px] font-bold shadow-sm">
-                  Pos. {activeScan.average_position ? Math.round(activeScan.average_position) : '20+'}
-                </span>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold leading-tight">{activeScanLead?.company_name || 'Empresa analisada'}</p>
-                  <p className="text-[11px] text-[#727687] mt-1 line-clamp-2">{activeScanLead?.address}</p>
+      <div className={`heatmap-shell grid grid-cols-1 overflow-hidden rounded-[14px] border border-[#d9dbe3] bg-white shadow-[0_8px_28px_rgba(31,41,55,0.08)] ${activeScan ? 'lg:grid-cols-[320px_1fr]' : ''}`}>
+        {activeScan && <aside className="flex flex-col min-h-0 max-h-[520px] lg:min-h-[680px] lg:max-h-[760px] border-b lg:border-b-0 lg:border-r border-[#e2e3e8] bg-[#fcfcfd] text-[#34363e]">
+          <div className="px-5 pt-5 pb-4 border-b border-[#e5e6ea]">
+            <p className="text-[12px] font-medium text-[#565963]">Palavra-chave</p>
+            <span className="inline-flex mt-2 max-w-full truncate px-3 py-1.5 rounded-full bg-[#3978d4] text-white text-[12px] font-medium shadow-[0_1px_2px_rgba(25,75,145,0.25)]">{activeScan.keyword}</span>
+
+            <div className="mt-5">
+              <p className="text-[11px] font-semibold text-[#579663]">Rank {activeScan.average_position ? Math.round(activeScan.average_position) : '20+'}</p>
+              <div className="mt-1.5 flex items-start gap-3">
+                <div className="shrink-0 w-14 h-14 rounded-[3px] bg-gradient-to-br from-[#d9e1ea] to-[#b8c6d4] text-[#3978d4] grid place-items-center font-semibold text-sm shadow-inner">
+                  {(activeScanLead?.company_name || 'EA').slice(0, 2).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[14px] font-medium leading-[1.25] text-[#34363e]">{activeScanLead?.company_name || 'Empresa analisada'}</p>
+                  <p className="text-[11px] leading-4 text-[#777a83] mt-0.5 line-clamp-2">{activeScanLead?.category || activeScanLead?.address}</p>
+                  <div className="mt-2">
+                    <div className="flex items-center gap-1 text-[11px] text-[#6e7179]"><span>Visibilidade do negócio</span><Info className="w-3 h-3 text-[#9a9ca3]" /><strong className="ml-auto text-[#579663]">{Math.round(activeScan.visibility_percentage)}%</strong></div>
+                    <div className="h-1.5 mt-1 rounded-full bg-[#d8dadd] overflow-hidden"><div className="h-full rounded-full bg-[#579663] transition-[width] duration-700 ease-out" style={{ width: `${Math.max(activeScan.visibility_percentage, 2)}%` }} /></div>
+                  </div>
+                  <div className="mt-2">
+                    <div className="flex items-center gap-1 text-[11px] text-[#6e7179]"><span>Dificuldade da área</span><Info className="w-3 h-3 text-[#9a9ca3]" /><strong className={`ml-auto uppercase text-[10px] ${areaDifficulty === 'Alta' ? 'text-[#c96050]' : areaDifficulty === 'Média' ? 'text-[#b8813e]' : 'text-[#579663]'}`}>{areaDifficulty}</strong></div>
+                    <div className="h-1.5 mt-1 rounded-full bg-[#d8dadd] overflow-hidden"><div className="h-full rounded-full bg-[#a8aaad] transition-[width] duration-700 ease-out" style={{ width: `${areaDifficultyPercentage}%` }} /></div>
+                  </div>
+                  {activeScanLead?.google_maps_url && <a href={activeScanLead.google_maps_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 mt-2.5 text-[11px] font-medium text-[#3978d4] hover:text-[#245fae] transition-colors">Abrir no Google <ExternalLink className="w-3 h-3" /></a>}
                 </div>
               </div>
-              <div className="mt-4">
-                <div className="flex justify-between text-[11px]"><span>Visibilidade do negócio</span><strong>{Math.round(activeScan.visibility_percentage)}%</strong></div>
-                <div className="h-2 mt-1.5 rounded-full bg-[#d9dce7] overflow-hidden"><div className="h-full rounded-full bg-[#0066ff]" style={{ width: `${Math.max(activeScan.visibility_percentage, 2)}%` }} /></div>
-              </div>
-              <div className="mt-3">
-                <div className="flex justify-between text-[11px]"><span>Dificuldade da área</span><strong className={areaDifficulty === 'Alta' ? 'text-rose-600' : areaDifficulty === 'Média' ? 'text-amber-600' : 'text-emerald-600'}>{areaDifficulty}</strong></div>
-                <div className="h-2 mt-1.5 rounded-full bg-[#d9dce7] overflow-hidden"><div className={`h-full rounded-full ${areaDifficulty === 'Alta' ? 'w-[88%] bg-rose-500' : areaDifficulty === 'Média' ? 'w-[58%] bg-amber-500' : 'w-[30%] bg-emerald-500'}`} /></div>
-              </div>
-              {activeScanLead?.google_maps_url && <a href={activeScanLead.google_maps_url} target="_blank" rel="noreferrer" className="inline-flex mt-3 text-xs font-medium text-[#0066ff] hover:underline">Abrir no Google ↗</a>}
             </div>
           </div>
 
-          <div className="px-5 py-3 flex items-center justify-between border-b border-[#c2c6d8]/25">
-            <div><p className="text-sm font-medium">Concorrentes</p><p className="text-[10px] text-[#727687]">Mais presentes nos pontos consultados</p></div>
-            <span className="px-2 py-1 rounded-lg bg-[#f4f2fd] dark:bg-[#10142e] text-[10px] font-semibold">{competitors.length}</span>
+          <div className="px-5 py-3 flex items-center gap-1.5 border-b border-[#e5e6ea]">
+            <p className="text-[12px] font-medium">Concorrentes ({competitors.length})</p>
+            <Info className="w-3 h-3 text-[#9a9ca3]" />
           </div>
-          <div className="flex-1 overflow-y-auto divide-y divide-[#c2c6d8]/25">
+          <div className="flex-1 overflow-y-auto divide-y divide-[#e8e9ec]">
             {!competitors.length && <div className="p-6 text-center text-xs text-[#727687]">Gere uma nova grade para carregar os concorrentes encontrados pelo Google.</div>}
             {competitors.map(competitor => {
               const displayPosition = Math.max(1, Math.round(competitor.average_position));
-              return <article key={competitor.id} className="p-4 flex gap-3">
-                <CompetitorPhoto photoName={competitor.photo_name} companyName={competitor.name} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-2"><p className="text-xs font-semibold leading-tight line-clamp-2">{competitor.name}</p><span className={`shrink-0 px-2 py-0.5 rounded-full text-[9px] font-bold ${displayPosition <= 3 ? 'bg-emerald-50 text-emerald-700' : displayPosition <= 10 ? 'bg-amber-50 text-amber-700' : 'bg-rose-50 text-rose-700'}`}>Pos. {displayPosition}</span></div>
-                  <p className="text-[10px] text-[#727687] mt-1 truncate">{competitor.address || 'Endereço não informado'}</p>
-                  <p className="text-[10px] text-[#727687] mt-1">{competitor.category || activeScan.keyword}</p>
-                  {competitor.rating !== null && <p className="flex items-center gap-1 text-[10px] mt-1 text-amber-500"><Star className="w-3 h-3 fill-current" /><strong>{competitor.rating.toFixed(1)}</strong><span className="text-[#727687]">({competitor.review_count})</span></p>}
+              return <article key={competitor.id} className="group px-5 py-3.5 transition-colors duration-200 hover:bg-[#f7f8fa]">
+                <p className={`text-[10px] font-semibold ${displayPosition <= 3 ? 'text-[#579663]' : displayPosition <= 10 ? 'text-[#c47735]' : 'text-[#c75a58]'}`}>Rank {displayPosition}</p>
+                <div className="mt-1.5 flex gap-3">
+                  <CompetitorPhoto photoName={competitor.photo_name} companyName={competitor.name} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] font-medium leading-[1.25] line-clamp-2 text-[#34363e]">{competitor.name}</p>
+                    <p className="text-[10px] text-[#777a83] mt-0.5 line-clamp-1">{competitor.category || activeScan.keyword}</p>
+                    {competitor.rating !== null && <p className="flex items-center gap-1 text-[10px] mt-1 text-[#d29138]"><Star className="w-3 h-3 fill-current" /><strong>{competitor.rating.toFixed(1)}</strong><span className="text-[#777a83]">({competitor.review_count})</span></p>}
+                  </div>
                 </div>
               </article>;
             })}
           </div>
         </aside>}
 
-        <section className="relative overflow-hidden bg-[#eef2f6] min-h-[520px] sm:min-h-[680px]">
-          {activeScan && <div className="absolute z-10 top-3 sm:top-4 left-1/2 -translate-x-1/2 max-w-[calc(100%-1.5rem)] px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl bg-white/95 shadow-xl border border-white flex items-center gap-2 text-[10px] sm:text-xs font-medium whitespace-nowrap"><Clock3 className="w-4 h-4 text-[#0066ff]" />{new Date(activeScan.created_at).toLocaleString('pt-BR', { dateStyle: 'long', timeStyle: 'short' })}</div>}
-          {activeScan && <div className="absolute z-10 top-4 right-4 hidden xl:flex flex-col gap-1.5 p-2 rounded-xl bg-white/95 shadow-lg text-[9px] font-semibold">
-            <span className="text-emerald-700">● 1–3</span><span className="text-amber-600">● 4–10</span><span className="text-rose-500">● 11–20</span><span className="text-rose-800">● 20+</span>
-          </div>}
+        <section className="relative overflow-hidden bg-[#e9e8e2] min-h-[520px] sm:min-h-[680px]">
+          {activeScan && <div className="absolute z-10 top-3 sm:top-4 left-1/2 -translate-x-1/2 max-w-[calc(100%-1.5rem)] px-3.5 py-2 rounded-full bg-[#f8f8f6]/95 shadow-[0_3px_12px_rgba(36,39,43,0.2)] border border-white/80 flex items-center gap-2 text-[10px] sm:text-[11px] text-[#5c5f65] font-medium whitespace-nowrap backdrop-blur-sm"><Clock3 className="w-3.5 h-3.5 text-[#6e7179]" />{new Date(activeScan.created_at).toLocaleString('pt-BR', { dateStyle: 'medium', timeStyle: 'medium' })}</div>}
           {(loading || generatingGrid) && <div className="absolute inset-0 z-20 grid place-items-center bg-white/85 backdrop-blur-[2px]"><div className="text-center"><Loader2 className="w-7 h-7 animate-spin text-[#0066ff] mx-auto" /><p className="text-xs font-semibold mt-2">{generatingGrid ? `Consultando ${gridSize * gridSize} pontos…` : 'Carregando mapa…'}</p></div></div>}
           {!mapsKey
             ? <EmptyMap title="Chave do mapa ainda não configurada" detail="O administrador pode cadastrar a chave em Administração → Integrações." />
@@ -772,8 +776,8 @@ function CompetitorPhoto({ photoName, companyName }: { photoName: string | null;
   }, [photoName]);
 
   return photoUrl
-    ? <Image src={photoUrl} alt="" width={48} height={48} unoptimized className="shrink-0 w-12 h-12 rounded-xl object-cover bg-[#eef2f6]" />
-    : <div className="shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-[#e9efff] to-[#dce6ff] text-[#0066ff] grid place-items-center font-semibold text-sm">{companyName.slice(0, 2).toUpperCase()}</div>;
+    ? <Image src={photoUrl} alt="" width={48} height={48} unoptimized className="shrink-0 w-12 h-12 rounded-[3px] object-cover bg-[#e8ebee]" />
+    : <div className="shrink-0 w-12 h-12 rounded-[3px] bg-gradient-to-br from-[#d9e1ea] to-[#b8c6d4] text-[#3978d4] grid place-items-center font-semibold text-sm">{companyName.slice(0, 2).toUpperCase()}</div>;
 }
 
 function EmptyMap({ title, detail }: { title: string; detail: string }) {
