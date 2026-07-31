@@ -1,6 +1,98 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ============================================================
+   Tokens visuais herdados da Lovable (projeto lead-hub).
+   Ficam separados dos tokens originais do Localway-OS (--bg-main,
+   --surface-main etc acima) pra não quebrar nada que já existe —
+   são usados só pelas telas/telas migradas (ex.: Prospecção nova).
+   ============================================================ */
+@theme inline {
+  --radius-sm: calc(var(--lv-radius) - 3px);
+  --radius-md: calc(var(--lv-radius) - 1px);
+  --radius-lg: var(--lv-radius);
+  --radius-xl: calc(var(--lv-radius) + 4px);
+  --color-background: var(--lv-background);
+  --color-foreground: var(--lv-foreground);
+  --color-card: var(--lv-card);
+  --color-card-foreground: var(--lv-card-foreground);
+  --color-popover: var(--lv-popover);
+  --color-popover-foreground: var(--lv-popover-foreground);
+  --color-primary: var(--lv-primary);
+  --color-primary-foreground: var(--lv-primary-foreground);
+  --color-secondary: var(--lv-secondary);
+  --color-secondary-foreground: var(--lv-secondary-foreground);
+  --color-muted: var(--lv-muted);
+  --color-muted-foreground: var(--lv-muted-foreground);
+  --color-accent: var(--lv-accent);
+  --color-accent-foreground: var(--lv-accent-foreground);
+  --color-destructive: var(--lv-destructive);
+  --color-destructive-foreground: var(--lv-destructive-foreground);
+  --color-success: var(--lv-success);
+  --color-success-foreground: var(--lv-success-foreground);
+  --color-warning: var(--lv-warning);
+  --color-warning-foreground: var(--lv-warning-foreground);
+  --color-danger: var(--lv-danger);
+  --color-danger-foreground: var(--lv-danger-foreground);
+  --color-border: var(--lv-border);
+  --color-input: var(--lv-input);
+  --color-ring: var(--lv-ring);
+  --color-surface: var(--lv-surface);
+  --color-surface-2: var(--lv-surface-2);
+}
+
+:root {
+  --lv-radius: 0.5rem;
+  --lv-background: oklch(0.985 0.003 250);
+  --lv-foreground: oklch(0.21 0.02 255);
+  --lv-surface: oklch(1 0 0);
+  --lv-surface-2: oklch(0.968 0.004 250);
+  --lv-card: oklch(1 0 0);
+  --lv-card-foreground: oklch(0.21 0.02 255);
+  --lv-popover: oklch(1 0 0);
+  --lv-popover-foreground: oklch(0.21 0.02 255);
+  --lv-primary: oklch(0.52 0.13 224);
+  --lv-primary-foreground: oklch(0.99 0.005 250);
+  --lv-secondary: oklch(0.958 0.005 250);
+  --lv-secondary-foreground: oklch(0.3 0.02 255);
+  --lv-muted: oklch(0.965 0.004 250);
+  --lv-muted-foreground: oklch(0.53 0.018 255);
+  --lv-accent: oklch(0.945 0.02 210);
+  --lv-accent-foreground: oklch(0.32 0.06 230);
+  --lv-destructive: oklch(0.57 0.2 25);
+  --lv-destructive-foreground: oklch(0.99 0.005 250);
+  --lv-success: oklch(0.6 0.13 156);
+  --lv-success-foreground: oklch(0.99 0.005 250);
+  --lv-warning: oklch(0.77 0.14 78);
+  --lv-warning-foreground: oklch(0.28 0.05 70);
+  --lv-danger: oklch(0.58 0.2 25);
+  --lv-danger-foreground: oklch(0.99 0.005 250);
+  --lv-border: oklch(0.918 0.006 250);
+  --lv-input: oklch(0.918 0.006 250);
+  --lv-ring: oklch(0.52 0.13 224);
+}
+
+.dark {
+  --lv-background: oklch(0.19 0.018 255);
+  --lv-foreground: oklch(0.95 0.005 250);
+  --lv-surface: oklch(0.23 0.02 255);
+  --lv-surface-2: oklch(0.26 0.02 255);
+  --lv-card: oklch(0.23 0.02 255);
+  --lv-card-foreground: oklch(0.95 0.005 250);
+  --lv-popover: oklch(0.23 0.02 255);
+  --lv-popover-foreground: oklch(0.95 0.005 250);
+  --lv-primary: oklch(0.66 0.12 224);
+  --lv-primary-foreground: oklch(0.18 0.02 255);
+  --lv-secondary: oklch(0.28 0.02 255);
+  --lv-secondary-foreground: oklch(0.95 0.005 250);
+  --lv-muted: oklch(0.28 0.02 255);
+  --lv-muted-foreground: oklch(0.7 0.015 255);
+  --lv-accent: oklch(0.31 0.03 230);
+  --lv-accent-foreground: oklch(0.95 0.005 250);
+  --lv-border: oklch(1 0 0 / 12%);
+  --lv-input: oklch(1 0 0 / 15%);
+}
+
 @layer base {
   :root {
     --bg-main: #f6f7fb;
