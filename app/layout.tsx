@@ -1,6 +1,14 @@
 import type {Metadata} from 'next';
+import { Outfit } from 'next/font/google';
 import './globals.css';
 import { ClientCrashRecovery } from '@/components/ClientCrashRecovery';
+
+const outfit = Outfit({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700', '800'],
+  variable: '--font-outfit',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'LocalWay OS - Gestão de Marketing Local e Prospecção GBP',
@@ -10,7 +18,7 @@ export const metadata: Metadata = {
 export default function RootLayout({children}: {children: React.ReactNode}) {
   return (
     <html lang="pt-BR">
-      <body suppressHydrationWarning className="antialiased min-h-screen bg-background">
+      <body suppressHydrationWarning className={`${outfit.variable} antialiased min-h-screen bg-background`}>
         <ClientCrashRecovery />
         {children}
       </body>

@@ -896,7 +896,13 @@ export async function POST(request: NextRequest) {
       radiusMeters,
       gridSize,
     );
-    const searchRadius = Math.min(Math.max(Math.round(stepMeters * 0.8), 100), 5000);
+    // Each request must represent the exact grid point, not a large area around it.
+    // With the previous 80% of the grid step, a 3x3 / 2 km scan used a 1.6 km
+    // bias circle at every point, so Google frequently returned the same order
+    // across the whole grid. A tight bias lets the point location materially
+    // influence the local result while still allowing businesses outside the
+    // circle to rank.
+    const searchRadius = Math.min(Math.max(Math.round(stepMeters * 0.08), 75), 150);
 
     const pointResults = await mapWithConcurrency(gridPoints, 7, async point => {
       const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
@@ -920,6 +926,7 @@ export async function POST(request: NextRequest) {
           regionCode: 'BR',
           pageSize: 20,
           includePureServiceAreaBusinesses: true,
+          rankPreference: 'RELEVANCE',
           locationBias: {
             circle: {
               center: { latitude: point.latitude, longitude: point.longitude },
