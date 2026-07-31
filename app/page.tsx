@@ -179,7 +179,7 @@ function AuthenticatedHome() {
       />
 
       {/* Main Layout Area */}
-      <div className="lg:ml-[248px] flex flex-col min-h-screen min-w-0 transition-all">
+      <div className="lg:ml-[216px] flex flex-col min-h-screen min-w-0 transition-all">
         {/* Sticky Header */}
         <Header
           darkMode={darkMode}
@@ -192,7 +192,7 @@ function AuthenticatedHome() {
         />
 
         {/* Content Body */}
-        <main className="flex-1 min-w-0 p-3 sm:p-4 lg:p-5 pb-24 sm:pb-24 lg:pb-5 max-w-[1600px] w-full mx-auto space-y-4">
+        <main className="flex-1 min-w-0 p-3 pb-24 sm:pb-24 lg:pb-4 max-w-[1600px] w-full mx-auto space-y-3">
           {!allowedTabs.length && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
               Seu perfil ainda não possui módulos liberados. Fale com o administrador.

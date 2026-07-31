@@ -82,7 +82,7 @@ export function ProspectingViewLovable({ onShowToast }: ProspectingViewProps) {
   const detalhe = detalheId ? uiLeads.find((l) => l.id === detalheId) || null : null;
 
   useEffect(() => {
-    if (!detalheId || !supabase) { setHistorico([]); return; }
+    if (!detalheId || !supabase) return;
     void (async () => {
       const { data } = await supabase.from('lead_interactions').select('*').eq('lead_id', detalheId).order('occurred_at', { ascending: false });
       setHistorico((data || []) as LeadInteraction[]);
@@ -173,44 +173,45 @@ export function ProspectingViewLovable({ onShowToast }: ProspectingViewProps) {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div className="space-y-2.5">
+      <div className="flex items-center justify-between gap-3 border-b border-border/70 pb-2">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Operação comercial</p>
-          <h2 className="text-lg font-semibold">Prospecção</h2>
-          <p className="text-xs text-muted-foreground">Leads presenciais e online em andamento</p>
+          <h2 className="text-[15px] font-semibold leading-5">Prospecção</h2>
+          <p className="text-[10px] leading-4 text-muted-foreground">Leads presenciais e online em andamento</p>
         </div>
-        <Button size="sm" className="h-9" onClick={() => setCadastroAberto(true)}>
-          <Plus className="size-4" /> Cadastrar lead
+        <Button size="sm" className="h-8 shrink-0 px-3 text-[11px]" onClick={() => setCadastroAberto(true)}>
+          <Plus className="size-3.5" /> <span className="hidden sm:inline">Cadastrar lead</span><span className="sm:hidden">Novo lead</span>
         </Button>
       </div>
 
-      <div className="no-scrollbar -mx-3 flex gap-1.5 overflow-x-auto px-3 sm:mx-0 sm:px-0">
-        {abas.map((a) => (
-          <button
-            key={a.id}
-            onClick={() => setAba(a.id)}
-            className={cn(
-              'inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-md border px-3 text-[12px] font-medium transition-colors',
-              aba === a.id ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-surface hover:bg-secondary',
-            )}
-          >
-            {a.label}
-            <span className={cn('rounded px-1 text-[10px] tabular-nums', aba === a.id ? 'bg-primary-foreground/20' : 'bg-secondary text-muted-foreground')}>
-              {a.count}
-            </span>
-          </button>
-        ))}
-        <div className="ml-auto hidden w-64 sm:block">
+      <div className="flex min-w-0 items-center gap-2">
+        <div className="no-scrollbar -mx-3 flex min-w-0 flex-1 gap-1.5 overflow-x-auto px-3 sm:mx-0 sm:px-0">
+          {abas.map((a) => (
+            <button
+              key={a.id}
+              onClick={() => setAba(a.id)}
+              className={cn(
+                'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border px-3 text-[11px] font-medium transition-colors',
+                aba === a.id ? 'border-primary bg-primary text-primary-foreground' : 'border-border/80 bg-surface hover:bg-secondary',
+              )}
+            >
+              {a.label}
+              <span className={cn('rounded px-1 text-[9px] tabular-nums', aba === a.id ? 'bg-primary-foreground/20' : 'bg-secondary text-muted-foreground')}>
+                {a.count}
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="hidden w-56 shrink-0 sm:block [&_input]:h-8 [&_input]:text-[11px]">
           <SearchInput value={busca} onChange={setBusca} placeholder="Buscar empresa, contato..." />
         </div>
       </div>
-      <div className="sm:hidden">
+      <div className="sm:hidden [&_input]:h-8 [&_input]:text-[11px]">
         <SearchInput value={busca} onChange={setBusca} placeholder="Buscar empresa, contato..." />
       </div>
 
       {aba === 'online' && (
-        <div className="grid gap-2 rounded-lg border bg-surface p-3 sm:grid-cols-[1fr_1fr_120px_auto]">
+        <div className="grid gap-2 rounded-lg border border-border/70 bg-surface p-2.5 sm:grid-cols-[1fr_1fr_100px_auto]">
           <div className="space-y-1">
             <Label className="text-[11px] text-muted-foreground">Segmento</Label>
             <Input value={online.segmento} onChange={(e) => setOnline((o) => ({ ...o, segmento: e.target.value }))} placeholder="Ex.: Pizzaria" />
@@ -229,7 +230,7 @@ export function ProspectingViewLovable({ onShowToast }: ProspectingViewProps) {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-lg border bg-surface">
+      <div className="overflow-hidden rounded-lg border border-border/70 bg-surface">
         {lista.length === 0 ? (
           <p className="px-3 py-8 text-center text-xs text-muted-foreground">
             {aba === 'arquivados' ? 'Nenhum lead arquivado.' : 'Nenhum lead encontrado com os filtros atuais.'}
@@ -238,7 +239,15 @@ export function ProspectingViewLovable({ onShowToast }: ProspectingViewProps) {
           lista.map((lead) =>
             aba === 'arquivados'
               ? <CompactLeadRow key={lead.id} lead={lead} onOpen={handlers.onOpen} onRestaurar={handlers.onRestaurar} />
-              : <CompactLeadRow key={lead.id} lead={lead} {...handlers} />,
+              : <CompactLeadRow
+                  key={lead.id}
+                  lead={lead}
+                  onNaoAtendeu={handlers.onNaoAtendeu}
+                  onRetornar={handlers.onRetornar}
+                  onSemInteresse={handlers.onSemInteresse}
+                  onArquivar={handlers.onArquivar}
+                  onOpen={handlers.onOpen}
+                />,
           )
         )}
       </div>
@@ -276,7 +285,13 @@ export function ProspectingViewLovable({ onShowToast }: ProspectingViewProps) {
       <LeadDetailsPanel
         lead={detalhe ? { ...detalhe, historico: toHistorico(historico) } : null}
         open={!!detalhe}
-        onOpenChange={(o) => { if (!o) setDetalheId(null); void refresh(); }}
+        onOpenChange={(o) => {
+          if (!o) {
+            setDetalheId(null);
+            setHistorico([]);
+          }
+          void refresh();
+        }}
       />
     </div>
   );

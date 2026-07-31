@@ -434,7 +434,8 @@ function GridMapCanvas({ scan, mapsKey, targetPlaceId, focusedPlaceId, focusedPl
 
 export function HeatmapView({ onShowToast }: HeatmapViewProps) {
   const profile = useAuthProfile();
-  const { leads, loading, error, createLead, updateLead } = useLeads();
+  const { leads, archivedLeads, loading, error, createLead, updateLead } = useLeads();
+  const allLeads = useMemo(() => [...leads, ...archivedLeads], [leads, archivedLeads]);
   const [selectedId, setSelectedId] = useState('');
   const [mapsKey, setMapsKey] = useState(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '');
   const [gridSize, setGridSize] = useState(5);
@@ -478,18 +479,30 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
       if (active && !scansRequest.error) {
         const rows = (scansRequest.data || []) as VisibilityScan[];
         setScanHistory(rows);
+        if (rows.length) {
+          const latestScan = rows[0];
+          setActiveScan(current => current || latestScan);
+          setSelectedId(current => current || latestScan.lead_id);
+          setActiveKeyword(current => current || latestScan.keyword);
+          setGridSize(scanGridSize(latestScan));
+          setSetupOpen(false);
+          setHistoryOpen(true);
+        }
+      }
+      if (active && scansRequest.error) {
+        onShowToast('Não foi possível carregar as análises anteriores do mapa.', 'error');
       }
     };
     void loadConfiguration();
     return () => { active = false; };
-  }, [profile.id]);
+  }, [onShowToast, profile.id]);
 
   const located = useMemo(
-    () => leads.filter(lead => typeof lead.latitude === 'number' && typeof lead.longitude === 'number'),
-    [leads],
+    () => allLeads.filter(lead => typeof lead.latitude === 'number' && typeof lead.longitude === 'number'),
+    [allLeads],
   );
   const selected = located.find(lead => lead.id === selectedId) || null;
-  const activeScanLead = activeScan ? leads.find(lead => lead.id === activeScan.lead_id) || null : null;
+  const activeScanLead = activeScan ? allLeads.find(lead => lead.id === activeScan.lead_id) || null : null;
   const centerPoint = activeScan ? centerPointForScan(activeScan) : null;
   const centerPosition = centerPoint?.position ?? null;
   const targetPlace = (() => {
@@ -607,7 +620,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
       throw new Error('O Google não retornou a identificação e as coordenadas dessa empresa.');
     }
 
-    const existing = leads.find(lead => lead.google_place_id === place.google_place_id);
+    const existing = allLeads.find(lead => lead.google_place_id === place.google_place_id);
     if (existing) {
       setSelectedId(existing.id);
       setActiveKeyword(registeredVisibilityKeywords(existing)[0] || '');

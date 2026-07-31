@@ -25,10 +25,36 @@ function keywordKey(value: string) {
 
 export function SearchVolumeView({ onShowToast }: SearchVolumeViewProps) {
   const profile = useAuthProfile();
-  const { leads, loading, error, createLead, updateLead } = useLeads();
+  const { leads, archivedLeads, loading, error, createLead, updateLead } = useLeads();
+  const allLeads = useMemo(() => [...leads, ...archivedLeads], [leads, archivedLeads]);
   const [selectedId, setSelectedId] = useState('');
   const [positions, setPositions] = useState<Record<string, number | null>>({});
-  const selected = leads.find(lead => lead.id === selectedId) || null;
+  const selected = allLeads.find(lead => lead.id === selectedId) || null;
+
+  useEffect(() => {
+    if (loading || selectedId || !supabase) return;
+    let active = true;
+    const restoreLatestCompany = async () => {
+      const { data } = await supabase!
+        .from('local_visibility_scans')
+        .select('lead_id,created_at')
+        .eq('created_by', profile.id)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (!active) return;
+      const scannedLeadId = data?.[0]?.lead_id as string | undefined;
+      const latestAnalysedLead = allLeads.find(lead =>
+        lead.id === scannedLeadId,
+      ) || allLeads.find(lead =>
+        Boolean(lead.google_place_id)
+        && Array.isArray(lead.analysis_data?.visibility_keywords)
+        && Boolean(lead.analysis_data?.visibility_keywords?.length),
+      );
+      if (latestAnalysedLead) setSelectedId(latestAnalysedLead.id);
+    };
+    void restoreLatestCompany();
+    return () => { active = false; };
+  }, [allLeads, loading, profile.id, selectedId]);
 
   useEffect(() => {
     if (!selectedId || !supabase) {
@@ -66,7 +92,7 @@ export function SearchVolumeView({ onShowToast }: SearchVolumeViewProps) {
   );
 
   const chooseSuggestion = async (place: GooglePlaceSuggestion) => {
-    const existing = leads.find(lead => lead.google_place_id === place.google_place_id);
+    const existing = allLeads.find(lead => lead.google_place_id === place.google_place_id);
     if (existing) {
       setPositions({});
       setSelectedId(existing.id);
@@ -170,7 +196,7 @@ export function SearchVolumeView({ onShowToast }: SearchVolumeViewProps) {
         <KeywordOpportunityPanel
           key={selected.id}
           selectedLead={selected}
-          leads={leads}
+          leads={allLeads}
           currentPosition={null}
           rankedKeyword=""
           keywordPositions={positions}

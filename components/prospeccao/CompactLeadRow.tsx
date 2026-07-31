@@ -41,62 +41,68 @@ export function CompactLeadRow({
   const [expandido, setExpandido] = useState(false);
 
   return (
-    <div className="border-b last:border-b-0">
-      <div className="flex flex-col gap-1.5 px-3 py-2 transition-colors hover:bg-surface-2 sm:flex-row sm:items-center sm:gap-3">
+    <div className="border-b border-border/70 last:border-b-0 transition-colors hover:bg-surface-2/60">
+      <div className="flex min-w-0 items-start gap-2 px-2.5 pt-2 sm:px-3">
         <button
           type="button"
           onClick={() => setExpandido((v) => !v)}
-          className="flex min-w-0 flex-1 items-start gap-2 text-left"
+          className="mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground hover:bg-secondary"
+          aria-label={expandido ? "Recolher informações" : "Expandir informações"}
           aria-expanded={expandido}
         >
           <ChevronDown
             className={cn(
-              "mt-0.5 size-3.5 shrink-0 text-muted-foreground transition-transform",
+              "size-3.5 transition-transform",
               expandido && "rotate-180",
             )}
           />
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="truncate text-sm font-semibold">{lead.empresa}</span>
-              <OriginBadge origem={lead.origem} />
-              <StatusBadge status={lead.resultado} />
-            </div>
-            <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
-              <span>{lead.segmento}</span>
-              <span className="inline-flex items-center gap-1">
-                <Phone className="size-3" />
-                {lead.telefone || lead.whatsapp}
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <User className="size-3" />
-                {lead.decisor || lead.contato}
-              </span>
-              <span className="hidden sm:inline">Último contato: {formatDate(lead.ultimoContato)}</span>
-            </div>
+        </button>
+        <button
+          type="button"
+          onClick={() => setExpandido((v) => !v)}
+          className="min-w-0 flex-1 text-left"
+          aria-expanded={expandido}
+        >
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="truncate text-[12px] font-semibold leading-4 sm:text-[13px]">{lead.empresa}</span>
+            <OriginBadge origem={lead.origem} />
+            <StatusBadge status={lead.resultado} />
+          </div>
+          <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[10px] leading-4 text-muted-foreground">
+            <span>{lead.segmento}</span>
+            <span className="inline-flex items-center gap-1">
+              <Phone className="size-2.5" />
+              {lead.telefone || lead.whatsapp}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <User className="size-2.5" />
+              {lead.decisor || lead.contato}
+            </span>
+            <span className="hidden lg:inline">Último contato: {formatDate(lead.ultimoContato)}</span>
           </div>
         </button>
 
-        <div className="flex shrink-0 flex-wrap items-center gap-1.5 pl-5 sm:pl-0">
-          <div className="hidden min-w-[130px] flex-col items-end sm:flex">
-            <span className="truncate text-[11px] font-medium">
+        <div className="hidden shrink-0 items-start gap-1.5 sm:flex">
+          <div className="min-w-[118px] text-right">
+            <p className="truncate text-[9px] font-medium leading-4">
               {lead.proximaAcaoLabel ?? "Sem próxima ação"}
-            </span>
-            <span className="text-[11px] tabular-nums text-muted-foreground">
+            </p>
+            <p className="text-[9px] tabular-nums leading-3 text-muted-foreground">
               {lead.proximaAcao ? formatDateTime(lead.proximaAcao) : "—"}
-            </span>
+            </p>
           </div>
           <UrgencyBadge date={lead.proximaAcao} compact />
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2 sm:pl-8">
+      <div className="no-scrollbar flex items-center gap-1.5 overflow-x-auto px-2.5 pb-2 pt-1.5 sm:px-3 sm:pl-8">
         {onNaoAtendeu && (
           <button
             type="button"
             onClick={() => onNaoAtendeu(lead)}
-            className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-[12px] font-medium transition-colors hover:bg-secondary"
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border/80 bg-surface px-2.5 text-[11px] font-medium transition-colors hover:bg-secondary"
           >
-            <PhoneOff className="size-3.5" /> Não atendeu
+            <PhoneOff className="size-3" /> Não atendeu
           </button>
         )}
         {onRetornar && (
@@ -106,9 +112,9 @@ export function CompactLeadRow({
             trigger={
               <button
                 type="button"
-                className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-[12px] font-medium transition-colors hover:bg-secondary"
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border/80 bg-surface px-2.5 text-[11px] font-medium transition-colors hover:bg-secondary"
               >
-                <RotateCcw className="size-3.5" /> Retornar depois
+                <RotateCcw className="size-3" /> Retornar depois
               </button>
             }
           />
@@ -123,9 +129,9 @@ export function CompactLeadRow({
             trigger={
               <button
                 type="button"
-                className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-[12px] font-medium transition-colors hover:bg-secondary"
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border/80 bg-surface px-2.5 text-[11px] font-medium transition-colors hover:bg-secondary"
               >
-                <ThumbsDown className="size-3.5" /> Sem interesse
+                <ThumbsDown className="size-3" /> Sem interesse
               </button>
             }
           />
@@ -139,9 +145,9 @@ export function CompactLeadRow({
             trigger={
               <button
                 type="button"
-                className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-secondary"
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border/80 bg-surface px-2.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-secondary"
               >
-                <Archive className="size-3.5" /> Arquivar
+                <Archive className="size-3" /> Arquivar
               </button>
             }
           />
@@ -150,16 +156,19 @@ export function CompactLeadRow({
           <button
             type="button"
             onClick={() => onRestaurar(lead)}
-            className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-primary/30 bg-primary/8 px-2.5 text-[12px] font-medium text-primary transition-colors hover:bg-primary/15"
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-primary/30 bg-primary/8 px-2.5 text-[11px] font-medium text-primary transition-colors hover:bg-primary/15"
           >
-            <RotateCcw className="size-3.5" /> Restaurar
+            <RotateCcw className="size-3" /> Restaurar
           </button>
         )}
+        <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:hidden">
+          <UrgencyBadge date={lead.proximaAcao} compact />
+        </div>
         {onOpen && (
           <button
             type="button"
             onClick={() => onOpen(lead)}
-            className="ml-auto inline-flex min-h-9 items-center gap-1.5 rounded-md px-2.5 text-[12px] font-medium text-primary hover:bg-primary/8"
+            className="ml-auto inline-flex h-8 shrink-0 items-center rounded-md px-2 text-[10px] font-medium text-primary hover:bg-primary/8"
           >
             Ver detalhes
           </button>
@@ -167,7 +176,7 @@ export function CompactLeadRow({
       </div>
 
       {expandido && (
-        <div className="grid gap-x-6 gap-y-1.5 border-t bg-surface-2 px-3 py-2.5 text-[11px] sm:grid-cols-2 sm:pl-8">
+        <div className="grid gap-x-6 gap-y-1 border-t border-border/70 bg-surface-2 px-3 py-2 text-[10px] sm:grid-cols-2 sm:pl-8">
           <Info icon={MapPin} label="Endereço" value={`${lead.endereco} • ${lead.cidade}`} />
           <Info icon={MessageCircle} label="WhatsApp" value={lead.whatsapp || "—"} />
           <Info icon={User} label="Atendente" value={lead.contato || "—"} />
