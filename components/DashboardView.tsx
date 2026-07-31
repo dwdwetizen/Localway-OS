@@ -126,13 +126,14 @@ export function DashboardView({ setActiveTab, onShowToast }: DashboardViewProps)
     { label: 'Fechamento de contratos', current: metrics.contracts, target: goal?.target_contracts || 0, color: 'bg-amber-500' },
   ], [goal, metrics]);
 
-  return <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-300">
+  return <div className="lw-page space-y-4">
     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
       <div>
-        <h2 className="text-2xl md:text-3xl font-bold font-poppins">Visão Geral</h2>
-        <p className="text-sm text-[#727687] mt-1">Olá, {profile.nome || profile.username}. Este painel usa seus resultados reais.</p>
+        <p className="lw-kicker mb-1.5">Painel individual</p>
+        <h2 className="lw-title">Olá, {(profile.nome || profile.username).split(' ')[0]}</h2>
+        <p className="text-xs text-[var(--text-secondary)] mt-1">Seus resultados, metas e atividades mais recentes.</p>
       </div>
-      <button onClick={() => void loadDashboard()} className="w-full md:w-auto min-h-10 px-4 py-2 rounded-xl border border-[#c2c6d8]/40 text-xs font-bold hover:bg-[#f4f2fd]">Atualizar dados</button>
+      <button onClick={() => void loadDashboard()} className="lw-secondary-button w-full px-4 md:w-auto">Atualizar dados</button>
     </div>
 
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
@@ -143,20 +144,20 @@ export function DashboardView({ setActiveTab, onShowToast }: DashboardViewProps)
     </div>
 
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <section className="lg:col-span-2 bg-white dark:bg-[#141936] p-4 sm:p-6 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
+      <section className="lw-panel lg:col-span-2 p-4 sm:p-5">
         <div className="flex items-center gap-2 mb-5"><Target className="w-5 h-5 text-[#0066ff]" /><div><h3 className="font-bold">Minhas metas</h3><p className="text-xs text-[#727687]">{goal ? `${new Date(`${goal.period_start}T12:00:00`).toLocaleDateString('pt-BR')} até ${new Date(`${goal.period_end}T12:00:00`).toLocaleDateString('pt-BR')}` : 'Nenhuma meta definida para este período'}</p></div></div>
         <div className="space-y-5">
           {goals.map(item => {
             const percentage = item.target ? Math.min(100, Math.round((item.current / item.target) * 100)) : 0;
             return <div key={item.label}>
               <div className="flex justify-between text-xs mb-2"><span className="font-semibold">{item.label}</span><span className="font-bold">{item.current} / {item.target || '—'} {item.target ? `(${percentage}%)` : ''}</span></div>
-              <div className="h-2.5 rounded-full bg-[#f4f2fd] dark:bg-[#10142e] overflow-hidden"><div className={`h-full rounded-full ${item.color}`} style={{ width: `${percentage}%` }} /></div>
+              <div className="h-2 rounded-full bg-[var(--surface-container)] overflow-hidden"><div className={`h-full rounded-full ${item.color}`} style={{ width: `${percentage}%` }} /></div>
             </div>;
           })}
         </div>
       </section>
 
-      <section className="bg-white dark:bg-[#141936] p-4 sm:p-6 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
+      <section className="lw-panel p-4 sm:p-5">
         <h3 className="font-bold mb-4">Ações rápidas</h3>
         <div className="space-y-2">
           <QuickAction icon={Search} label="Prospectar empresas" onClick={() => setActiveTab('prospeccao')} />
@@ -166,7 +167,7 @@ export function DashboardView({ setActiveTab, onShowToast }: DashboardViewProps)
       </section>
     </div>
 
-    <section className="bg-white dark:bg-[#141936] p-4 sm:p-6 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
+    <section className="lw-panel p-4 sm:p-5">
       <div className="flex items-center gap-2 mb-5"><History className="w-5 h-5 text-[#0066ff]" /><div><h3 className="font-bold">Meu histórico recente</h3><p className="text-xs text-[#727687]">Cadastros, contatos e movimentações realizados por este perfil.</p></div></div>
       {loading && <div className="py-8 text-center text-xs text-[#727687]">Carregando histórico…</div>}
       {!loading && !activities.length && <div className="py-8 text-center text-xs text-[#727687]">Nenhuma atividade registrada neste período.</div>}
@@ -184,9 +185,9 @@ export function DashboardView({ setActiveTab, onShowToast }: DashboardViewProps)
 }
 
 function Metric({ icon: Icon, label, value, color, loading }: { icon: React.ComponentType<{ className?: string }>; label: string; value: number; color: string; loading: boolean }) {
-  return <div className="min-w-0 bg-white dark:bg-[#141936] p-3.5 sm:p-5 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm"><div className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center ${color}`}><Icon className="w-5 h-5" /></div><p className="text-[10px] sm:text-xs leading-tight font-semibold text-[#727687] uppercase mt-3 sm:mt-4">{label}</p><p className="text-xl sm:text-2xl font-bold mt-1">{loading ? '…' : value}</p></div>;
+  return <div className="lw-panel min-w-0 p-3.5 sm:p-4"><div className="flex items-start justify-between gap-2"><div className={`w-9 h-9 rounded-lg flex items-center justify-center ${color}`}><Icon className="w-[18px] h-[18px]" /></div><span className="text-[9px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 rounded px-1.5 py-0.5">Atual</span></div><p className="text-[9px] sm:text-[10px] leading-tight font-bold tracking-wide text-[var(--text-secondary)] uppercase mt-3">{label}</p><p className="text-xl sm:text-2xl font-bold mt-1 tabular-nums">{loading ? '…' : value}</p></div>;
 }
 
 function QuickAction({ icon: Icon, label, onClick }: { icon: React.ComponentType<{ className?: string }>; label: string; onClick: () => void }) {
-  return <button onClick={onClick} className="w-full flex items-center gap-3 p-3 rounded-xl bg-[#f4f2fd] dark:bg-[#10142e] hover:bg-[#0066ff]/10 text-xs font-bold text-left"><Icon className="w-4 h-4 text-[#0066ff]" />{label}</button>;
+  return <button onClick={onClick} className="w-full flex items-center gap-3 p-3 rounded-lg bg-[var(--surface-container-low)] hover:bg-[#1268ff]/8 text-xs font-bold text-left"><Icon className="w-4 h-4 text-[var(--primary-main)]" />{label}</button>;
 }

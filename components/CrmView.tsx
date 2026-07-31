@@ -116,26 +116,27 @@ export function CrmView({ onShowToast, onOpenAiPitchModal }: CrmViewProps) {
   };
 
   return (
-    <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-300">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-[#141936] p-5 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
+    <div className="lw-page space-y-3">
+      <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <h2 className="text-xl font-bold font-poppins text-[#1a1b22] dark:text-[#f8f7ff]">CRM & Pipeline de Vendas</h2>
-          <p className="text-xs text-[#727687]">
+          <p className="lw-kicker mb-1.5">Pipeline comercial</p>
+          <h2 className="lw-title">CRM</h2>
+          <p className="text-xs text-[var(--text-secondary)]">
             {canManageCrm
               ? 'Arraste cada empresa para atualizar a etapa. A alteração fica salva automaticamente.'
               : 'Acompanhe aqui o andamento dos seus leads. As etapas são atualizadas pela gestão.'}
           </p>
         </div>
-        <div className="w-full md:w-auto grid grid-cols-2 md:flex bg-[#f4f2fd] dark:bg-[#10142e] p-1 rounded-xl border border-[#c2c6d8]/30 dark:border-[#2e366b]">
+        <div className="w-full md:w-auto grid grid-cols-2 md:flex bg-[var(--surface-container-low)] p-1 rounded-lg border border-[var(--border-color)]">
           <button
             onClick={() => setViewMode('kanban')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold ${viewMode === 'kanban' ? 'bg-white dark:bg-[#1d234a] text-[#0066ff] shadow-sm' : 'text-[#727687]'}`}
+            className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-bold ${viewMode === 'kanban' ? 'bg-white dark:bg-[#202737] text-[var(--primary-main)] shadow-sm' : 'text-[var(--text-secondary)]'}`}
           >
             <Kanban className="w-3.5 h-3.5" /> Kanban
           </button>
           <button
             onClick={() => setViewMode('tabela')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold ${viewMode === 'tabela' ? 'bg-white dark:bg-[#1d234a] text-[#0066ff] shadow-sm' : 'text-[#727687]'}`}
+            className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-bold ${viewMode === 'tabela' ? 'bg-white dark:bg-[#202737] text-[var(--primary-main)] shadow-sm' : 'text-[var(--text-secondary)]'}`}
           >
             <TableIcon className="w-3.5 h-3.5" /> Tabela
           </button>
@@ -143,14 +144,14 @@ export function CrmView({ onShowToast, onOpenAiPitchModal }: CrmViewProps) {
       </header>
 
       {isPrimaryAdmin && (
-        <div className="rounded-xl border border-[#c2c6d8]/30 bg-white dark:bg-[#141936] p-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+        <div className="lw-panel p-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
           <div className="min-w-0 flex-1"><p className="text-xs font-bold">CRM central da equipe</p><p className="text-[10px] text-[#727687]">Você movimenta os leads de todos os colaboradores sem trocar de conta.</p></div>
           <label className="text-[10px] font-bold sm:min-w-60">COLABORADOR<select value={ownerFilter} onChange={event => setOwnerFilter(event.target.value)} className="input mt-1"><option value="all">Toda a equipe</option>{owners.filter(owner => owner.id !== profile.id).map(owner => <option key={owner.id} value={owner.id}>{owner.nome || owner.username}</option>)}</select></label>
         </div>
       )}
 
       {!canManageCrm && (
-        <div className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs font-semibold text-blue-800">
+        <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/20 p-2.5 text-[11px] font-semibold text-blue-800 dark:text-blue-300">
           <LockKeyhole className="h-4 w-4 shrink-0" />
           Modo de acompanhamento: você vê seus leads e vendas pagas, mas somente a gestão movimenta os cartões.
         </div>
@@ -183,9 +184,9 @@ export function CrmView({ onShowToast, onOpenAiPitchModal }: CrmViewProps) {
                   if (canManageCrm) event.preventDefault();
                 }}
                 onDrop={event => dropOnStage(event, stage.id)}
-                className="w-[calc(100vw-2.5rem)] max-w-80 sm:w-80 shrink-0 snap-center bg-[#f4f2fd]/60 dark:bg-[#10142e]/60 p-3 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] min-h-[360px] sm:min-h-[420px]"
+                className="w-[calc(100vw-2.5rem)] max-w-[270px] sm:w-[260px] shrink-0 snap-center bg-[var(--surface-container-low)] p-2.5 rounded-xl border border-[var(--border-subtle)] min-h-[360px] sm:min-h-[420px]"
               >
-                <div className={`p-3 rounded-xl bg-white dark:bg-[#141936] border-l-4 ${stage.color} shadow-sm mb-3`}>
+                <div className={`p-2.5 rounded-lg bg-[var(--surface-main)] border-l-[3px] ${stage.color} shadow-sm mb-2.5`}>
                   <h3 className="font-bold text-xs text-[#1a1b22] dark:text-[#f8f7ff]">{stage.label}</h3>
                   <p className="text-[10px] text-[#727687]">
                     {cards.length} negócios • {formatCurrency(cards.reduce((sum, item) => sum + Number(item.estimated_value || 0), 0))}
@@ -217,7 +218,7 @@ export function CrmView({ onShowToast, onOpenAiPitchModal }: CrmViewProps) {
           })}
         </div>
       ) : (
-        <div className="bg-white dark:bg-[#141936] rounded-2xl border border-[#c2c6d8]/30 overflow-hidden">
+        <div className="lw-panel overflow-hidden">
           <div className="md:hidden divide-y divide-[#c2c6d8]/20">
             {visibleDeals.map(lead => (
               <div key={`mobile-table-${lead.id}`} className="p-3">
@@ -274,8 +275,8 @@ export function CrmView({ onShowToast, onOpenAiPitchModal }: CrmViewProps) {
 
 function Metric({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
   return (
-    <div className="min-w-0 bg-white dark:bg-[#141936] p-3 sm:p-4 rounded-xl border border-[#c2c6d8]/30 dark:border-[#2e366b]">
-      <span className="text-[10px] font-bold text-[#727687] uppercase">{label}</span>
+    <div className="lw-panel min-w-0 p-3 sm:p-4">
+      <span className="text-[9px] font-bold tracking-wide text-[var(--text-secondary)] uppercase">{label}</span>
       <p className={`text-base sm:text-xl break-words font-bold font-poppins mt-0.5 ${accent ? 'text-emerald-600' : 'text-[#1a1b22] dark:text-[#f8f7ff]'}`}>
         {value}
       </p>
@@ -304,7 +305,7 @@ function LeadCard({
   return (
     <article
       {...dragProps}
-      className={`p-4 bg-white dark:bg-[#141936] rounded-xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm hover:border-[#0066ff] space-y-3 ${canManageCrm ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}
+      className={`p-3 bg-[var(--surface-main)] rounded-lg border border-[var(--border-subtle)] shadow-sm hover:border-[var(--primary-main)] space-y-2.5 ${canManageCrm ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}
     >
       <div className="flex justify-between gap-2">
         <div>

@@ -197,10 +197,10 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
     return typeof days === 'number' && days >= 2 && days <= 3;
   };
 
-  return <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-300">
-    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-[#141936] p-5 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
-      <div><h2 className="text-xl font-bold font-poppins">Follow-up</h2><p className="text-xs text-[#727687]">Leads com retorno, ligação ou reunião programada.</p></div>
-      <button onClick={() => setAddOpen(true)} className="w-full md:w-auto h-11 px-4 flex items-center justify-center gap-2 rounded-xl bg-[#0066ff] text-white text-xs font-bold"><Plus className="w-4 h-4"/> Adicionar follow-up</button>
+  return <div className="lw-page space-y-3">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div><p className="lw-kicker mb-1.5">Próximos contatos</p><h2 className="lw-title">Follow-up</h2><p className="text-xs text-[var(--text-secondary)]">Retornos agendados, urgências e reuniões.</p></div>
+      <button onClick={() => setAddOpen(true)} className="lw-primary-button w-full px-4 sm:w-auto flex items-center justify-center gap-2"><Plus className="w-4 h-4"/> Adicionar follow-up</button>
     </div>
     {error && <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800">{error}</div>}
     <div className="grid grid-cols-3 gap-2 sm:gap-4">
@@ -208,8 +208,8 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
       <Metric label="Urgentes: até amanhã" value={list.filter(isDue).length} warning />
       <Metric label="Atenção: 2 a 3 dias" value={list.filter(isNear).length} />
     </div>
-    <div className="flex flex-wrap items-center gap-3 px-1 text-[10px] font-bold"><span className="text-rose-600">● Vermelho: atrasado, hoje ou amanhã</span><span className="text-amber-600">● Amarelo: 2–3 dias</span><span className="text-emerald-600">● Verde: 4 dias ou mais</span></div>
-    <div className="overflow-hidden rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] bg-white dark:bg-[#141936] divide-y divide-[#c2c6d8]/20 dark:divide-[#2e366b]">
+    <div className="no-scrollbar flex items-center gap-3 overflow-x-auto px-1 text-[9px] font-bold whitespace-nowrap"><span className="text-rose-600">● Atrasado, hoje ou amanhã</span><span className="text-amber-600">● Em 2–3 dias</span><span className="text-emerald-600">● Em 4 dias ou mais</span></div>
+    <div className="lw-panel overflow-hidden divide-y divide-[var(--border-subtle)]">
       {loading && <div className="p-8 text-center text-xs text-[#727687]">Carregando follow-ups…</div>}
       {!loading && !list.length && <div className="p-10 text-center text-xs text-[#727687]">Nenhum retorno com decisor pendente. Eles aparecerão aqui quando forem enviados pela prospecção.</div>}
       {list.map(lead => {
@@ -217,7 +217,7 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
         const expanded = expandedLeadId === lead.id;
         const whatsApp = whatsappLink(lead.whatsapp || lead.phone);
         return <article key={lead.id} className={urgencyRowClass(countdown?.urgency)}>
-          <div className="px-3 py-2 grid grid-cols-1 lg:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)_auto] lg:items-center gap-1 lg:gap-3">
+          <div className="px-3 py-2.5 grid grid-cols-1 lg:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)_auto] lg:items-center gap-1 lg:gap-3">
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <h3 className="font-bold text-xs truncate">{lead.company_name}</h3>
@@ -233,8 +233,8 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
               {lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer" className="p-1.5 rounded-lg text-[#0066ff] hover:bg-[#0066ff]/10" title="Abrir perfil no Google Maps"><ExternalLink className="w-3.5 h-3.5" /></a>}
               {whatsApp && <a href={whatsApp} target="_blank" rel="noreferrer" className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50" title="WhatsApp"><MessageCircle className="w-3.5 h-3.5" /></a>}
               {lead.phone && <a href={`tel:${lead.phone.replace(/\D/g, '')}`} className="p-1.5 rounded-lg text-[#0066ff] hover:bg-[#0066ff]/10" title="Ligar"><PhoneCall className="w-3.5 h-3.5" /></a>}
-              <button type="button" onClick={() => setExpandedLeadId(expanded ? null : lead.id)} className="ml-1 px-2 py-1.5 rounded-lg border border-[#0066ff]/30 text-[#0066ff] text-[10px] font-bold flex items-center gap-1">
-                {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />} {expanded ? 'Fechar' : 'Atender'}
+              <button type="button" onClick={() => setExpandedLeadId(expanded ? null : lead.id)} className="ml-1 min-h-8 px-2.5 rounded-lg border border-[#1268ff]/30 bg-[#1268ff]/5 text-[#1268ff] text-[10px] font-bold flex items-center gap-1">
+                {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />} {expanded ? 'Fechar' : 'Registrar contato'}
               </button>
               <button type="button" disabled={archivingLeadId === lead.id} onClick={() => void archiveLead(lead)} className="px-2 py-1.5 rounded-lg border border-[#c2c6d8]/40 text-[#727687] hover:text-[#1a1b22] text-[10px] font-bold flex items-center gap-1 disabled:opacity-50" title="Arquivar sem excluir">
                 <Archive className="w-3.5 h-3.5"/> {archivingLeadId === lead.id ? 'Arquivando…' : 'Arquivar'}
@@ -245,7 +245,7 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
             <label className="text-[10px] font-semibold">RESULTADO<select value={outcomes[lead.id] || 'retornar_depois'} onChange={event => { const value = event.target.value as FollowUpOutcome; setOutcomes({ ...outcomes, [lead.id]: value }); if (value === 'retry_tomorrow') setDates({ ...dates, [lead.id]: tomorrowAtNine() }); }} className="mt-1 w-full p-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl">{followUpOutcomeOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
             <label className="text-[10px] font-semibold">{(outcomes[lead.id] || 'retornar_depois') === 'reuniao_marcada' ? 'DATA E HORA DA REUNIÃO' : 'PRÓXIMO RETORNO'}<input type="datetime-local" disabled={(outcomes[lead.id] || 'retornar_depois') === 'sem_interesse'} value={dates[lead.id] || ''} onChange={event => setDates({ ...dates, [lead.id]: event.target.value })} className="mt-1 w-full p-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl disabled:opacity-50" /></label>
             <label className="text-[10px] font-semibold">RESUMO DO CONTATO<input value={notes[lead.id] || ''} onChange={event => setNotes({ ...notes, [lead.id]: event.target.value })} className="mt-1 w-full p-2 text-xs bg-[#f4f2fd] dark:bg-[#10142e] border border-[#c2c6d8]/40 rounded-xl" placeholder="Ex.: falou com o decisor, pediu retorno…" /></label>
-            <button onClick={() => void saveContact(lead)} className="h-9 justify-center flex items-center gap-2 px-4 text-xs font-bold text-white bg-[#0066ff] hover:bg-[#0050cb] rounded-xl"><CheckCircle2 className="w-4 h-4" /> Salvar</button>
+            <button onClick={() => void saveContact(lead)} className="lw-primary-button h-9 justify-center flex items-center gap-2 px-4"><CheckCircle2 className="w-4 h-4" /> Salvar</button>
             {(outcomes[lead.id] || 'retornar_depois') === 'reuniao_marcada' && <div className="md:col-span-2 xl:col-span-4 grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-xl border border-emerald-200 bg-emerald-50/60 dark:bg-emerald-950/10 p-3">
               <label className="text-[10px] font-semibold">PESSOA DA REUNIÃO<input value={meetingPeople[lead.id] ?? lead.decision_maker_name ?? ''} onChange={event => setMeetingPeople({...meetingPeople, [lead.id]: event.target.value})} className="input mt-1" placeholder="Nome do decisor"/></label>
               <label className="text-[10px] font-semibold">TELEFONE / WHATSAPP<input value={meetingPhones[lead.id] ?? lead.whatsapp ?? lead.phone ?? ''} onChange={event => setMeetingPhones({...meetingPhones, [lead.id]: event.target.value})} className="input mt-1" placeholder="(85) 99999-9999"/></label>
@@ -269,5 +269,5 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
 }
 
 function Metric({ label, value, warning }: { label: string; value: number; warning?: boolean }) {
-  return <div className="min-w-0 bg-white dark:bg-[#141936] p-3 sm:p-4 rounded-xl border border-[#c2c6d8]/30 dark:border-[#2e366b]"><span className="block text-[9px] sm:text-[10px] leading-tight font-bold text-[#727687] uppercase">{label}</span><p className={`text-xl sm:text-2xl font-bold mt-1 ${warning ? 'text-rose-600' : 'text-[#0066ff]'}`}>{value}</p></div>;
+  return <div className="lw-panel min-w-0 p-3 sm:p-4"><span className="block text-[9px] sm:text-[10px] leading-tight font-bold text-[var(--text-secondary)] uppercase">{label}</span><p className={`text-xl sm:text-2xl font-bold mt-1 tabular-nums ${warning ? 'text-rose-600' : 'text-[var(--primary-main)]'}`}>{value}</p></div>;
 }

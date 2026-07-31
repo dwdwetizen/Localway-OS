@@ -257,16 +257,16 @@ export function KeywordOpportunityPanel({
       ? '20+'
       : effectivePosition.toFixed(1);
 
-  return <section className="bg-white dark:bg-[#141936] rounded-2xl border border-[#c2c6d8]/35 overflow-hidden">
-    <div className="p-4 sm:p-5 border-b border-[#c2c6d8]/30 flex flex-wrap sm:flex-nowrap items-start gap-3">
-      <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 grid place-items-center"><TrendingUp className="w-5 h-5"/></div>
-      <div className="flex-1"><h3 className="font-semibold">Potencial de palavras-chave e receita</h3><p className="text-[11px] text-[#727687] mt-1">O perfil, o segmento e o site geram sugestões automáticas; você apenas confirma as palavras e as premissas comerciais.</p></div>
+  return <section className="lw-panel overflow-hidden">
+    <div className="p-3 sm:p-4 border-b border-[var(--border-subtle)] flex flex-wrap sm:flex-nowrap items-start gap-3">
+      <div className="lw-icon-box bg-emerald-50 text-emerald-600"><TrendingUp className="w-[18px] h-[18px]"/></div>
+      <div className="flex-1"><h3 className="text-sm font-semibold">Palavras-chave e potencial mensal</h3><p className="text-[10px] text-[var(--text-secondary)] mt-1">Sugestões automáticas do Google Ads combinadas com posição local, conversão e ticket médio.</p></div>
       <span
         title={apiValidated ? 'A consulta completa ao Planejador de palavras-chave foi validada.' : connected ? 'A conta Google autorizou o acesso; a API será validada ao fazer uma consulta.' : 'A integração ainda precisa ser autorizada.'}
         className={`ml-[3.25rem] sm:ml-0 px-2.5 py-1 rounded-full text-[10px] font-bold ${connected ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}
       >{connected === null ? 'Verificando…' : apiValidated ? 'Google Ads validado' : connected ? 'Conta Google autorizada' : 'Google Ads pendente'}</span>
     </div>
-    <div className="p-4 sm:p-5 grid lg:grid-cols-[1fr_1.1fr] gap-5">
+    <div className="p-3 sm:p-4 grid lg:grid-cols-[1fr_1.08fr] gap-4">
       <div>
         <div className="grid sm:grid-cols-2 gap-3">
           <label className="text-xs font-semibold">Segmento<select value={segment} onChange={event => changeSegment(event.target.value)} className="input mt-1">{segments.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
@@ -274,7 +274,7 @@ export function KeywordOpportunityPanel({
           {segment === 'outro' && <label className="text-xs font-semibold sm:col-span-2">O que a empresa vende ou oferece<input value={customSegment} onChange={event => setCustomSegment(event.target.value)} className="input mt-1" placeholder="Ex.: atacado de semijoias"/><span className="block text-[10px] font-normal text-[#727687] mt-1">Use algo específico. Categorias genéricas como “Atacadista” podem gerar sugestões de marcas sem relação com a empresa.</span></label>}
           <label className="text-xs font-semibold sm:col-span-2">Palavras específicas — opcional<input value={keywordInput} onChange={event => setKeywordInput(event.target.value)} className="input mt-1" placeholder="Ex.: semijoias no atacado, acessórios para revenda"/><span className="block text-[10px] font-normal text-[#727687] mt-1">Se ficar vazio, usamos o nome da empresa e a descrição acima como contexto.</span></label>
         </div>
-        <button disabled={loading || !connected} onClick={() => void research()} className="mt-3 w-full sm:w-auto min-h-11 px-4 py-2.5 rounded-xl bg-[#0066ff] text-white text-xs font-semibold flex justify-center items-center gap-2 disabled:opacity-50">{loading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Search className="w-4 h-4"/>}Buscar volume e sugestões</button>
+        <button disabled={loading || !connected} onClick={() => void research()} className="lw-primary-button mt-3 w-full px-4 sm:w-auto flex justify-center items-center gap-2 disabled:opacity-50">{loading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Search className="w-4 h-4"/>}Consultar volume</button>
         {!!ideas.length && <p className="mt-4 text-[10px] leading-relaxed text-[#727687]"><strong>Seleção automática:</strong> marcamos até cinco grupos relevantes, evitando somar termos muito parecidos. Buscas/mês é uma média aproximada no Google para a região.</p>}
         {!!ideas.length && <div className="mt-2 max-h-72 overflow-auto rounded-xl border divide-y">
           {ideas.slice(0, 30).map(item => {
@@ -293,8 +293,8 @@ export function KeywordOpportunityPanel({
         {!!ideas.length && <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-[#727687]"><span>{selectedKeywords.length} palavras selecionadas</span><span>{estimate.measuredKeywords}/{estimate.selectedKeywords} com mapa medido</span></div>}
       </div>
 
-      <div className="rounded-2xl bg-[#f8f9fc] dark:bg-[#10142e] p-4 border border-[#c2c6d8]/30">
-        <div className="flex items-center gap-2"><Calculator className="w-5 h-5 text-[#0066ff]"/><h4 className="text-sm font-semibold">Simulador auditável</h4></div>
+      <div className="lw-panel-muted p-3 sm:p-4">
+        <div className="flex items-center gap-2"><Calculator className="w-5 h-5 text-[var(--primary-main)]"/><h4 className="text-sm font-semibold">Estimativa comercial auditável</h4></div>
         {!selectedIdeas.length ? <div className="py-12 text-center text-xs text-[#727687]"><BarChart3 className="w-8 h-8 mx-auto mb-2 opacity-50"/>Consulte e selecione ao menos uma palavra-chave para calcular.</div> : <>
           {idea && <div className="mt-3 p-3 rounded-xl bg-white dark:bg-[#141936] border"><p className="text-[10px] text-[#727687]">Palavra em destaque</p><div className="flex items-center justify-between gap-2 mt-1"><strong className="text-sm">{idea.keyword}</strong><button onClick={() => void onUseKeyword(idea.keyword)} className="text-[10px] font-bold text-[#0066ff] flex items-center gap-1"><MapPin className="size-3"/>Usar no mapa</button></div><p className="text-[11px] mt-1">{volume.toLocaleString('pt-BR')} buscas/mês • CPC topo {currency(idea.lowTopOfPageBid)}–{currency(idea.highTopOfPageBid)}</p><p className="text-[9px] text-[#727687] mt-1">Posição atual: {currentPositionLabel}. O CPC é dado do Google Ads e não representa uma cobrança deste sistema.</p></div>}
           <div className="grid grid-cols-2 gap-3 mt-3">

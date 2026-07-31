@@ -6,6 +6,7 @@ import { Header } from '@/components/Header';
 import { DashboardView } from '@/components/DashboardView';
 import { AnalisesView } from '@/components/AnalisesView';
 import { HeatmapView } from '@/components/HeatmapView';
+import { SearchVolumeView } from '@/components/SearchVolumeView';
 import { RaioXView } from '@/components/RaioXView';
 import { ModuleErrorBoundary } from '@/components/ModuleErrorBoundary';
 import { ProspectingView } from '@/components/ProspectingView';
@@ -26,6 +27,7 @@ import { supabase, supabaseConfigurationError } from '@/lib/supabase';
 const permissionByTab: Record<Exclude<TabType, 'admin'>, string[]> = {
   dashboard: ['Dashboard', 'dashboard'],
   analises: ['Análises', 'analises'],
+  volume: ['Volume de Busca', 'volume', 'Mapa', 'mapa'],
   mapa: ['Mapa', 'mapa'],
   raiox: ['Raio-X', 'raiox'],
   prospeccao: ['Prospecção', 'prospeccao'],
@@ -40,6 +42,7 @@ const permissionByTab: Record<Exclude<TabType, 'admin'>, string[]> = {
 const allTabs: TabType[] = [
   'dashboard',
   'analises',
+  'volume',
   'mapa',
   'raiox',
   'prospeccao',
@@ -163,7 +166,7 @@ function AuthenticatedHome() {
   };
 
   return (
-    <div className="min-h-screen bg-[#fbf8ff] dark:bg-[#0a0e27] text-[#1a1b22] dark:text-[#f8f7ff] transition-colors duration-300">
+    <div className="min-h-screen bg-[var(--bg-main)] text-[var(--text-primary)] transition-colors duration-300">
       {/* Fixed Sidebar */}
       <Sidebar
         activeTab={visibleTab || 'dashboard'}
@@ -176,7 +179,7 @@ function AuthenticatedHome() {
       />
 
       {/* Main Layout Area */}
-      <div className="lg:ml-[280px] flex flex-col min-h-screen min-w-0 transition-all">
+      <div className="lg:ml-[248px] flex flex-col min-h-screen min-w-0 transition-all">
         {/* Sticky Header */}
         <Header
           darkMode={darkMode}
@@ -189,7 +192,7 @@ function AuthenticatedHome() {
         />
 
         {/* Content Body */}
-        <main className="flex-1 min-w-0 p-3 sm:p-4 md:p-6 lg:p-8 pb-24 sm:pb-24 lg:pb-8 max-w-7xl w-full mx-auto space-y-4 sm:space-y-6">
+        <main className="flex-1 min-w-0 p-3 sm:p-4 lg:p-5 pb-24 sm:pb-24 lg:pb-5 max-w-[1600px] w-full mx-auto space-y-4">
           {!allowedTabs.length && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
               Seu perfil ainda não possui módulos liberados. Fale com o administrador.
@@ -208,6 +211,10 @@ function AuthenticatedHome() {
               onShowToast={showToast}
               onOpenAiReviewModal={handleOpenAiReviewModal}
             />
+          )}
+
+          {visibleTab === 'volume' && (
+            <SearchVolumeView onShowToast={showToast} />
           )}
 
           {visibleTab === 'mapa' && <HeatmapView onShowToast={showToast} />}

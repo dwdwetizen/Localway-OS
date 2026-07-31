@@ -131,20 +131,20 @@ export function GooglePlaceSearch({ module, onSelect, disabled = false }: Google
         }}
         placeholder="Digite o nome da empresa, bairro ou cidade"
         autoComplete="off"
-        className="w-full min-h-12 pl-10 pr-10 py-3 rounded-xl bg-[#f8f9fc] dark:bg-[#10142e] border border-[#0066ff]/30 text-sm outline-none focus:border-[#0066ff] focus:ring-2 focus:ring-[#0066ff]/10 disabled:opacity-50"
+        className="lw-input w-full pl-10 pr-10 py-2 text-sm disabled:opacity-50"
       />
       {loading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#0066ff] animate-spin" />}
     </div>
-    {open && !disabled && (suggestions.length > 0 || message) && <div className="absolute z-40 left-0 right-0 mt-2 max-h-80 overflow-y-auto rounded-2xl border border-[#c2c6d8]/45 bg-white dark:bg-[#141936] shadow-2xl">
+    {open && !disabled && (suggestions.length > 0 || message) && <div className="absolute z-40 left-0 right-0 mt-2 max-h-80 overflow-y-auto rounded-xl border border-[var(--border-color)] bg-white dark:bg-[#151a28] shadow-2xl">
       {message && <p className="p-4 text-xs text-[#727687]">{message}</p>}
       {suggestions.map(place => <button
         key={place.google_place_id}
         type="button"
         onMouseDown={event => event.preventDefault()}
         onClick={() => void choose(place)}
-        className="w-full p-3 sm:p-4 flex items-start gap-3 text-left border-b last:border-b-0 border-[#c2c6d8]/20 hover:bg-[#0066ff]/5 focus:bg-[#0066ff]/5 outline-none"
+        className="w-full p-3 flex items-start gap-3 text-left border-b last:border-b-0 border-[var(--border-subtle)] hover:bg-[#1268ff]/5 focus:bg-[#1268ff]/5 outline-none"
       >
-        <span className="w-9 h-9 shrink-0 rounded-xl bg-[#0066ff]/10 text-[#0066ff] grid place-items-center"><Building2 className="w-4 h-4"/></span>
+        <span className="w-9 h-9 shrink-0 rounded-lg bg-[#1268ff]/10 text-[#1268ff] grid place-items-center"><Building2 className="w-4 h-4"/></span>
         <span className="min-w-0 flex-1">
           <span className="block text-xs sm:text-sm font-bold truncate">{place.company_name}</span>
           <span className="mt-0.5 flex items-center gap-1 text-[10px] sm:text-[11px] text-[#727687]"><MapPin className="w-3 h-3 shrink-0"/><span className="truncate">{place.address || 'Endereço não informado'}</span></span>

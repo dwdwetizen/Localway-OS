@@ -6,7 +6,6 @@ import { ChevronDown, Clock3, ExternalLink, Grid3X3, History, Info, Layers, Link
 import { useLeads } from '@/hooks/use-leads';
 import { Lead } from '@/lib/leads';
 import { supabase } from '@/lib/supabase';
-import { KeywordOpportunityPanel } from '@/components/KeywordOpportunityPanel';
 import { useAuthProfile } from '@/components/AuthGate';
 import { GooglePlaceSearch, GooglePlaceSuggestion } from '@/components/GooglePlaceSearch';
 
@@ -504,17 +503,6 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
     if (!selected) return [];
     return registeredVisibilityKeywords(selected);
   }, [selected]);
-  const keywordPositions = useMemo<Record<string, number | null>>(() => {
-    if (!selected) return {};
-    return scanHistory.reduce<Record<string, number | null>>((positions, scan) => {
-      if (scan.lead_id !== selected.id) return positions;
-      const key = keywordKey(scan.keyword);
-      if (!Object.prototype.hasOwnProperty.call(positions, key)) {
-        positions[key] = scan.average_position ?? 21;
-      }
-      return positions;
-    }, {});
-  }, [scanHistory, selected]);
   const activeRegisteredKeyword = keywordTabs.find(keyword =>
     keywordKey(keyword) === keywordKey(activeKeyword));
   const competitors = useMemo(() => {
@@ -786,39 +774,18 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
     onShowToast(`Grade ${gridSize}×${gridSize} calculada e salva no histórico.`);
   };
 
-  const useKeywordFromResearch = async (keyword: string) => {
-    if (!selected) return;
-    const stored = selected.analysis_data?.visibility_keywords || [];
-    const keywords = stored.some(item => keywordKey(item) === keywordKey(keyword))
-      ? stored
-      : [...stored, keyword].slice(0, 10);
-    if (keywords !== stored) {
-      const result = await updateLead(selected.id, {
-        analysis_data: { ...(selected.analysis_data || {}), visibility_keywords: keywords },
-      });
-      if (result.error) {
-        onShowToast(result.error, 'error');
-        return;
-      }
-    }
-    setActiveKeyword(keyword);
-    setFocusedPlaceId('');
-    setActiveScan(scanHistory.find(item =>
-      item.lead_id === selected.id && keywordKey(item.keyword) === keywordKey(keyword)) || null);
-    onShowToast(`“${keyword}” adicionada ao mapa de calor.`, 'success');
-  };
-
   return (
-    <div className="space-y-4 sm:space-y-5 animate-in fade-in duration-300" style={{ fontFamily: "'Inter', sans-serif" }}>
-      <header className="flex items-center gap-3 bg-white dark:bg-[#141936] p-4 sm:p-5 rounded-2xl border border-[#c2c6d8]/30 dark:border-[#2e366b] shadow-sm">
-        <div className="w-10 h-10 sm:w-12 sm:h-12 shrink-0 rounded-xl sm:rounded-2xl bg-[#0066ff]/10 text-[#0066ff] flex items-center justify-center"><MapPin className="w-5 h-5 sm:w-6 sm:h-6" /></div>
+    <div className="lw-page space-y-3" style={{ fontFamily: "'Inter', sans-serif" }}>
+      <header className="flex items-center gap-3">
+        <div className="lw-icon-box"><MapPin className="w-[18px] h-[18px]" /></div>
         <div>
-          <h2 className="text-xl font-semibold tracking-tight" style={{ fontFamily: "'Inter', sans-serif" }}>Mapa de calor de ranking local</h2>
-          <p className="text-xs text-[#727687] mt-0.5">Busque a empresa ou cole o perfil do Google e veja a posição em cada ponto da região.</p>
+          <p className="lw-kicker mb-1">Inteligência local</p>
+          <h2 className="lw-title">Mapa de Calor</h2>
+          <p className="text-xs text-[var(--text-secondary)] mt-0.5">Posição da empresa em cada ponto da região, por palavra-chave.</p>
         </div>
       </header>
 
-      <section className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#141936] border border-[#c2c6d8]/35 dark:border-[#2e366b] shadow-sm space-y-4">
+      <section className="lw-panel p-3 sm:p-4 space-y-3">
         <GooglePlaceSearch module="mapa" disabled={resolvingProfile} onSelect={chooseSuggestion}/>
         <div className="flex items-center gap-3"><span className="h-px flex-1 bg-[#c2c6d8]/30"/><span className="text-[10px] font-bold uppercase text-[#727687]">ou cole o link</span><span className="h-px flex-1 bg-[#c2c6d8]/30"/></div>
         <div className="flex flex-col sm:flex-row gap-2">
@@ -832,10 +799,10 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
                 if (event.key === 'Enter') void resolveGoogleProfile();
               }}
               placeholder="Cole o link curto ou completo do perfil no Google Maps"
-              className="w-full pl-9 pr-3 py-3 rounded-xl bg-[#f8f9fc] dark:bg-[#10142e] border border-[#c2c6d8]/50 text-sm outline-none focus:border-[#0066ff] focus:ring-2 focus:ring-[#0066ff]/10"
+              className="lw-input w-full pl-9 pr-3 py-2 text-sm"
             />
           </div>
-          <button disabled={resolvingProfile || !googleMapsUrl.trim()} onClick={() => void resolveGoogleProfile()} className="px-5 py-3 rounded-xl border border-[#0066ff] text-[#0066ff] hover:bg-[#0066ff]/5 disabled:opacity-50 text-xs font-semibold flex justify-center items-center gap-2">
+          <button disabled={resolvingProfile || !googleMapsUrl.trim()} onClick={() => void resolveGoogleProfile()} className="lw-secondary-button px-5 disabled:opacity-50 text-[var(--primary-main)] flex justify-center items-center gap-2">
             {resolvingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <MapPin className="w-4 h-4" />}
             {resolvingProfile ? 'Identificando...' : 'Carregar perfil'}
           </button>
@@ -859,7 +826,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
             <select aria-label="Tamanho da grade" value={gridSize} onChange={event => setGridSize(Number(event.target.value))} className="min-w-0 px-3 py-2 rounded-xl bg-white dark:bg-[#141936] border border-[#c2c6d8]/50 text-xs font-medium">
               {[3, 4, 5, 6, 7].map(size => <option key={size} value={size}>{size}×{size} ({size * size} pontos)</option>)}
             </select>
-            <button disabled={generatingGrid || !activeRegisteredKeyword} onClick={() => void runVisibilityGrid()} className="col-span-2 md:col-span-1 min-h-11 px-5 py-2 rounded-xl bg-[#0066ff] hover:bg-[#0050cb] disabled:opacity-50 text-white text-xs font-semibold flex justify-center items-center gap-2">
+            <button disabled={generatingGrid || !activeRegisteredKeyword} onClick={() => void runVisibilityGrid()} className="lw-primary-button col-span-2 md:col-span-1 px-5 disabled:opacity-50 flex justify-center items-center gap-2">
               {generatingGrid ? <Loader2 className="w-4 h-4 animate-spin"/> : <Grid3X3 className="w-4 h-4"/>}
               {generatingGrid ? `Consultando ${gridSize * gridSize} pontos…` : 'Gerar mapa de calor'}
             </button>
@@ -867,18 +834,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
         </div>}
       </section>
 
-      {selected && <KeywordOpportunityPanel
-        key={selected.id}
-        selectedLead={selected}
-        leads={leads}
-        currentPosition={activeScan ? centerPosition ?? 21 : null}
-        rankedKeyword={activeScan?.keyword || ''}
-        keywordPositions={keywordPositions}
-        onUseKeyword={useKeywordFromResearch}
-        onShowToast={onShowToast}
-      />}
-
-      <div className={`heatmap-shell grid grid-cols-1 overflow-hidden rounded-[14px] border border-[#d9dbe3] bg-white shadow-[0_8px_28px_rgba(31,41,55,0.08)] ${activeScan ? 'lg:grid-cols-[320px_1fr]' : ''}`}>
+      <div className={`heatmap-shell grid grid-cols-1 overflow-hidden rounded-[14px] border border-[var(--border-subtle)] bg-white shadow-[var(--shadow-panel)] ${activeScan ? 'lg:grid-cols-[300px_1fr]' : ''}`}>
         {activeScan && <aside className="flex flex-col min-h-0 max-h-[520px] lg:min-h-[680px] lg:max-h-[760px] border-b lg:border-b-0 lg:border-r border-[#e2e3e8] bg-[#fcfcfd] text-[#34363e]">
           <div className="px-5 pt-5 pb-4 border-b border-[#e5e6ea]">
             <p className="text-[12px] font-medium text-[#565963]">Palavra-chave</p>
@@ -952,7 +908,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
         </section>
       </div>
 
-      <section className="rounded-2xl bg-white dark:bg-[#141936] border border-[#c2c6d8]/35 overflow-hidden shadow-sm">
+      <section className="lw-panel overflow-hidden">
         <button type="button" onClick={() => setHistoryOpen(current => !current)} className="w-full p-4 flex items-center gap-2 text-left hover:bg-[#f8f9fc] dark:hover:bg-[#10142e] transition-colors" aria-expanded={historyOpen}>
           <History className="w-4 h-4 text-[#0066ff]"/>
           <div className="flex-1">

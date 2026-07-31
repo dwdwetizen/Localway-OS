@@ -41,24 +41,24 @@ export function Header({
   const unreadCount = notifications.filter(n => n.unread).length;
 
   return (
-    <header className="sticky top-0 z-40 min-h-16 bg-white/95 dark:bg-[#141936]/95 backdrop-blur-xl border-b border-[#c2c6d8]/40 dark:border-[#2e366b] px-3 md:px-6 py-2 flex flex-wrap lg:flex-nowrap items-center gap-2 lg:gap-4 transition-colors">
+    <header className="sticky top-0 z-40 min-h-14 bg-white/95 dark:bg-[#151a28]/95 backdrop-blur-xl border-b border-[var(--border-subtle)] px-3 md:px-4 py-2 flex flex-wrap lg:flex-nowrap items-center gap-2 lg:gap-3 transition-colors">
       <button
         onClick={onOpenMobileSidebar}
-        className="order-1 lg:hidden w-10 h-10 grid place-items-center text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl"
+        className="order-1 lg:hidden w-9 h-9 grid place-items-center text-[var(--text-secondary)] hover:bg-[var(--surface-container-low)] rounded-lg"
         aria-label="Abrir Menu"
       >
         <Menu className="w-5 h-5" />
       </button>
 
-      <div className="order-3 lg:order-1 relative w-full lg:max-w-md lg:flex-1">
+      <div className="order-3 lg:order-1 relative w-full lg:max-w-sm lg:flex-1">
         <div className="relative w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#727687]" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar empresas ou leads..."
-            className="w-full h-10 pl-9 pr-4 text-sm bg-[#f4f2fd] dark:bg-[#10142e] text-[#1a1b22] dark:text-[#f8f7ff] border-none rounded-xl lg:rounded-full focus:outline-none focus:ring-2 focus:ring-[#0066ff] placeholder-[#727687] transition-all"
+            placeholder="Buscar empresa, lead ou negócio"
+            className="w-full h-9 pl-9 pr-4 text-[12px] bg-[var(--surface-container-low)] text-[var(--text-primary)] border border-transparent rounded-lg focus:outline-none focus:border-[var(--primary-main)] focus:ring-2 focus:ring-[#1268ff]/10 placeholder-[var(--text-secondary)] transition-all"
           />
         </div>
       </div>
@@ -68,7 +68,7 @@ export function Header({
         <div className="relative">
           <button
             onClick={() => setShowNotifications(!showNotifications)}
-            className="relative w-10 h-10 grid place-items-center text-[#424656] dark:text-[#b0b4ce] hover:bg-[#f4f2fd] dark:hover:bg-[#1d234a] rounded-xl transition-all"
+            className="relative w-9 h-9 grid place-items-center text-[var(--text-secondary)] hover:bg-[var(--surface-container-low)] rounded-lg transition-all"
             title="Notificações"
           >
             <Bell className="w-5 h-5" />
@@ -116,7 +116,7 @@ export function Header({
         {/* Theme Toggle */}
         <button
           onClick={() => setDarkMode(prev => !prev)}
-          className="w-10 h-10 grid place-items-center text-[#424656] dark:text-[#b0b4ce] hover:bg-[#f4f2fd] dark:hover:bg-[#1d234a] rounded-xl transition-all"
+            className="w-9 h-9 grid place-items-center text-[var(--text-secondary)] hover:bg-[var(--surface-container-low)] rounded-lg transition-all"
           title={darkMode ? 'Modo Claro' : 'Modo Escuro'}
         >
           {darkMode ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5" />}
@@ -127,7 +127,7 @@ export function Header({
         <button
           onClick={onSwitchAccount}
           disabled={isSwitchingAccount}
-          className="w-10 h-10 grid place-items-center text-xs font-semibold text-[#0050cb] dark:text-[#3b82f6] hover:bg-[#0066ff]/10 rounded-xl transition-colors disabled:opacity-50"
+          className="w-9 h-9 grid place-items-center text-xs font-semibold text-[var(--primary-main)] hover:bg-[#1268ff]/10 rounded-lg transition-colors disabled:opacity-50"
           title="Trocar de conta"
         >
           <Repeat2 className={`w-4 h-4 ${isSwitchingAccount ? 'animate-spin' : ''}`} />
@@ -136,7 +136,7 @@ export function Header({
 
         {/* User Profile */}
         <div className="flex items-center gap-2 pl-1 group">
-          <div className="w-10 h-10 rounded-xl sm:rounded-full bg-[#0066ff] text-white flex items-center justify-center font-bold text-sm overflow-hidden border border-[#0066ff]/30 shadow-sm">
+          <div className="w-9 h-9 rounded-full bg-[#1268ff] text-white flex items-center justify-center font-bold text-xs overflow-hidden border border-[#1268ff]/30 shadow-sm">
             {profile.photo_url
               ? <img src={profile.photo_url} alt={profile.nome || profile.username} className="w-full h-full object-cover" />
               : <span>{(profile.nome || profile.username).slice(0, 1).toUpperCase()}</span>}
