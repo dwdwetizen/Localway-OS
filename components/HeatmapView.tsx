@@ -622,6 +622,18 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
 
     const existing = allLeads.find(lead => lead.google_place_id === place.google_place_id);
     if (existing) {
+      const incomingAnalysis = place.analysis_data && typeof place.analysis_data === 'object'
+        ? place.analysis_data as Lead['analysis_data']
+        : null;
+      if (incomingAnalysis) {
+        const refreshed = await updateLead(existing.id, {
+          analysis_data: {
+            ...(existing.analysis_data || {}),
+            ...incomingAnalysis,
+          },
+        });
+        if (refreshed.error) throw new Error(refreshed.error);
+      }
       const existingKeywords = registeredVisibilityKeywords(existing);
       setSelectedId(existing.id);
       setActiveKeyword(existingKeywords[0] || '');
@@ -847,7 +859,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
                 <InfoTip text={`Posição no ponto central da grade. Média nos ${activeScan.points.length} pontos: ${activeScan.average_position ? activeScan.average_position.toFixed(1).replace('.', ',') : '20+'}.`} />
               </div>
               <div className="mt-1.5 flex items-start gap-3">
-                <CompetitorPhoto photoName={targetPlace?.photo_name || null} companyName={activeScanLead?.company_name || 'Empresa analisada'} size="large" />
+                <CompetitorPhoto photoName={targetPlace?.photo_name || activeScanLead?.analysis_data?.photo_name || null} companyName={activeScanLead?.company_name || 'Empresa analisada'} size="large" />
                 <div className="min-w-0 flex-1">
                   <p className="text-[14px] font-medium leading-[1.25] text-[#34363e]">{activeScanLead?.company_name || 'Empresa analisada'}</p>
                   <p className="text-[11px] leading-4 text-[#777a83] mt-0.5 line-clamp-2">{activeScanLead?.category || activeScanLead?.address}</p>
@@ -1009,7 +1021,7 @@ function CompetitorPhoto({ photoName, companyName, size = 'normal' }: {
   }, [photoName]);
 
   return photoUrl
-    ? <Image src={photoUrl} alt="" width={size === 'large' ? 56 : 48} height={size === 'large' ? 56 : 48} unoptimized className={`shrink-0 ${sizeClass} rounded-[3px] object-cover bg-[#e8ebee]`} />
+    ? <Image src={photoUrl} alt={companyName} width={size === 'large' ? 56 : 48} height={size === 'large' ? 56 : 48} unoptimized onError={() => setPhotoUrl('')} className={`shrink-0 ${sizeClass} rounded-[3px] object-cover bg-[#e8ebee]`} />
     : <div className={`shrink-0 ${sizeClass} rounded-[3px] bg-gradient-to-br from-[#d9e1ea] to-[#b8c6d4] text-[#3978d4] grid place-items-center font-semibold text-sm`}>{companyName.slice(0, 2).toUpperCase()}</div>;
 }
 

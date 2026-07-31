@@ -82,6 +82,9 @@ function analysePlace(place: PlaceRecord) {
   const rating = Number(place.rating || 0);
   const reviews = Number(place.userRatingCount || 0);
   const photos = Array.isArray(place.photos) ? place.photos.length : 0;
+  const photoName = Array.isArray(place.photos)
+    ? readText((place.photos[0] as PlaceRecord | undefined)?.name)
+    : null;
   const hoursCount = openingHoursCount(place.regularOpeningHours);
   const isOperational = place.businessStatus === 'OPERATIONAL';
 
@@ -178,6 +181,7 @@ function analysePlace(place: PlaceRecord) {
     health_score: healthScore,
     opportunity: summary,
     analysis_data: {
+      photo_name: photoName,
       summary,
       strengths,
       weaknesses,

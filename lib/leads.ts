@@ -55,6 +55,7 @@ export interface Lead {
 }
 
 export interface LeadAnalysisData {
+  photo_name?: string | null;
   summary?: string;
   strengths?: string[];
   weaknesses?: string[];
