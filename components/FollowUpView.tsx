@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Archive, CalendarPlus, CheckCircle2, ChevronDown, ChevronUp, ExternalLink, MessageCircle, PhoneCall, Plus, X } from 'lucide-react';
+import { Archive, CalendarPlus, CheckCircle2, ChevronDown, ChevronUp, ExternalLink, MessageCircle, PhoneCall, Plus, Search, X } from 'lucide-react';
 import { useAuthProfile } from '@/components/AuthGate';
 import { useLeads } from '@/hooks/use-leads';
 import { contactCountdown, ContactUrgency, googleCalendarLink, Lead, LeadStatus, statusLabel, whatsappLink } from '@/lib/leads';
@@ -57,6 +57,8 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
   const [addOpen, setAddOpen] = useState(false);
   const [expandedLeadId, setExpandedLeadId] = useState<string | null>(null);
   const [archivingLeadId, setArchivingLeadId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<'all' | 'overdue' | 'today' | 'tomorrow' | 'week' | 'undated'>('all');
+  const [search, setSearch] = useState('');
   const [, setUrgencyRefresh] = useState(0);
   const [newFollowUp, setNewFollowUp] = useState({ leadId: '', status: 'retornar_depois' as LeadStatus, date: '', note: '' });
 
@@ -68,6 +70,29 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
   const list = useMemo(() => leads
     .filter(lead => followUpStatuses.includes(lead.status))
     .sort((a, b) => new Date(a.next_action_at || 0).getTime() - new Date(b.next_action_at || 0).getTime()), [leads]);
+  const filterMatches = (lead: Lead, value: typeof filter) => {
+    const countdown = contactCountdown(lead.next_action_at);
+    const days = countdown?.days;
+    if (value === 'all') return true;
+    if (value === 'undated') return typeof days !== 'number';
+    if (typeof days !== 'number') return false;
+    if (value === 'overdue') return days < 0;
+    if (value === 'today') return days === 0;
+    if (value === 'tomorrow') return days === 1;
+    return days >= 0 && days <= 7;
+  };
+  const visibleList = list.filter(lead => {
+    const haystack = `${lead.company_name} ${lead.decision_maker_name || ''} ${lead.phone || ''} ${lead.whatsapp || ''}`.toLocaleLowerCase('pt-BR');
+    return filterMatches(lead, filter) && (!search.trim() || haystack.includes(search.trim().toLocaleLowerCase('pt-BR')));
+  });
+  const filterOptions: Array<{ id: typeof filter; label: string }> = [
+    { id: 'all', label: 'Todos' },
+    { id: 'overdue', label: 'Atrasados' },
+    { id: 'today', label: 'Hoje' },
+    { id: 'tomorrow', label: 'Amanhã' },
+    { id: 'week', label: 'Esta semana' },
+    { id: 'undated', label: 'Sem data' },
+  ];
 
   const archiveLead = async (lead: Lead) => {
     const confirmed = window.confirm(`Arquivar o lead “${lead.company_name}”? Ele sairá do Follow-up, mas poderá ser restaurado na área de Arquivados da Prospecção.`);
@@ -191,28 +216,25 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
     onShowToast('Follow-up adicionado.');
   };
 
-  const isDue = (lead: Lead) => (contactCountdown(lead.next_action_at)?.days ?? 2) <= 1;
-  const isNear = (lead: Lead) => {
-    const days = contactCountdown(lead.next_action_at)?.days;
-    return typeof days === 'number' && days >= 2 && days <= 3;
-  };
-
   return <div className="lw-page space-y-3">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div><p className="lw-kicker mb-1.5">Próximos contatos</p><h2 className="lw-title">Follow-up</h2><p className="text-xs text-[var(--text-secondary)]">Retornos agendados, urgências e reuniões.</p></div>
       <button onClick={() => setAddOpen(true)} className="lw-primary-button w-full px-4 sm:w-auto flex items-center justify-center gap-2"><Plus className="w-4 h-4"/> Adicionar follow-up</button>
     </div>
     {error && <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800">{error}</div>}
-    <div className="grid grid-cols-3 gap-2 sm:gap-4">
-      <Metric label="Agendados" value={list.length} />
-      <Metric label="Urgentes: até amanhã" value={list.filter(isDue).length} warning />
-      <Metric label="Atenção: 2 a 3 dias" value={list.filter(isNear).length} />
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
+        {filterOptions.map(option => {
+          const count = list.filter(lead => filterMatches(lead, option.id)).length;
+          return <button key={option.id} onClick={() => setFilter(option.id)} className={`min-h-9 shrink-0 rounded-md border px-2.5 text-[11px] font-medium ${filter === option.id ? 'border-[#0788a8] bg-[#0788a8] text-white' : 'border-[var(--border-color)] bg-[var(--surface-main)]'}`}>{option.label} <span className={`ml-1 rounded px-1 text-[9px] ${filter === option.id ? 'bg-white/20' : 'bg-[var(--surface-container-low)] text-[var(--text-secondary)]'}`}>{count}</span></button>;
+        })}
+      </div>
+      <div className="relative sm:ml-auto sm:w-64"><Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-secondary)]"/><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Empresa, decisor ou telefone" className="lw-input w-full pl-9"/></div>
     </div>
-    <div className="no-scrollbar flex items-center gap-3 overflow-x-auto px-1 text-[9px] font-bold whitespace-nowrap"><span className="text-rose-600">● Atrasado, hoje ou amanhã</span><span className="text-amber-600">● Em 2–3 dias</span><span className="text-emerald-600">● Em 4 dias ou mais</span></div>
     <div className="lw-panel overflow-hidden divide-y divide-[var(--border-subtle)]">
       {loading && <div className="p-8 text-center text-xs text-[#727687]">Carregando follow-ups…</div>}
-      {!loading && !list.length && <div className="p-10 text-center text-xs text-[#727687]">Nenhum retorno com decisor pendente. Eles aparecerão aqui quando forem enviados pela prospecção.</div>}
-      {list.map(lead => {
+      {!loading && !visibleList.length && <div className="p-10 text-center text-xs text-[#727687]">Nenhum retorno neste filtro.</div>}
+      {visibleList.map(lead => {
         const countdown = contactCountdown(lead.next_action_at);
         const expanded = expandedLeadId === lead.id;
         const whatsApp = whatsappLink(lead.whatsapp || lead.phone);
@@ -268,6 +290,3 @@ export function FollowUpView({ onShowToast }: FollowUpViewProps) {
   </div>;
 }
 
-function Metric({ label, value, warning }: { label: string; value: number; warning?: boolean }) {
-  return <div className="lw-panel min-w-0 p-3 sm:p-4"><span className="block text-[9px] sm:text-[10px] leading-tight font-bold text-[var(--text-secondary)] uppercase">{label}</span><p className={`text-xl sm:text-2xl font-bold mt-1 tabular-nums ${warning ? 'text-rose-600' : 'text-[var(--primary-main)]'}`}>{value}</p></div>;
-}

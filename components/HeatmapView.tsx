@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
-import { ChevronDown, Clock3, ExternalLink, Grid3X3, History, Info, Layers, Link2, Loader2, MapPin, Pencil, Plus, Star, Trash2, X } from 'lucide-react';
+import { ChevronDown, Clock3, ExternalLink, Grid3X3, History, Info, Layers, Link2, Loader2, MapPin, Pencil, Plus, Sparkles, Star, Trash2, X } from 'lucide-react';
 import { useLeads } from '@/hooks/use-leads';
 import { Lead } from '@/lib/leads';
 import { supabase } from '@/lib/supabase';
@@ -450,6 +450,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
   const [newKeyword, setNewKeyword] = useState('');
   const [savingKeywords, setSavingKeywords] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(true);
   const [deletingScanId, setDeletingScanId] = useState('');
   const resolvingProfileRef = useRef(false);
 
@@ -649,6 +650,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
     setGoogleMapsUrl(place.google_maps_url || fallbackMapsUrl);
     setFocusedPlaceId('');
     setActiveScan(null);
+    setSetupOpen(false);
   };
   const resolveGoogleProfile = async (selectedUrl?: string) => {
     if (resolvingProfileRef.current) return;
@@ -776,66 +778,40 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
 
   return (
     <div className="lw-page space-y-3" style={{ fontFamily: "'Inter', sans-serif" }}>
-      <header className="flex items-center gap-3">
-        <div className="lw-icon-box"><MapPin className="w-[18px] h-[18px]" /></div>
-        <div>
-          <p className="lw-kicker mb-1">Inteligência local</p>
-          <h2 className="lw-title">Mapa de Calor</h2>
-          <p className="text-xs text-[var(--text-secondary)] mt-0.5">Posição da empresa em cada ponto da região, por palavra-chave.</p>
-        </div>
+      <header>
+        <h2 className="lw-title">Mapa de Calor</h2>
+        <p className="mt-1 text-xs text-[var(--text-secondary)]">Ranking local por palavra-chave e ponto da região.</p>
       </header>
 
-      <section className="lw-panel p-3 sm:p-4 space-y-3">
-        <GooglePlaceSearch module="mapa" disabled={resolvingProfile} onSelect={chooseSuggestion}/>
-        <div className="flex items-center gap-3"><span className="h-px flex-1 bg-[#c2c6d8]/30"/><span className="text-[10px] font-bold uppercase text-[#727687]">ou cole o link</span><span className="h-px flex-1 bg-[#c2c6d8]/30"/></div>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <div className="relative flex-1">
-            <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#727687]" />
-            <input
-              type="url"
-              value={googleMapsUrl}
-              onChange={event => setGoogleMapsUrl(event.target.value)}
-              onKeyDown={event => {
-                if (event.key === 'Enter') void resolveGoogleProfile();
-              }}
-              placeholder="Cole o link curto ou completo do perfil no Google Maps"
-              className="lw-input w-full pl-9 pr-3 py-2 text-sm"
-            />
+      <section className="lw-panel flex items-center gap-2 overflow-hidden p-2">
+        <button type="button" onClick={() => setSetupOpen(current => !current)} className="lw-secondary-button shrink-0 px-3"><Sparkles className="h-3.5 w-3.5"/>{setupOpen ? 'Fechar análise' : 'Nova análise'}</button>
+        <div className="no-scrollbar min-w-0 flex-1 overflow-x-auto">
+          <div className="flex gap-1.5">
+            {keywordTabs.map(keyword => <button key={keyword} type="button" onClick={() => selectKeyword(keyword)} className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium ${keywordKey(activeKeyword) === keywordKey(keyword) ? 'border-[#1268ff] bg-blue-50 text-[#1268ff]' : 'border-[var(--border-color)] bg-[var(--surface-main)] text-[var(--text-secondary)]'}`}>{keyword}</button>)}
+            {!keywordTabs.length && <span className="px-2 py-1 text-[11px] text-[var(--text-secondary)]">Selecione uma empresa para começar</span>}
           </div>
-          <button disabled={resolvingProfile || !googleMapsUrl.trim()} onClick={() => void resolveGoogleProfile()} className="lw-secondary-button px-5 disabled:opacity-50 text-[var(--primary-main)] flex justify-center items-center gap-2">
-            {resolvingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <MapPin className="w-4 h-4" />}
-            {resolvingProfile ? 'Identificando...' : 'Carregar perfil'}
-          </button>
         </div>
-
-        {selected && <div className="flex flex-wrap items-center gap-2">
-          <span className="mr-1 text-[10px] uppercase tracking-[0.12em] font-semibold text-[#727687]">Palavras-chave</span>
-          {keywordTabs.map(keyword => <button key={keyword} type="button" onClick={() => selectKeyword(keyword)} className={`px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors ${keywordKey(activeKeyword) === keywordKey(keyword) ? 'bg-[#0066ff] border-[#0066ff] text-white shadow-sm' : 'bg-white dark:bg-[#10142e] border-[#c2c6d8]/45 hover:border-[#0066ff] text-[#424656] dark:text-[#dfe3f4]'}`}>{keyword}</button>)}
-          {!keywordTabs.length && <span className="text-xs text-amber-700">Cadastre uma palavra-chave para gerar o mapa.</span>}
-          <button type="button" onClick={openKeywordManager} className="w-full sm:w-auto sm:ml-auto px-3 py-2 sm:py-1.5 rounded-xl sm:rounded-full border border-[#c2c6d8]/45 text-xs font-semibold text-[#0066ff] hover:bg-[#0066ff]/5 flex justify-center items-center gap-1.5"><Pencil className="w-3 h-3" /> Gerenciar palavras-chave</button>
-        </div>}
-
-        {selected && <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-4 rounded-xl bg-[#f8f9fc] dark:bg-[#10142e] border border-[#c2c6d8]/30">
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.14em] font-semibold text-[#727687]">Perfil identificado</p>
-            <p className="text-sm font-semibold mt-1">{selected.company_name}</p>
-            <p className="text-xs text-[#727687]">{selected.category || 'Categoria identificada pelo Google'}</p>
-          </div>
-          <div className="grid grid-cols-2 md:flex w-full md:w-auto items-center gap-2">
-            <span className="px-3 py-2.5 rounded-xl bg-white dark:bg-[#141936] border border-[#c2c6d8]/35 text-xs font-medium text-center">Raio: 2 km</span>
-            <select aria-label="Tamanho da grade" value={gridSize} onChange={event => setGridSize(Number(event.target.value))} className="min-w-0 px-3 py-2 rounded-xl bg-white dark:bg-[#141936] border border-[#c2c6d8]/50 text-xs font-medium">
-              {[3, 4, 5, 6, 7].map(size => <option key={size} value={size}>{size}×{size} ({size * size} pontos)</option>)}
-            </select>
-            <button disabled={generatingGrid || !activeRegisteredKeyword} onClick={() => void runVisibilityGrid()} className="lw-primary-button col-span-2 md:col-span-1 px-5 disabled:opacity-50 flex justify-center items-center gap-2">
-              {generatingGrid ? <Loader2 className="w-4 h-4 animate-spin"/> : <Grid3X3 className="w-4 h-4"/>}
-              {generatingGrid ? `Consultando ${gridSize * gridSize} pontos…` : 'Gerar mapa de calor'}
-            </button>
-          </div>
-        </div>}
+        {selected && <button type="button" onClick={openKeywordManager} className="shrink-0 rounded-md p-2 text-[var(--primary-main)] hover:bg-blue-50" title="Gerenciar palavras-chave"><Pencil className="h-4 w-4"/></button>}
+        <button type="button" onClick={() => setHistoryOpen(current => !current)} className="lw-secondary-button shrink-0 px-3"><History className="h-3.5 w-3.5"/><span className="hidden sm:inline">Histórico</span></button>
       </section>
 
-      <div className={`heatmap-shell grid grid-cols-1 overflow-hidden rounded-[14px] border border-[var(--border-subtle)] bg-white shadow-[var(--shadow-panel)] ${activeScan ? 'lg:grid-cols-[300px_1fr]' : ''}`}>
-        {activeScan && <aside className="flex flex-col min-h-0 max-h-[520px] lg:min-h-[680px] lg:max-h-[760px] border-b lg:border-b-0 lg:border-r border-[#e2e3e8] bg-[#fcfcfd] text-[#34363e]">
+      {setupOpen && <section className="lw-panel p-3 sm:p-4 space-y-3">
+        <GooglePlaceSearch module="mapa" disabled={resolvingProfile} onSelect={chooseSuggestion}/>
+        <div className="flex items-center gap-3"><span className="h-px flex-1 bg-[var(--border-subtle)]"/><span className="text-[9px] font-semibold uppercase text-[var(--text-secondary)]">ou cole o link</span><span className="h-px flex-1 bg-[var(--border-subtle)]"/></div>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1"><Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-secondary)]" /><input type="url" value={googleMapsUrl} onChange={event => setGoogleMapsUrl(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void resolveGoogleProfile(); }} placeholder="Cole o link curto ou completo do perfil no Google Maps" className="lw-input w-full pl-9 pr-3 py-2 text-sm"/></div>
+          <button disabled={resolvingProfile || !googleMapsUrl.trim()} onClick={() => void resolveGoogleProfile()} className="lw-secondary-button px-5 disabled:opacity-50">{resolvingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <MapPin className="w-4 h-4" />}{resolvingProfile ? 'Identificando...' : 'Carregar perfil'}</button>
+        </div>
+        {selected && <div className="grid gap-2 rounded-lg border border-[var(--border-color)] bg-[var(--surface-container-low)] p-3 sm:grid-cols-[1fr_auto_auto_auto] sm:items-center">
+          <div className="min-w-0"><p className="truncate text-[12px] font-semibold">{selected.company_name}</p><p className="truncate text-[10px] text-[var(--text-secondary)]">{selected.category || 'Categoria identificada pelo Google'}</p></div>
+          <span className="rounded-md border bg-[var(--surface-main)] px-3 py-2 text-center text-[11px]">Raio 2 km</span>
+          <select aria-label="Tamanho da grade" value={gridSize} onChange={event => setGridSize(Number(event.target.value))} className="h-9 rounded-md border border-[var(--border-color)] bg-[var(--surface-main)] px-2 text-[11px]">{[3, 4, 5, 6, 7].map(size => <option key={size} value={size}>{size}×{size} ({size * size} pontos)</option>)}</select>
+          <button disabled={generatingGrid || !activeRegisteredKeyword} onClick={() => void runVisibilityGrid()} className="lw-primary-button px-4 disabled:opacity-50">{generatingGrid ? <Loader2 className="w-4 h-4 animate-spin"/> : <Grid3X3 className="w-4 h-4"/>}{generatingGrid ? `Consultando ${gridSize * gridSize} pontos…` : 'Gerar mapa'}</button>
+        </div>}
+      </section>}
+
+      <div className={`heatmap-shell grid grid-cols-1 overflow-hidden rounded-[12px] border border-[var(--border-subtle)] bg-white shadow-[var(--shadow-panel)] ${activeScan ? 'lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px]' : ''}`}>
+        {activeScan && <aside className="order-2 flex flex-col min-h-0 max-h-[520px] lg:min-h-[680px] lg:max-h-[760px] border-t lg:border-t-0 lg:border-l border-[#e2e3e8] bg-[#fcfcfd] text-[#34363e]">
           <div className="px-5 pt-5 pb-4 border-b border-[#e5e6ea]">
             <p className="text-[12px] font-medium text-[#565963]">Palavra-chave</p>
             <span className="inline-flex mt-2 max-w-full truncate px-3 py-1.5 rounded-full bg-[#3978d4] text-white text-[12px] font-medium shadow-[0_1px_2px_rgba(25,75,145,0.25)]">{activeScan.keyword}</span>
@@ -890,7 +866,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
           </div>
         </aside>}
 
-        <section className="relative overflow-hidden bg-[#e9e8e2] min-h-[520px] sm:min-h-[680px]">
+        <section className="order-1 relative overflow-hidden bg-[#e9e8e2] min-h-[520px] sm:min-h-[680px]">
           {activeScan && <div className="absolute z-10 top-3 sm:top-4 left-1/2 -translate-x-1/2 max-w-[calc(100%-1.5rem)] px-3.5 py-2 rounded-full bg-[#f8f8f6]/95 shadow-[0_3px_12px_rgba(36,39,43,0.2)] border border-white/80 flex items-center gap-2 text-[10px] sm:text-[11px] text-[#5c5f65] font-medium whitespace-nowrap backdrop-blur-sm"><Clock3 className="w-3.5 h-3.5 text-[#6e7179]" />{new Date(activeScan.created_at).toLocaleString('pt-BR', { dateStyle: 'medium', timeStyle: 'medium' })}</div>}
           {(loading || generatingGrid) && <div className="absolute inset-0 z-20 grid place-items-center bg-white/85 backdrop-blur-[2px]"><div className="text-center"><Loader2 className="w-7 h-7 animate-spin text-[#0066ff] mx-auto" /><p className="text-xs font-semibold mt-2">{generatingGrid ? `Consultando ${gridSize * gridSize} pontos…` : 'Carregando mapa…'}</p></div></div>}
           {!mapsKey
@@ -908,7 +884,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
         </section>
       </div>
 
-      <section className="lw-panel overflow-hidden">
+      {historyOpen && <section className="lw-panel overflow-hidden">
         <button type="button" onClick={() => setHistoryOpen(current => !current)} className="w-full p-4 flex items-center gap-2 text-left hover:bg-[#f8f9fc] dark:hover:bg-[#10142e] transition-colors" aria-expanded={historyOpen}>
           <History className="w-4 h-4 text-[#0066ff]"/>
           <div className="flex-1">
@@ -935,7 +911,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
             </div>;
           })}
         </div>)}
-      </section>
+      </section>}
       {keywordManagerOpen && selected && <div className="fixed inset-0 z-50 flex items-end sm:grid sm:place-items-center p-0 sm:p-4 bg-[#10142e]/55 backdrop-blur-sm">
         <div className="w-full max-w-lg max-h-[92dvh] rounded-t-3xl sm:rounded-2xl bg-white dark:bg-[#141936] border border-[#c2c6d8]/35 shadow-2xl overflow-hidden mobile-safe-bottom">
           <div className="p-5 flex items-start justify-between border-b border-[#c2c6d8]/30">

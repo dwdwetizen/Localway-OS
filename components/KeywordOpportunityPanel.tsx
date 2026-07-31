@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BarChart3, Calculator, Check, Info, Loader2, MapPin, Search, TrendingUp } from 'lucide-react';
+import { Loader2, MapPin, Search, TrendingDown, TrendingUp } from 'lucide-react';
 import { Lead } from '@/lib/leads';
 import { supabase } from '@/lib/supabase';
-import { estimateKeywordOpportunity } from '@/lib/keyword-opportunity';
+import { ctrForLocalPosition, estimateKeywordOpportunity } from '@/lib/keyword-opportunity';
 
 type KeywordIdea = {
   keyword: string;
@@ -86,7 +86,7 @@ export function KeywordOpportunityPanel({
   const [location, setLocation] = useState(selectedLead.city || 'Fortaleza');
   const [keywordInput, setKeywordInput] = useState('');
   const [connected, setConnected] = useState<boolean | null>(null);
-  const [apiValidated, setApiValidated] = useState(false);
+  const [, setApiValidated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [ideas, setIdeas] = useState<KeywordIdea[]>([]);
   const [selectedKeyword, setSelectedKeyword] = useState('');
@@ -95,7 +95,7 @@ export function KeywordOpportunityPanel({
   const [closeRate, setCloseRate] = useState(20);
   const [ticket, setTicket] = useState(inferredSegment.ticket);
   const [targetCtr, setTargetCtr] = useState(20);
-  const [usingCrmRate, setUsingCrmRate] = useState(false);
+  const [, setUsingCrmRate] = useState(false);
   const automaticResearchKey = useRef('');
 
   useEffect(() => {
@@ -172,6 +172,9 @@ export function KeywordOpportunityPanel({
       return true;
     }).map(item => item.keyword);
     setSelectedKeywords(automaticSelection);
+    if (!keywordInput.trim() && automaticSelection.length) {
+      setKeywordInput(automaticSelection.join('\n'));
+    }
     if (!rows.length) onShowToast('O Google Ads não encontrou volume para essa combinação.', 'info');
   }, [
     connected,
@@ -220,21 +223,7 @@ export function KeywordOpportunityPanel({
     return key === normalize(rankedKeyword) ? currentPosition : null;
   }, [currentPosition, keywordPositions, rankedKeyword]);
 
-  const toggleKeyword = (keyword: string) => {
-    setSelectedKeywords(current => {
-      if (current.includes(keyword)) return current.filter(item => item !== keyword);
-      if (current.length >= 8) {
-        onShowToast('Selecione no máximo 8 palavras para evitar sobreposição no cálculo.', 'info');
-        return current;
-      }
-      return [...current, keyword];
-    });
-  };
-
-  const idea = ideas.find(item => item.keyword === selectedKeyword) || null;
   const selectedIdeas = ideas.filter(item => selectedKeywords.includes(item.keyword));
-  const effectivePosition = idea ? positionForKeyword(idea.keyword) : null;
-  const volume = idea?.avgMonthlySearches || 0;
   const estimate = estimateKeywordOpportunity(
     selectedIdeas.map(item => ({
       keyword: item.keyword,
@@ -249,75 +238,97 @@ export function KeywordOpportunityPanel({
     },
   );
   const likely = estimate.scenarios.likely;
-  const conservative = estimate.scenarios.conservative;
-  const optimistic = estimate.scenarios.optimistic;
-  const currentPositionLabel = effectivePosition === null
-    ? 'não medida'
-    : effectivePosition > 20
-      ? '20+'
-      : effectivePosition.toFixed(1);
+  const tableRows = selectedIdeas.map(item => {
+    const position = positionForKeyword(item.keyword);
+    const ctr = ctrForLocalPosition(position) || 0;
+    const clicks = Math.round(item.avgMonthlySearches * (ctr / 100));
+    const rowEstimate = estimateKeywordOpportunity([{
+      keyword: item.keyword,
+      avgMonthlySearches: item.avgMonthlySearches,
+      position,
+    }], {
+      clickToLeadRate,
+      closeRate,
+      averageTicket: ticket,
+      targetCtr,
+    }).scenarios.likely;
+    const months = item.monthlySearchVolumes || [];
+    const latest = months.at(-1)?.monthlySearches || 0;
+    const previous = months.at(-2)?.monthlySearches || latest;
+    const trend = previous ? Math.round(((latest - previous) / previous) * 100) : 0;
+    return {
+      ...item,
+      position,
+      ctr,
+      clicks,
+      trend,
+      lost: Math.round(rowEstimate.incrementalLeads),
+      lostRevenue: Math.round(rowEstimate.opportunityRevenue),
+      cpc: (item.lowTopOfPageBid + item.highTopOfPageBid) / 2,
+    };
+  });
 
-  return <section className="lw-panel overflow-hidden">
-    <div className="p-3 sm:p-4 border-b border-[var(--border-subtle)] flex flex-wrap sm:flex-nowrap items-start gap-3">
-      <div className="lw-icon-box bg-emerald-50 text-emerald-600"><TrendingUp className="w-[18px] h-[18px]"/></div>
-      <div className="flex-1"><h3 className="text-sm font-semibold">Palavras-chave e potencial mensal</h3><p className="text-[10px] text-[var(--text-secondary)] mt-1">Sugestões automáticas do Google Ads combinadas com posição local, conversão e ticket médio.</p></div>
-      <span
-        title={apiValidated ? 'A consulta completa ao Planejador de palavras-chave foi validada.' : connected ? 'A conta Google autorizou o acesso; a API será validada ao fazer uma consulta.' : 'A integração ainda precisa ser autorizada.'}
-        className={`ml-[3.25rem] sm:ml-0 px-2.5 py-1 rounded-full text-[10px] font-bold ${connected ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}
-      >{connected === null ? 'Verificando…' : apiValidated ? 'Google Ads validado' : connected ? 'Conta Google autorizada' : 'Google Ads pendente'}</span>
+  return <div className="space-y-3">
+    <div className={`rounded-xl border px-4 py-3 ${connected ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
+      <p className="text-[11px] font-semibold">{connected === null ? 'Verificando Google Ads…' : connected ? 'Google Ads Keyword Planner conectado' : 'Google Ads Keyword Planner ainda não está conectado'}</p>
+      <p className="mt-0.5 text-[10px] opacity-75">{connected ? 'Volumes, CPC e concorrência abaixo vêm da integração real.' : 'Conecte a conta em Administração → Integrações para consultar dados reais.'}</p>
     </div>
-    <div className="p-3 sm:p-4 grid lg:grid-cols-[1fr_1.08fr] gap-4">
-      <div>
-        <div className="grid sm:grid-cols-2 gap-3">
-          <label className="text-xs font-semibold">Segmento<select value={segment} onChange={event => changeSegment(event.target.value)} className="input mt-1">{segments.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
-          <label className="text-xs font-semibold">Cidade/região<input value={location} onChange={event => setLocation(event.target.value)} className="input mt-1" placeholder="Fortaleza"/></label>
-          {segment === 'outro' && <label className="text-xs font-semibold sm:col-span-2">O que a empresa vende ou oferece<input value={customSegment} onChange={event => setCustomSegment(event.target.value)} className="input mt-1" placeholder="Ex.: atacado de semijoias"/><span className="block text-[10px] font-normal text-[#727687] mt-1">Use algo específico. Categorias genéricas como “Atacadista” podem gerar sugestões de marcas sem relação com a empresa.</span></label>}
-          <label className="text-xs font-semibold sm:col-span-2">Palavras específicas — opcional<input value={keywordInput} onChange={event => setKeywordInput(event.target.value)} className="input mt-1" placeholder="Ex.: semijoias no atacado, acessórios para revenda"/><span className="block text-[10px] font-normal text-[#727687] mt-1">Se ficar vazio, usamos o nome da empresa e a descrição acima como contexto.</span></label>
+
+    <section className="lw-panel p-3">
+      <div className="grid gap-3 lg:grid-cols-[1fr_1fr_2.1fr]">
+        <label className="text-[11px] font-semibold">Segmento<select value={segment} onChange={event => changeSegment(event.target.value)} className="input mt-1">{segments.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+        <label className="text-[11px] font-semibold">Cidade ou bairro<input value={location} onChange={event => setLocation(event.target.value)} className="input mt-1" placeholder="Fortaleza"/></label>
+        <label className="text-[11px] font-semibold">Palavras-chave (uma por linha)<textarea value={keywordInput} onChange={event => setKeywordInput(event.target.value)} rows={3} className="input mt-1 min-h-[76px] resize-none" placeholder="Deixe vazio para gerar automaticamente pelo perfil"/></label>
+      </div>
+      {segment === 'outro' && <label className="mt-3 block text-[11px] font-semibold">Descrição do segmento<input value={customSegment} onChange={event => setCustomSegment(event.target.value)} className="input mt-1" placeholder="Ex.: atacado de semijoias"/></label>}
+      <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+        <label className="text-[11px] font-semibold">Taxa de conversão em lead (%)<input type="number" min={0} value={clickToLeadRate} onChange={event => setClickToLeadRate(Number(event.target.value) || 0)} className="input mt-1"/></label>
+        <label className="text-[11px] font-semibold">Ticket médio (R$)<input type="number" min={0} value={ticket} onChange={event => setTicket(Number(event.target.value) || 0)} className="input mt-1"/></label>
+        <button disabled={loading || !connected} onClick={() => void research()} className="lw-primary-button self-end px-8 disabled:opacity-50">{loading ? <Loader2 className="h-4 w-4 animate-spin"/> : <Search className="h-4 w-4"/>}Consultar volume</button>
+      </div>
+    </section>
+
+    <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+      <VolumeStat label="Volume total/mês" value={estimate.totalMeasuredVolume.toLocaleString('pt-BR')} tone="blue"/>
+      <VolumeStat label="Palavras" value={String(selectedIdeas.length)}/>
+      <VolumeStat label="Oportunidades perdidas" value={Math.round(likely.incrementalLeads).toLocaleString('pt-BR')} hint="estimativa mensal" tone="orange"/>
+      <VolumeStat label="Faturamento perdido" value={currency(likely.opportunityRevenue)} hint="estimativa mensal" tone="red"/>
+    </div>
+
+    <section className="lw-panel overflow-hidden">
+      {!tableRows.length ? <div className="p-10 text-center text-xs text-[var(--text-secondary)]">Consulte o volume para preencher a tabela com dados reais do Google Ads.</div> : <>
+        <div className="hidden overflow-x-auto lg:block">
+          <table className="w-full min-w-[900px] text-[11px]">
+            <thead className="bg-[var(--surface-container-low)] text-[10px] uppercase tracking-wide text-[var(--text-secondary)]"><tr>
+              <th className="px-3 py-2.5 text-left">Palavra-chave</th><th className="px-3 py-2.5 text-right">Volume</th><th className="px-3 py-2.5 text-right">Tend.</th><th className="px-3 py-2.5 text-left">Concorrência</th><th className="px-3 py-2.5 text-right">CPC</th><th className="px-3 py-2.5 text-right">Posição</th><th className="px-3 py-2.5 text-right">CTR</th><th className="px-3 py-2.5 text-right">Cliques</th><th className="px-3 py-2.5 text-right">Perdidas</th><th className="px-3 py-2.5 text-right">R$ perdido</th>
+            </tr></thead>
+            <tbody className="divide-y divide-[var(--border-subtle)]">{tableRows.map(row => <tr key={row.keyword} className={row.keyword === selectedKeyword ? 'bg-blue-50/60 dark:bg-blue-950/20' : 'hover:bg-[var(--surface-container-low)]'}>
+              <td className="max-w-56 px-3 py-2.5"><button onClick={() => { setSelectedKeyword(row.keyword); void onUseKeyword(row.keyword); }} className="flex items-center gap-1 truncate font-medium hover:text-[var(--primary-main)]">{row.keyword}<MapPin className="h-3 w-3 shrink-0"/></button></td>
+              <td className="px-3 py-2.5 text-right tabular-nums">{row.avgMonthlySearches.toLocaleString('pt-BR')}</td>
+              <td className={`px-3 py-2.5 text-right font-medium ${row.trend >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{row.trend >= 0 ? <TrendingUp className="mr-0.5 inline h-3 w-3"/> : <TrendingDown className="mr-0.5 inline h-3 w-3"/>}{row.trend > 0 ? '+' : ''}{row.trend}%</td>
+              <td className="px-3 py-2.5"><span className={`rounded px-1.5 py-0.5 font-medium ${row.competition === 'HIGH' ? 'bg-rose-100 text-rose-600' : row.competition === 'MEDIUM' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>{competitionLabel(row.competition)}</span></td>
+              <td className="px-3 py-2.5 text-right">{currency(row.cpc)}</td><td className="px-3 py-2.5 text-right">{row.position === null ? '—' : row.position > 20 ? '20+' : `#${row.position.toFixed(0)}`}</td><td className="px-3 py-2.5 text-right">{row.ctr.toFixed(1)}%</td><td className="px-3 py-2.5 text-right">{row.clicks}</td><td className="px-3 py-2.5 text-right text-orange-500">{row.lost}</td><td className="px-3 py-2.5 text-right font-semibold text-rose-500">{currency(row.lostRevenue)}</td>
+            </tr>)}</tbody>
+          </table>
         </div>
-        <button disabled={loading || !connected} onClick={() => void research()} className="lw-primary-button mt-3 w-full px-4 sm:w-auto flex justify-center items-center gap-2 disabled:opacity-50">{loading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Search className="w-4 h-4"/>}Consultar volume</button>
-        {!!ideas.length && <p className="mt-4 text-[10px] leading-relaxed text-[#727687]"><strong>Seleção automática:</strong> marcamos até cinco grupos relevantes, evitando somar termos muito parecidos. Buscas/mês é uma média aproximada no Google para a região.</p>}
-        {!!ideas.length && <div className="mt-2 max-h-72 overflow-auto rounded-xl border divide-y">
-          {ideas.slice(0, 30).map(item => {
-            const checked = selectedKeywords.includes(item.keyword);
-            const measuredPosition = positionForKeyword(item.keyword);
-            return <div key={item.keyword} className={`p-3 flex items-center gap-2 ${selectedKeyword === item.keyword ? 'bg-blue-50 dark:bg-[#17234b]' : 'hover:bg-[#f8f9fc] dark:hover:bg-[#10142e]'}`}>
-              <button type="button" onClick={() => toggleKeyword(item.keyword)} aria-label={`${checked ? 'Remover' : 'Selecionar'} ${item.keyword}`} className={`size-6 shrink-0 rounded-md border grid place-items-center ${checked ? 'bg-[#0066ff] border-[#0066ff] text-white' : 'bg-white dark:bg-[#141936] border-[#c2c6d8]'}`}>{checked && <Check className="size-3.5"/>}</button>
-              <button type="button" onClick={() => setSelectedKeyword(item.keyword)} className="min-w-0 flex-1 text-left">
-                <p className="text-xs font-semibold truncate">{item.keyword}</p>
-                <p className="text-[10px] text-[#727687]">Ads: {competitionLabel(item.competition)} • {measuredPosition === null ? 'mapa pendente' : `posição média ${measuredPosition > 20 ? '20+' : measuredPosition.toFixed(1)}`}</p>
-              </button>
-              <strong className="text-xs whitespace-nowrap">{item.avgMonthlySearches.toLocaleString('pt-BR')}/mês</strong>
-            </div>;
-          })}
-        </div>}
-        {!!ideas.length && <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-[#727687]"><span>{selectedKeywords.length} palavras selecionadas</span><span>{estimate.measuredKeywords}/{estimate.selectedKeywords} com mapa medido</span></div>}
-      </div>
+        <ul className="divide-y divide-[var(--border-subtle)] lg:hidden">{tableRows.map(row => <li key={row.keyword} className="p-3">
+          <div className="flex items-start justify-between gap-2"><button onClick={() => void onUseKeyword(row.keyword)} className="text-left text-[12px] font-semibold">{row.keyword}</button><span className={`text-[10px] font-semibold ${row.trend >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{row.trend > 0 ? '+' : ''}{row.trend}%</span></div>
+          <div className="mt-2 grid grid-cols-3 gap-1.5 text-[10px]"><SmallCell label="Volume" value={row.avgMonthlySearches.toLocaleString('pt-BR')}/><SmallCell label="CPC" value={currency(row.cpc)}/><SmallCell label="Posição" value={row.position === null ? '—' : row.position > 20 ? '20+' : `#${row.position.toFixed(0)}`}/></div>
+          <div className="mt-2 flex items-center justify-between rounded-lg bg-rose-50 px-2.5 py-2 text-rose-600"><span className="text-[10px]">{row.lost} oportunidades</span><strong className="text-[11px]">{currency(row.lostRevenue)}</strong></div>
+        </li>)}</ul>
+      </>}
+    </section>
 
-      <div className="lw-panel-muted p-3 sm:p-4">
-        <div className="flex items-center gap-2"><Calculator className="w-5 h-5 text-[var(--primary-main)]"/><h4 className="text-sm font-semibold">Estimativa comercial auditável</h4></div>
-        {!selectedIdeas.length ? <div className="py-12 text-center text-xs text-[#727687]"><BarChart3 className="w-8 h-8 mx-auto mb-2 opacity-50"/>Consulte e selecione ao menos uma palavra-chave para calcular.</div> : <>
-          {idea && <div className="mt-3 p-3 rounded-xl bg-white dark:bg-[#141936] border"><p className="text-[10px] text-[#727687]">Palavra em destaque</p><div className="flex items-center justify-between gap-2 mt-1"><strong className="text-sm">{idea.keyword}</strong><button onClick={() => void onUseKeyword(idea.keyword)} className="text-[10px] font-bold text-[#0066ff] flex items-center gap-1"><MapPin className="size-3"/>Usar no mapa</button></div><p className="text-[11px] mt-1">{volume.toLocaleString('pt-BR')} buscas/mês • CPC topo {currency(idea.lowTopOfPageBid)}–{currency(idea.highTopOfPageBid)}</p><p className="text-[9px] text-[#727687] mt-1">Posição atual: {currentPositionLabel}. O CPC é dado do Google Ads e não representa uma cobrança deste sistema.</p></div>}
-          <div className="grid grid-cols-2 gap-3 mt-3">
-            <NumberField label="CTR desejado no Top 3" help="Meta de cliques se a empresa aparecer entre os primeiros resultados." value={targetCtr} onChange={setTargetCtr} suffix="%"/>
-            <NumberField label="Cliques que viram leads" help="De cada 100 cliques, quantos viram contatos interessados." value={clickToLeadRate} onChange={setClickToLeadRate} suffix="%"/>
-            <NumberField label="Leads que viram vendas" help="De cada 100 contatos, quantos realmente compram." value={closeRate} onChange={value => { setCloseRate(value); setUsingCrmRate(false); }} suffix="%"/>
-            <NumberField label="Ticket médio" help="Valor médio recebido em cada venda." value={ticket} onChange={setTicket} prefix="R$"/>
-            <div className="rounded-xl border bg-white dark:bg-[#141936] p-3"><p className="flex items-center gap-1 text-[10px] text-[#727687]">CRM do segmento <Info className="w-3 h-3" /></p><p className="text-[9px] text-[#727687] mt-1">Taxa calculada com vendas reais registradas no sistema.</p><p className="text-xs font-bold mt-1">{crmSample.total ? `${crmSample.won}/${crmSample.total} fechados • ${crmSample.rate.toFixed(1)}%` : 'Sem amostra'}</p><button onClick={applyCrmRate} disabled={crmSample.total < 5} className="text-[10px] text-[#0066ff] font-bold mt-1 disabled:opacity-40">Aplicar taxa real</button></div>
-            <div className="rounded-xl border bg-white dark:bg-[#141936] p-3"><p className="text-[10px] text-[#727687]">Cobertura da medição</p><p className="text-xs font-bold mt-1">{estimate.measuredKeywords}/{estimate.selectedKeywords} palavras</p><p className="text-[9px] text-[#727687] mt-1">{estimate.totalMeasuredVolume.toLocaleString('pt-BR')} buscas/mês consideradas.</p></div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3 text-center">
-            <Metric label="Cenário conservador" value={estimate.measuredKeywords ? currency(conservative.opportunityRevenue) : 'Após medir'} help="Taxas comerciais e CTR reduzidos em relação às premissas informadas."/>
-            <Metric label="Cenário provável" value={estimate.measuredKeywords ? currency(likely.opportunityRevenue) : 'Após medir'} help={`${likely.incrementalLeads.toFixed(1)} leads e ${likely.incrementalSales.toFixed(1)} vendas adicionais estimadas.`} accent/>
-            <Metric label="Cenário otimista" value={estimate.measuredKeywords ? currency(optimistic.opportunityRevenue) : 'Após medir'} help="Limite superior da projeção; não representa garantia de resultado."/>
-          </div>
-          {estimate.measuredKeywords < estimate.selectedKeywords
-            ? <p className="text-[10px] text-amber-700 mt-3 leading-relaxed"><strong>Medição incompleta:</strong> abra as palavras marcadas como “mapa pendente”, clique em “Usar no mapa” e gere a grade. O cálculo considera somente as {estimate.measuredKeywords} palavras já medidas.</p>
-            : <p className="text-[10px] text-[#727687] mt-3 leading-relaxed"><strong>Faixa mensal estimada:</strong> {currency(conservative.opportunityRevenue)} a {currency(optimistic.opportunityRevenue)} de receita potencial não capturada. Não é dinheiro comprovadamente perdido.</p>}
-          <p className="text-[10px] text-[#727687] mt-2 leading-relaxed"><strong>Fórmula:</strong> volume sem duplicidades selecionadas × diferença de CTR pela posição média da grade × conversão em lead × fechamento × ticket. {usingCrmRate ? 'O fechamento usa os dados reais do CRM.' : 'As taxas são premissas editáveis; não são uma promessa de resultado.'} Os volumes são aproximados e representam buscas no Google, não exclusivamente no Maps.</p>
-        </>}
+    <details className="lw-panel p-3 text-[10px] text-[var(--text-secondary)]">
+      <summary className="cursor-pointer font-semibold text-[var(--text-primary)]">Premissas avançadas da estimativa</summary>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <NumberField label="CTR desejado no Top 3" help="Meta de cliques no Top 3." value={targetCtr} onChange={setTargetCtr} suffix="%"/>
+        <NumberField label="Leads que viram vendas" help="Taxa de fechamento." value={closeRate} onChange={value => { setCloseRate(value); setUsingCrmRate(false); }} suffix="%"/>
+        <div className="rounded-lg border p-2"><p>CRM do segmento</p><strong className="mt-1 block text-[var(--text-primary)]">{crmSample.total ? `${crmSample.won}/${crmSample.total} · ${crmSample.rate.toFixed(1)}%` : 'Sem amostra'}</strong><button onClick={applyCrmRate} disabled={crmSample.total < 5} className="mt-1 font-semibold text-[var(--primary-main)] disabled:opacity-40">Aplicar taxa real</button></div>
       </div>
-    </div>
-  </section>;
+    </details>
+    <p className="rounded-lg border border-[var(--border-color)] bg-[var(--surface-container-low)] px-3 py-2.5 text-[10px] leading-relaxed text-[var(--text-secondary)]"><strong className="text-[var(--text-primary)]">Importante:</strong> CTR, conversão, oportunidades e faturamento perdido são estimativas comerciais baseadas nos dados reais disponíveis e nas premissas informadas. Não constituem garantia de resultado.</p>
+  </div>;
 }
 
 function NumberField({ label, help, value, displayValue, onChange, prefix, suffix, disabled = false }: {
@@ -333,6 +344,11 @@ function NumberField({ label, help, value, displayValue, onChange, prefix, suffi
   return <label className="text-[10px] text-[#727687]">{label}<span className="block min-h-7 mt-0.5 text-[9px] leading-3 text-[#9699a5]">{help}</span><div className="mt-1 flex items-center rounded-xl border bg-white dark:bg-[#141936] px-3"><span className="text-xs">{prefix}</span><input disabled={disabled} type={displayValue ? 'text' : 'number'} min={displayValue ? undefined : 0} step={displayValue ? undefined : 0.1} value={displayValue ?? value} onChange={event => onChange?.(Number(event.target.value) || 0)} className="w-full bg-transparent py-2 text-xs font-bold outline-none disabled:opacity-70"/><span className="text-xs">{suffix}</span></div></label>;
 }
 
-function Metric({ label, value, help, accent = false }: { label: string; value: string; help: string; accent?: boolean }) {
-  return <div className={`rounded-xl p-3 ${accent ? 'bg-emerald-600 text-white' : 'bg-white dark:bg-[#141936] border'}`}><p className={`text-[9px] ${accent ? 'text-emerald-50' : 'text-[#727687]'}`}>{label}</p><p className="text-sm font-bold mt-1">{value}</p><p className={`text-[8px] leading-3 mt-1 ${accent ? 'text-emerald-50' : 'text-[#9699a5]'}`}>{help}</p></div>;
+function VolumeStat({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: 'blue' | 'orange' | 'red' }) {
+  const color = tone === 'blue' ? 'text-blue-600' : tone === 'orange' ? 'text-orange-500' : tone === 'red' ? 'text-rose-500' : 'text-[var(--text-primary)]';
+  return <div className="lw-panel min-w-0 p-3.5"><p className="text-[9px] uppercase tracking-wide text-[var(--text-secondary)]">{label}</p><p className={`mt-1 text-lg font-semibold tabular-nums sm:text-xl ${color}`}>{value}</p>{hint && <p className="mt-1 text-[9px] text-[var(--text-secondary)]">{hint}</p>}</div>;
+}
+
+function SmallCell({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-md bg-[var(--surface-container-low)] px-2 py-1.5"><p className="text-[9px] text-[var(--text-secondary)]">{label}</p><p className="font-semibold tabular-nums">{value}</p></div>;
 }

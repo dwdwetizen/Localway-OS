@@ -34,7 +34,10 @@ type Activity = {
 
 type LeadSummary = {
   id: string;
+  company_name: string;
+  decision_maker_name: string | null;
   status: string;
+  next_action_at: string | null;
   crm_stage: string | null;
   crm_closed_at: string | null;
   created_at: string;
@@ -47,6 +50,8 @@ export function DashboardView({ setActiveTab, onShowToast }: DashboardViewProps)
   const [goal, setGoal] = useState<Goal | null>(null);
   const [metrics, setMetrics] = useState(emptyMetrics);
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [dashboardLeads, setDashboardLeads] = useState<LeadSummary[]>([]);
+  const [dashboardNow] = useState(() => Date.now());
   const [loading, setLoading] = useState(true);
 
   const loadDashboard = useCallback(async () => {
@@ -77,7 +82,7 @@ export function DashboardView({ setActiveTab, onShowToast }: DashboardViewProps)
     const [leadRequest, activityRequest] = await Promise.all([
       supabase
         .from('leads')
-        .select('id,status,crm_stage,crm_closed_at,created_at')
+        .select('id,company_name,decision_maker_name,status,next_action_at,crm_stage,crm_closed_at,created_at')
         .eq('created_by', profile.id)
         .or(`created_at.gte.${startsAt},crm_closed_at.gte.${startsAt}`),
       supabase
@@ -109,6 +114,7 @@ export function DashboardView({ setActiveTab, onShowToast }: DashboardViewProps)
     }).length;
 
     setGoal(activeGoal);
+    setDashboardLeads(leads);
     setMetrics({ leads: periodLeads.length, contacts, meetings, contracts });
     setActivities(history.slice(0, 12));
     setLoading(false);
@@ -125,69 +131,85 @@ export function DashboardView({ setActiveTab, onShowToast }: DashboardViewProps)
     { label: 'Reuniões marcadas', current: metrics.meetings, target: goal?.target_meetings || 0, color: 'bg-emerald-500' },
     { label: 'Fechamento de contratos', current: metrics.contracts, target: goal?.target_contracts || 0, color: 'bg-amber-500' },
   ], [goal, metrics]);
+  const upcoming = useMemo(() => dashboardLeads
+    .filter(item => item.next_action_at && ['retornar_depois', 'nao_atendeu'].includes(item.status))
+    .sort((a, b) => new Date(a.next_action_at || 0).getTime() - new Date(b.next_action_at || 0).getTime())
+    .slice(0, 6), [dashboardLeads]);
 
   return <div className="lw-page space-y-4">
-    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <p className="lw-kicker mb-1.5">Painel individual</p>
-        <h2 className="lw-title">Olá, {(profile.nome || profile.username).split(' ')[0]}</h2>
-        <p className="text-xs text-[var(--text-secondary)] mt-1">Seus resultados, metas e atividades mais recentes.</p>
+        <h2 className="text-[26px] font-bold tracking-tight">Olá, {(profile.nome || profile.username).split(' ')[0]}</h2>
+        <p className="mt-1 text-[13px] text-[var(--text-secondary)]">Seus resultados desta semana e o que precisa de ação hoje.</p>
       </div>
-      <button onClick={() => void loadDashboard()} className="lw-secondary-button w-full px-4 md:w-auto">Atualizar dados</button>
+      <button onClick={() => setActiveTab('prospeccao')} className="lw-primary-button w-full px-5 sm:w-auto">Novo lead</button>
     </div>
 
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
-      <Metric icon={Building2} label="Leads prospectados" value={metrics.leads} color="text-[#0066ff] bg-[#0066ff]/10" loading={loading} />
-      <Metric icon={Phone} label="Contatos feitos" value={metrics.contacts} color="text-purple-600 bg-purple-500/10" loading={loading} />
-      <Metric icon={CalendarCheck} label="Reuniões marcadas" value={metrics.meetings} color="text-amber-600 bg-amber-500/10" loading={loading} />
-      <Metric icon={CheckCircle2} label="Contratos fechados" value={metrics.contracts} color="text-emerald-600 bg-emerald-500/10" loading={loading} />
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <Metric icon={Building2} label="Leads prospectados" value={metrics.leads} target={goal?.target_leads || 0} color="text-[#0066ff]" loading={loading} />
+      <Metric icon={Phone} label="Contatos feitos" value={metrics.contacts} target={goal?.target_contacts || 0} color="text-[#0066ff]" loading={loading} />
+      <Metric icon={CalendarCheck} label="Reuniões marcadas" value={metrics.meetings} target={goal?.target_meetings || 0} color="text-[#0066ff]" loading={loading} />
+      <Metric icon={CheckCircle2} label="Contratos fechados" value={metrics.contracts} target={goal?.target_contracts || 0} color="text-[#0066ff]" loading={loading} />
     </div>
 
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <section className="lw-panel lg:col-span-2 p-4 sm:p-5">
-        <div className="flex items-center gap-2 mb-5"><Target className="w-5 h-5 text-[#0066ff]" /><div><h3 className="font-bold">Minhas metas</h3><p className="text-xs text-[#727687]">{goal ? `${new Date(`${goal.period_start}T12:00:00`).toLocaleDateString('pt-BR')} até ${new Date(`${goal.period_end}T12:00:00`).toLocaleDateString('pt-BR')}` : 'Nenhuma meta definida para este período'}</p></div></div>
-        <div className="space-y-5">
-          {goals.map(item => {
-            const percentage = item.target ? Math.min(100, Math.round((item.current / item.target) * 100)) : 0;
-            return <div key={item.label}>
-              <div className="flex justify-between text-xs mb-2"><span className="font-semibold">{item.label}</span><span className="font-bold">{item.current} / {item.target || '—'} {item.target ? `(${percentage}%)` : ''}</span></div>
-              <div className="h-2 rounded-full bg-[var(--surface-container)] overflow-hidden"><div className={`h-full rounded-full ${item.color}`} style={{ width: `${percentage}%` }} /></div>
-            </div>;
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
+      <section>
+        <h3 className="mb-2 text-[13px] font-semibold">Próximos follow-ups</h3>
+        <div className="lw-panel overflow-hidden divide-y divide-[var(--border-subtle)]">
+          {loading && <div className="p-8 text-center text-xs text-[var(--text-secondary)]">Carregando agenda…</div>}
+          {!loading && !upcoming.length && <div className="p-8 text-center text-xs text-[var(--text-secondary)]">Nenhum retorno pendente.</div>}
+          {upcoming.map(item => {
+            const date = new Date(item.next_action_at!);
+            const days = Math.ceil((date.getTime() - dashboardNow) / 86_400_000);
+            const urgency = days <= 0 ? 'bg-rose-50 text-rose-600 border-rose-200' : days <= 2 ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200';
+            const label = days < 0 ? `Atrasado ${Math.abs(days)}d` : days === 0 ? 'Hoje' : days === 1 ? 'Amanhã' : `Em ${days} dias`;
+            return <button key={item.id} onClick={() => setActiveTab('followup')} className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left hover:bg-[var(--surface-container-low)]">
+              <span className="min-w-0">
+                <strong className="block truncate text-[13px]">{item.company_name}</strong>
+                <span className="block truncate text-[11px] text-[var(--text-secondary)]">{item.decision_maker_name || 'Decisor não identificado'} · {date.toLocaleString('pt-BR')}</span>
+              </span>
+              <span className={`rounded-full border px-2 py-1 text-[10px] font-medium ${urgency}`}>{label}</span>
+            </button>;
           })}
         </div>
       </section>
 
-      <section className="lw-panel p-4 sm:p-5">
-        <h3 className="font-bold mb-4">Ações rápidas</h3>
-        <div className="space-y-2">
-          <QuickAction icon={Search} label="Prospectar empresas" onClick={() => setActiveTab('prospeccao')} />
-          <QuickAction icon={Clock} label="Ver follow-ups" onClick={() => setActiveTab('followup')} />
-          <QuickAction icon={CheckCircle2} label="Acompanhar CRM" onClick={() => setActiveTab('crm')} />
-        </div>
-      </section>
-    </div>
+      <aside className="space-y-4">
+        <section className="lw-panel p-3.5">
+          <h3 className="flex items-center gap-2 text-[13px] font-semibold"><Target className="h-4 w-4 text-[var(--primary-main)]" />Atalhos rápidos</h3>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <QuickAction icon={Search} label="Prospectar" onClick={() => setActiveTab('prospeccao')} />
+            <QuickAction icon={Clock} label="Follow-up" onClick={() => setActiveTab('followup')} />
+            <QuickAction icon={Building2} label="Mapa de calor" onClick={() => setActiveTab('mapa')} />
+            <QuickAction icon={CheckCircle2} label="Analisar perfil" onClick={() => setActiveTab('analises')} />
+          </div>
+        </section>
 
-    <section className="lw-panel p-4 sm:p-5">
-      <div className="flex items-center gap-2 mb-5"><History className="w-5 h-5 text-[#0066ff]" /><div><h3 className="font-bold">Meu histórico recente</h3><p className="text-xs text-[#727687]">Cadastros, contatos e movimentações realizados por este perfil.</p></div></div>
-      {loading && <div className="py-8 text-center text-xs text-[#727687]">Carregando histórico…</div>}
-      {!loading && !activities.length && <div className="py-8 text-center text-xs text-[#727687]">Nenhuma atividade registrada neste período.</div>}
-      <div className="space-y-4">
-        {activities.map(activity => {
-          const relation = Array.isArray(activity.leads) ? activity.leads[0] : activity.leads;
-          return <article key={activity.id} className="pl-4 border-l-2 border-[#0066ff]/30">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1"><p className="text-xs font-bold">{activity.outcome}</p><time className="text-[10px] text-[#727687]">{new Date(activity.occurred_at).toLocaleString('pt-BR')}</time></div>
-            <p className="text-xs text-[#727687]">{relation?.company_name || 'Empresa'}{activity.notes ? ` • ${activity.notes}` : ''}</p>
-          </article>;
-        })}
-      </div>
-    </section>
+        <section className="lw-panel p-3.5">
+          <h3 className="text-[13px] font-semibold">Histórico recente</h3>
+          <div className="mt-2 space-y-2">
+            {!loading && !activities.length && <p className="text-[11px] text-[var(--text-secondary)]">Nenhuma atividade recente.</p>}
+            {activities.slice(0, 5).map(activity => {
+              const relation = Array.isArray(activity.leads) ? activity.leads[0] : activity.leads;
+              return <article key={activity.id} className="text-[11px] leading-4 text-[var(--text-secondary)]"><strong className="font-medium text-[var(--text-primary)]">{activity.outcome}</strong> · {relation?.company_name || 'Empresa'}</article>;
+            })}
+          </div>
+        </section>
+      </aside>
+    </div>
   </div>;
 }
 
-function Metric({ icon: Icon, label, value, color, loading }: { icon: React.ComponentType<{ className?: string }>; label: string; value: number; color: string; loading: boolean }) {
-  return <div className="lw-panel min-w-0 p-3.5 sm:p-4"><div className="flex items-start justify-between gap-2"><div className={`w-9 h-9 rounded-lg flex items-center justify-center ${color}`}><Icon className="w-[18px] h-[18px]" /></div><span className="text-[9px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 rounded px-1.5 py-0.5">Atual</span></div><p className="text-[9px] sm:text-[10px] leading-tight font-bold tracking-wide text-[var(--text-secondary)] uppercase mt-3">{label}</p><p className="text-xl sm:text-2xl font-bold mt-1 tabular-nums">{loading ? '…' : value}</p></div>;
+function Metric({ icon: Icon, label, value, target, color, loading }: { icon: React.ComponentType<{ className?: string }>; label: string; value: number; target: number; color: string; loading: boolean }) {
+  const percentage = target ? Math.min(100, Math.round((value / target) * 100)) : 0;
+  return <div className="lw-panel min-w-0 p-3.5 sm:p-4">
+    <div className="flex items-center justify-between gap-2"><p className="text-[10px] sm:text-[11px] font-medium text-[var(--text-secondary)]">{label}</p><Icon className={`h-4 w-4 ${color}`} /></div>
+    <p className="mt-2 text-2xl font-semibold tabular-nums">{loading ? '…' : value}</p>
+    <div className="mt-2 flex justify-between text-[9px] text-[var(--text-secondary)]"><span>Meta da semana</span><span>{value}/{target || '—'}</span></div>
+    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[var(--surface-container)]"><div className="h-full rounded-full bg-[#1268ff]" style={{ width: `${percentage}%` }} /></div>
+  </div>;
 }
 
 function QuickAction({ icon: Icon, label, onClick }: { icon: React.ComponentType<{ className?: string }>; label: string; onClick: () => void }) {
-  return <button onClick={onClick} className="w-full flex items-center gap-3 p-3 rounded-lg bg-[var(--surface-container-low)] hover:bg-[#1268ff]/8 text-xs font-bold text-left"><Icon className="w-4 h-4 text-[var(--primary-main)]" />{label}</button>;
+  return <button onClick={onClick} className="min-h-12 w-full rounded-lg border border-[var(--border-color)] bg-[var(--surface-main)] p-2.5 text-left text-[12px] font-medium shadow-sm hover:border-[#1268ff]/40 hover:bg-[#1268ff]/5"><Icon className="mb-1 h-4 w-4 text-[var(--primary-main)]" />{label}</button>;
 }

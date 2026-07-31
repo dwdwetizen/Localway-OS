@@ -89,6 +89,7 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
   const [manual, setManual] = useState(emptyManual);
   const [selected, setSelected] = useState<string[]>([]);
   const [prospectingMode, setProspectingMode] = useState<'presencial' | 'online' | 'arquivados'>('presencial');
+  const [leadSearch, setLeadSearch] = useState('');
   const [, setUrgencyRefresh] = useState(0);
 
   useEffect(() => {
@@ -108,10 +109,15 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
       const matchesMode = prospectingMode === 'online'
         ? lead.source === 'google_places'
         : prospectingMode === 'presencial' && lead.source !== 'google_places';
-      return isActive && matchesMode;
+      const haystack = `${lead.company_name} ${lead.category || ''} ${lead.decision_maker_name || ''} ${lead.receptionist_name || ''} ${lead.phone || ''}`.toLocaleLowerCase('pt-BR');
+      return isActive && matchesMode && (!leadSearch.trim() || haystack.includes(leadSearch.trim().toLocaleLowerCase('pt-BR')));
     }),
-    [leads, prospectingMode],
+    [leadSearch, leads, prospectingMode],
   );
+  const visibleArchivedLeads = useMemo(() => archivedLeads.filter(lead => {
+    const haystack = `${lead.company_name} ${lead.category || ''} ${lead.decision_maker_name || ''} ${lead.phone || ''}`.toLocaleLowerCase('pt-BR');
+    return !leadSearch.trim() || haystack.includes(leadSearch.trim().toLocaleLowerCase('pt-BR'));
+  }), [archivedLeads, leadSearch]);
   const toggle = (id: string) => setSelected(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
   const toggleAll = () => setSelected(current => current.length === prospects.length ? [] : prospects.map(lead => lead.id));
 
@@ -213,10 +219,13 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
       {prospectingMode === 'presencial' && <button aria-label="Adicionar empresa presencial" title="Adicionar empresa presencial" onClick={() => setManualOpen(true)} className="lw-primary-button w-full px-4 sm:w-auto flex items-center justify-center gap-2"><Plus className="w-4 h-4" /> Cadastrar lead</button>}
     </div>
 
-    <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
       <button onClick={() => { setProspectingMode('presencial'); setSelected([]); }} className={`min-h-9 shrink-0 rounded-lg border px-3 flex items-center justify-center gap-1.5 text-[12px] font-semibold transition-colors ${prospectingMode === 'presencial' ? 'border-[#1268ff] bg-[#1268ff] text-white' : 'border-[var(--border-color)] bg-[var(--surface-main)] text-[var(--text-secondary)] hover:bg-[var(--surface-container-low)]'}`}><Building2 className="w-3.5 h-3.5" /> Presencial</button>
       <button onClick={() => { setProspectingMode('online'); setSelected([]); }} className={`min-h-9 shrink-0 rounded-lg border px-3 flex items-center justify-center gap-1.5 text-[12px] font-semibold transition-colors ${prospectingMode === 'online' ? 'border-[#1268ff] bg-[#1268ff] text-white' : 'border-[var(--border-color)] bg-[var(--surface-main)] text-[var(--text-secondary)] hover:bg-[var(--surface-container-low)]'}`}><Globe2 className="w-3.5 h-3.5" /> Online</button>
       <button onClick={() => { setProspectingMode('arquivados'); setSelected([]); }} className={`min-h-9 shrink-0 rounded-lg border px-3 flex items-center justify-center gap-1.5 text-[12px] font-semibold transition-colors ${prospectingMode === 'arquivados' ? 'border-[#1268ff] bg-[#1268ff] text-white' : 'border-[var(--border-color)] bg-[var(--surface-main)] text-[var(--text-secondary)] hover:bg-[var(--surface-container-low)]'}`}><Archive className="w-3.5 h-3.5" /> Arquivados <span className="rounded bg-white/15 px-1 text-[10px]">{archivedLeads.length}</span></button>
+      </div>
+      <div className="relative sm:ml-auto sm:w-64"><Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-secondary)]"/><input value={leadSearch} onChange={event => setLeadSearch(event.target.value)} placeholder="Buscar empresa, contato..." className="lw-input w-full pl-9"/></div>
     </div>
 
     {prospectingMode === 'online' && <div className="lw-panel p-3 grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-3 items-end">
@@ -235,11 +244,11 @@ export function ProspectingView({ onShowToast, onOpenAiPitchModal }: Prospecting
         {prospects.map(lead => <LeadRow key={lead.id} lead={lead} selected={selected.includes(lead.id)} toggle={toggle} updateStep={updateStep} archiveLead={archiveLead} onPitch={onOpenAiPitchModal} />)}
       </div>
     </div> : <div className="lw-panel overflow-hidden">
-      <div className="p-4 bg-[#f4f2fd] dark:bg-[#10142e] border-b border-[#c2c6d8]/30 flex items-center justify-between"><div><p className="text-xs font-bold">Leads arquivados ({archivedLeads.length})</p><p className="text-[10px] text-[#727687] mt-0.5">{isPrimaryAdmin ? 'Restaure um lead ou exclua definitivamente.' : 'Você pode restaurar; a exclusão definitiva é feita pela gestão.'}</p></div><Archive className="w-5 h-5 text-[#727687]" /></div>
+      <div className="p-4 bg-[#f4f2fd] dark:bg-[#10142e] border-b border-[#c2c6d8]/30 flex items-center justify-between"><div><p className="text-xs font-bold">Leads arquivados ({visibleArchivedLeads.length})</p><p className="text-[10px] text-[#727687] mt-0.5">{isPrimaryAdmin ? 'Restaure um lead ou exclua definitivamente.' : 'Você pode restaurar; a exclusão definitiva é feita pela gestão.'}</p></div><Archive className="w-5 h-5 text-[#727687]" /></div>
       <div className="divide-y divide-[#c2c6d8]/20 dark:divide-[#2e366b]">
         {loading && <div className="p-8 text-center text-xs text-[#727687]">Carregando arquivados…</div>}
-        {!loading && !archivedLeads.length && <div className="p-10 text-center text-xs text-[#727687]">Nenhum lead arquivado.</div>}
-        {archivedLeads.map(lead => <ArchivedLeadRow key={lead.id} lead={lead} restoreLead={restoreLead} deleteLead={deleteLead} canDelete={isPrimaryAdmin} onShowToast={onShowToast} />)}
+        {!loading && !visibleArchivedLeads.length && <div className="p-10 text-center text-xs text-[#727687]">Nenhum lead arquivado.</div>}
+        {visibleArchivedLeads.map(lead => <ArchivedLeadRow key={lead.id} lead={lead} restoreLead={restoreLead} deleteLead={deleteLead} canDelete={isPrimaryAdmin} onShowToast={onShowToast} />)}
       </div>
     </div>}
 
