@@ -8,6 +8,7 @@
    são usados só pelas telas/telas migradas (ex.: Prospecção nova).
    ============================================================ */
 @theme inline {
+  --font-sans: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
   --radius-sm: calc(var(--lv-radius) - 3px);
   --radius-md: calc(var(--lv-radius) - 1px);
   --radius-lg: var(--lv-radius);
@@ -136,7 +137,10 @@
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block');
 
 body {
-  font-family: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   background-color: var(--bg-main);
   color: var(--text-primary);
   transition: background-color 0.3s ease, color 0.3s ease;
@@ -146,7 +150,7 @@ body {
 }
 
 h1, h2, h3, h4, .font-poppins {
-  font-family: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
 }
 
 .material-symbols-outlined {
