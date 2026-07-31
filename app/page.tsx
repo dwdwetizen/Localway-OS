@@ -9,7 +9,7 @@ import { HeatmapView } from '@/components/HeatmapView';
 import { SearchVolumeView } from '@/components/SearchVolumeView';
 import { RaioXView } from '@/components/RaioXView';
 import { ModuleErrorBoundary } from '@/components/ModuleErrorBoundary';
-import { ProspectingView } from '@/components/ProspectingView';
+import { ProspectingViewLovable as ProspectingView } from '@/components/ProspectingViewLovable';
 import { FollowUpView } from '@/components/FollowUpView';
 import { CrmView } from '@/components/CrmView';
 import { PropostasView } from '@/components/PropostasView';
