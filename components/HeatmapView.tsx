@@ -622,8 +622,14 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
 
     const existing = allLeads.find(lead => lead.google_place_id === place.google_place_id);
     if (existing) {
+      const existingKeywords = registeredVisibilityKeywords(existing);
       setSelectedId(existing.id);
-      setActiveKeyword(registeredVisibilityKeywords(existing)[0] || '');
+      setActiveKeyword(existingKeywords[0] || '');
+      if (!existingKeywords.length) {
+        setKeywordDrafts(['']);
+        setNewKeyword('');
+        setKeywordManagerOpen(true);
+      }
     } else {
       const created = await createLead({
         company_name: place.company_name || 'Empresa do Google',
@@ -656,14 +662,20 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
         next_action_at: null,
       });
       if (created.error || !created.data) throw new Error(created.error || 'Não foi possível salvar a empresa.');
+      const createdKeywords = registeredVisibilityKeywords(created.data);
       setSelectedId(created.data.id);
-      setActiveKeyword(registeredVisibilityKeywords(created.data)[0] || '');
+      setActiveKeyword(createdKeywords[0] || '');
+      if (!createdKeywords.length) {
+        setKeywordDrafts(['']);
+        setNewKeyword('');
+        setKeywordManagerOpen(true);
+      }
     }
 
     setGoogleMapsUrl(place.google_maps_url || fallbackMapsUrl);
     setFocusedPlaceId('');
     setActiveScan(null);
-    setSetupOpen(false);
+    setSetupOpen(true);
   };
   const resolveGoogleProfile = async (selectedUrl?: string) => {
     if (resolvingProfileRef.current) return;
@@ -804,7 +816,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
             {!keywordTabs.length && <span className="px-2 py-1 text-[11px] text-[var(--text-secondary)]">Selecione uma empresa para começar</span>}
           </div>
         </div>
-        {selected && <button type="button" onClick={openKeywordManager} className="shrink-0 rounded-md p-2 text-[var(--primary-main)] hover:bg-blue-50" title="Gerenciar palavras-chave"><Pencil className="h-4 w-4"/></button>}
+        {selected && <button type="button" onClick={openKeywordManager} className="lw-secondary-button shrink-0 px-3" title="Gerenciar palavras-chave"><Pencil className="h-3.5 w-3.5"/><span className="hidden sm:inline">Palavras-chave</span></button>}
         <button type="button" onClick={() => setHistoryOpen(current => !current)} className="lw-secondary-button shrink-0 px-3"><History className="h-3.5 w-3.5"/><span className="hidden sm:inline">Histórico</span></button>
       </section>
 
@@ -819,7 +831,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
           <div className="min-w-0"><p className="truncate text-[12px] font-semibold">{selected.company_name}</p><p className="truncate text-[10px] text-[var(--text-secondary)]">{selected.category || 'Categoria identificada pelo Google'}</p></div>
           <span className="rounded-md border bg-[var(--surface-main)] px-3 py-2 text-center text-[11px]">Raio 2 km</span>
           <select aria-label="Tamanho da grade" value={gridSize} onChange={event => setGridSize(Number(event.target.value))} className="h-9 rounded-md border border-[var(--border-color)] bg-[var(--surface-main)] px-2 text-[11px]">{[3, 4, 5, 6, 7].map(size => <option key={size} value={size}>{size}×{size} ({size * size} pontos)</option>)}</select>
-          <button disabled={generatingGrid || !activeRegisteredKeyword} onClick={() => void runVisibilityGrid()} className="lw-primary-button px-4 disabled:opacity-50">{generatingGrid ? <Loader2 className="w-4 h-4 animate-spin"/> : <Grid3X3 className="w-4 h-4"/>}{generatingGrid ? `Consultando ${gridSize * gridSize} pontos…` : 'Gerar mapa'}</button>
+          <button disabled={generatingGrid || !activeRegisteredKeyword} onClick={() => void runVisibilityGrid()} className="lw-primary-button px-4 disabled:opacity-50">{generatingGrid ? <Loader2 className="w-4 h-4 animate-spin"/> : <Grid3X3 className="w-4 h-4"/>}{generatingGrid ? `Consultando ${gridSize * gridSize} pontos…` : 'Iniciar análise'}</button>
         </div>}
       </section>}
 
@@ -908,7 +920,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
         </button>
         {historyOpen && (!scanHistory.length ? <div className="p-8 border-t border-[#c2c6d8]/30 text-center text-xs text-[#727687]">Nenhum mapa gerado ainda.</div> : <div className="border-t border-[#c2c6d8]/30 divide-y divide-[#c2c6d8]/25">
           {scanHistory.map(scan => {
-            const lead = leads.find(item => item.id === scan.lead_id);
+            const lead = allLeads.find(item => item.id === scan.lead_id);
             const historyGridSize = scanGridSize(scan);
             return <div key={scan.id} className={`flex items-stretch hover:bg-[#f8f9fc] dark:hover:bg-[#10142e] transition-colors ${activeScan?.id === scan.id ? 'bg-[#0066ff]/5' : ''}`}>
               <button type="button" onClick={() => { setActiveScan(scan); setSelectedId(scan.lead_id); setActiveKeyword(scan.keyword); setFocusedPlaceId(''); setGridSize(historyGridSize); }} className="min-w-0 flex-1 p-4 text-left flex flex-col sm:flex-row sm:items-center justify-between gap-2">
