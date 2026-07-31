@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
-import { ChevronDown, ExternalLink, Grid3X3, History, Info, Layers, Link2, Loader2, MapPin, Pencil, Plus, Sparkles, Star, Trash2, X } from 'lucide-react';
+import { ChevronDown, Crosshair, ExternalLink, Grid3X3, History, Info, Layers, Link2, Loader2, MapPin, Pencil, Plus, Sparkles, Star, Trash2, X } from 'lucide-react';
 import { useLeads } from '@/hooks/use-leads';
 import { Lead } from '@/lib/leads';
 import { supabase } from '@/lib/supabase';
@@ -222,6 +222,8 @@ function GridMapCanvas({ scan, mapsKey, targetPlaceId, focusedPlaceId, focusedPl
   onError: (message: string) => void;
 }) {
   const node = useRef<HTMLDivElement>(null);
+  const mapInstance = useRef<MapInstance | null>(null);
+  const gridBounds = useRef<BoundsInstance | null>(null);
   const [mapError, setMapError] = useState('');
   const [mapReady, setMapReady] = useState(false);
   const [selectedPoint, setSelectedPoint] = useState<{
@@ -234,29 +236,23 @@ function GridMapCanvas({ scan, mapsKey, targetPlaceId, focusedPlaceId, focusedPl
     if (!node.current || !mapsKey || !scan.points.length) return;
     let active = true;
     let loadTimer: number | null = null;
-    let wheelFrame: number | null = null;
-    let accumulatedWheelDelta = 0;
     let tilesListener: { remove?: () => void } | null = null;
-    let mapElement: HTMLDivElement | null = null;
-    let wheelHandler: ((event: WheelEvent) => void) | null = null;
     const markers: MarkerInstance[] = [];
     const circles: CircleInstance[] = [];
     setMapError('');
     setMapReady(false);
     void loadGoogleMaps(mapsKey).then(maps => {
       if (!active || !node.current) return;
-      mapElement = node.current;
-      const map = new maps.Map(mapElement, {
+      const map = new maps.Map(node.current, {
         center: { lat: scan.center_latitude, lng: scan.center_longitude },
         zoom: 13,
-        isFractionalZoomEnabled: true,
         mapTypeControl: false,
         streetViewControl: false,
         fullscreenControl: false,
         zoomControl: true,
         clickableIcons: false,
         gestureHandling: 'greedy',
-        scrollwheel: false,
+        scrollwheel: true,
         styles: [
           { elementType: 'geometry', stylers: [{ color: '#f4f4f1' }] },
           { elementType: 'labels.text.fill', stylers: [{ color: '#989b96' }] },
@@ -271,21 +267,7 @@ function GridMapCanvas({ scan, mapsKey, targetPlaceId, focusedPlaceId, focusedPl
           { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#e4ecec' }] },
         ],
       });
-      wheelHandler = event => {
-        event.preventDefault();
-        accumulatedWheelDelta += event.deltaY;
-        if (wheelFrame !== null) return;
-        wheelFrame = window.requestAnimationFrame(() => {
-          wheelFrame = null;
-          const zoomChange = Math.max(-0.35, Math.min(0.35, accumulatedWheelDelta / 500));
-          if (Math.abs(zoomChange) < 0.025) return;
-          accumulatedWheelDelta = 0;
-          const currentZoom = map.getZoom();
-          if (typeof currentZoom !== 'number') return;
-          map.setZoom(Math.max(3, Math.min(20, currentZoom - zoomChange)));
-        });
-      };
-      mapElement.addEventListener('wheel', wheelHandler, { passive: false });
+      mapInstance.current = map;
       tilesListener = map.addListener?.('tilesloaded', () => {
         if (!active) return;
         if (loadTimer !== null) window.clearTimeout(loadTimer);
@@ -391,6 +373,7 @@ function GridMapCanvas({ scan, mapsKey, targetPlaceId, focusedPlaceId, focusedPl
         markers.push(marker);
       });
       map.fitBounds(bounds);
+      gridBounds.current = bounds;
     }).catch(error => {
       if (!active) return;
       const message = error instanceof Error ? error.message : 'Erro ao abrir a grade.';
@@ -400,9 +383,9 @@ function GridMapCanvas({ scan, mapsKey, targetPlaceId, focusedPlaceId, focusedPl
     return () => {
       active = false;
       if (loadTimer !== null) window.clearTimeout(loadTimer);
-      if (wheelFrame !== null) window.cancelAnimationFrame(wheelFrame);
-      if (mapElement && wheelHandler) mapElement.removeEventListener('wheel', wheelHandler);
       tilesListener?.remove?.();
+      mapInstance.current = null;
+      gridBounds.current = null;
       markers.forEach(marker => {
         if (marker.setMap) marker.setMap(null);
         else marker.map = null;
@@ -428,6 +411,9 @@ function GridMapCanvas({ scan, mapsKey, targetPlaceId, focusedPlaceId, focusedPl
           : 'Posição 20+: não apareceu entre os 20 primeiros resultados neste ponto.'}
       </p>
     </div>}
+    {mapReady && <button type="button" onClick={() => {
+      if (mapInstance.current && gridBounds.current) mapInstance.current.fitBounds(gridBounds.current);
+    }} className="absolute bottom-4 right-3 z-20 grid h-10 w-10 place-items-center rounded-lg border border-[#dce1e8] bg-white text-[#4b5563] shadow-md hover:bg-[#f6f8fb]" title="Centralizar a grade" aria-label="Centralizar a grade"><Crosshair className="h-4 w-4" /></button>}
   </div>;
 }
 
@@ -453,6 +439,18 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
   const [setupOpen, setSetupOpen] = useState(true);
   const [deletingScanId, setDeletingScanId] = useState('');
   const resolvingProfileRef = useRef(false);
+
+  useEffect(() => {
+    if (!setupOpen && !historyOpen && !keywordManagerOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setSetupOpen(false);
+      setHistoryOpen(false);
+      setKeywordManagerOpen(false);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [historyOpen, keywordManagerOpen, setupOpen]);
 
   useEffect(() => {
     let active = true;
@@ -502,6 +500,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
   );
   const selected = located.find(lead => lead.id === selectedId) || null;
   const activeScanLead = activeScan ? allLeads.find(lead => lead.id === activeScan.lead_id) || null : null;
+  const managedLead = selected || activeScanLead;
   const centerPoint = activeScan ? centerPointForScan(activeScan) : null;
   const targetPlace = (() => {
     if (!activeScan || !activeScanLead?.google_place_id) return null;
@@ -512,9 +511,9 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
     return null;
   })();
   const keywordTabs = useMemo(() => {
-    if (!selected) return [];
-    return registeredVisibilityKeywords(selected);
-  }, [selected]);
+    if (!managedLead) return [];
+    return registeredVisibilityKeywords(managedLead);
+  }, [managedLead]);
   const activeRegisteredKeyword = keywordTabs.find(keyword =>
     keywordKey(keyword) === keywordKey(activeKeyword));
   const competitors = useMemo(() => {
@@ -561,14 +560,14 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
   const displayedPlaceName = focusedCompetitor?.name || activeScanLead?.company_name || 'Empresa analisada';
   const handleMapError = useCallback((message: string) => onShowToast(message, 'error'), [onShowToast]);
   const selectKeyword = (keyword: string) => {
-    if (!selected) return;
+    if (!managedLead) return;
     setFocusedPlaceId('');
     setActiveKeyword(keyword);
-    const scan = scanHistory.find(item => item.lead_id === selected.id && keywordKey(item.keyword) === keywordKey(keyword));
+    const scan = scanHistory.find(item => item.lead_id === managedLead.id && keywordKey(item.keyword) === keywordKey(keyword));
     setActiveScan(scan || null);
   };
   const openKeywordManager = () => {
-    if (!selected) return;
+    if (!managedLead) return;
     setKeywordDrafts(keywordTabs.length ? keywordTabs : ['']);
     setNewKeyword('');
     setKeywordManagerOpen(true);
@@ -582,16 +581,16 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
     setNewKeyword('');
   };
   const saveKeywords = async () => {
-    if (!selected) return;
+    if (!managedLead) return;
     const cleaned = keywordDrafts
       .map(value => value.trim())
       .filter(value => value.length >= 2)
       .filter((value, index, values) => values.findIndex(item => keywordKey(item) === keywordKey(value)) === index);
     if (!cleaned.length) return onShowToast('Mantenha pelo menos uma palavra-chave.', 'error');
     setSavingKeywords(true);
-    const result = await updateLead(selected.id, {
+    const result = await updateLead(managedLead.id, {
       analysis_data: {
-        ...(selected.analysis_data || {}),
+        ...(managedLead.analysis_data || {}),
         visibility_keywords: cleaned,
       },
     });
@@ -600,7 +599,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
     const nextKeyword = cleaned.some(item => keywordKey(item) === keywordKey(activeKeyword)) ? activeKeyword : cleaned[0];
     setActiveKeyword(nextKeyword);
     setFocusedPlaceId('');
-    setActiveScan(scanHistory.find(item => item.lead_id === selected.id && keywordKey(item.keyword) === keywordKey(nextKeyword)) || null);
+    setActiveScan(scanHistory.find(item => item.lead_id === managedLead.id && keywordKey(item.keyword) === keywordKey(nextKeyword)) || null);
     setKeywordManagerOpen(false);
     onShowToast('Palavras-chave atualizadas.', 'success');
   };
@@ -798,6 +797,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
     setActiveKeyword(scan.keyword);
     setActiveScan(scan);
     setFocusedPlaceId('');
+    setSetupOpen(false);
     setScanHistory(current => [scan, ...current.filter(item => item.id !== scan.id)].slice(0, 20));
     onShowToast(`Grade ${gridSize}×${gridSize} calculada e salva no histórico.`);
   };
@@ -812,11 +812,13 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
             {!keywordTabs.length && <span className="px-2 py-1.5 text-[13px] text-[var(--text-secondary)]">Selecione uma empresa para começar</span>}
           </div>
         </div>
-        {selected && <button type="button" onClick={openKeywordManager} className="lw-secondary-button h-9 shrink-0 px-3 text-[13px]" title="Gerenciar palavras-chave"><Pencil className="h-4 w-4"/><span className="hidden sm:inline">Palavras-chave</span></button>}
+        {managedLead && <button type="button" onClick={openKeywordManager} className="lw-secondary-button h-9 shrink-0 px-3 text-[13px]" title="Gerenciar palavras-chave"><Pencil className="h-4 w-4"/><span className="hidden sm:inline">Gerenciar palavras-chave</span></button>}
         <button type="button" onClick={() => setHistoryOpen(current => !current)} className="lw-secondary-button h-9 shrink-0 px-3 text-[13px]"><History className="h-4 w-4"/><span className="hidden sm:inline">Histórico</span></button>
       </section>
 
-      {setupOpen && <section className="fixed inset-x-0 bottom-0 z-50 max-h-[88dvh] space-y-3 overflow-y-auto rounded-t-2xl border border-[var(--border-color)] bg-white p-4 shadow-2xl sm:inset-auto sm:right-4 sm:top-16 sm:w-[560px] sm:rounded-xl dark:bg-[var(--surface-main)]">
+      {setupOpen && <>
+      <button type="button" className="fixed inset-0 z-40 cursor-default bg-[#10142e]/25 backdrop-blur-[1px]" onClick={() => setSetupOpen(false)} aria-label="Fechar nova análise" />
+      <section className="fixed inset-x-0 bottom-0 z-50 max-h-[88dvh] space-y-3 overflow-y-auto rounded-t-2xl border border-[var(--border-color)] bg-white p-4 shadow-2xl sm:inset-auto sm:right-4 sm:top-16 sm:w-[560px] sm:rounded-xl dark:bg-[var(--surface-main)]">
         <GooglePlaceSearch module="mapa" disabled={resolvingProfile} onSelect={chooseSuggestion}/>
         <div className="flex items-center gap-3"><span className="h-px flex-1 bg-[var(--border-subtle)]"/><span className="text-[11px] font-semibold uppercase text-[var(--text-secondary)]">ou cole o link</span><span className="h-px flex-1 bg-[var(--border-subtle)]"/></div>
         <div className="flex flex-col sm:flex-row gap-2">
@@ -829,7 +831,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
           <select aria-label="Tamanho da grade" value={gridSize} onChange={event => setGridSize(Number(event.target.value))} className="h-9 rounded-md border border-[var(--border-color)] bg-[var(--surface-main)] px-2 text-[13px]">{[3, 4, 5, 6, 7].map(size => <option key={size} value={size}>{size}×{size} ({size * size} pontos)</option>)}</select>
           <button disabled={generatingGrid || !activeRegisteredKeyword} onClick={() => void runVisibilityGrid()} className="lw-primary-button px-4 disabled:opacity-50">{generatingGrid ? <Loader2 className="w-4 h-4 animate-spin"/> : <Grid3X3 className="w-4 h-4"/>}{generatingGrid ? `Consultando ${gridSize * gridSize} pontos…` : 'Iniciar análise'}</button>
         </div>}
-      </section>}
+      </section></>}
 
       <div className={`heatmap-shell grid min-h-[600px] flex-1 grid-cols-1 overflow-hidden bg-white ${activeScan ? 'lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_380px]' : ''}`}>
         {activeScan && <aside className="order-2 flex min-h-0 flex-col border-t border-[#e2e3e8] bg-[#f8f9fc] p-3 text-[#222631] lg:order-2 lg:border-l lg:border-t-0">
@@ -903,7 +905,9 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
         </section>
       </div>
 
-      {historyOpen && <section className="fixed inset-y-0 right-0 z-50 w-[min(92vw,430px)] overflow-y-auto border-l border-[var(--border-color)] bg-white shadow-2xl dark:bg-[var(--surface-main)]">
+      {historyOpen && <>
+      <button type="button" className="fixed inset-0 z-40 cursor-default bg-[#10142e]/25 backdrop-blur-[1px]" onClick={() => setHistoryOpen(false)} aria-label="Fechar histórico" />
+      <section className="fixed inset-y-0 right-0 z-50 w-[min(92vw,430px)] overflow-y-auto border-l border-[var(--border-color)] bg-white shadow-2xl dark:bg-[var(--surface-main)]">
         <button type="button" onClick={() => setHistoryOpen(current => !current)} className="w-full p-4 flex items-center gap-2 text-left hover:bg-[#f8f9fc] dark:hover:bg-[#10142e] transition-colors" aria-expanded={historyOpen}>
           <History className="w-4 h-4 text-[#0066ff]"/>
           <div className="flex-1">
@@ -930,9 +934,9 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
             </div>;
           })}
         </div>)}
-      </section>}
-      {keywordManagerOpen && selected && <div className="fixed inset-0 z-50 flex items-end sm:grid sm:place-items-center p-0 sm:p-4 bg-[#10142e]/55 backdrop-blur-sm">
-        <div className="w-full max-w-lg max-h-[92dvh] rounded-t-3xl sm:rounded-2xl bg-white dark:bg-[#141936] border border-[#c2c6d8]/35 shadow-2xl overflow-hidden mobile-safe-bottom">
+      </section></>}
+      {keywordManagerOpen && managedLead && <div onMouseDown={() => setKeywordManagerOpen(false)} className="fixed inset-0 z-50 flex items-end sm:grid sm:place-items-center p-0 sm:p-4 bg-[#10142e]/55 backdrop-blur-sm">
+        <div onMouseDown={event => event.stopPropagation()} className="w-full max-w-lg max-h-[92dvh] rounded-t-3xl sm:rounded-2xl bg-white dark:bg-[#141936] border border-[#c2c6d8]/35 shadow-2xl overflow-hidden mobile-safe-bottom">
           <div className="p-5 flex items-start justify-between border-b border-[#c2c6d8]/30">
             <div><h3 className="text-base font-semibold">Gerenciar palavras-chave</h3><p className="text-xs text-[#727687] mt-1">Cada palavra-chave terá sua própria grade e histórico.</p></div>
             <button type="button" onClick={() => setKeywordManagerOpen(false)} className="p-2 rounded-lg hover:bg-[#f4f2fd] dark:hover:bg-[#10142e]" aria-label="Fechar"><X className="w-4 h-4" /></button>
