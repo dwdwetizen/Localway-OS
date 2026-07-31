@@ -504,6 +504,17 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
     if (!selected) return [];
     return registeredVisibilityKeywords(selected);
   }, [selected]);
+  const keywordPositions = useMemo<Record<string, number | null>>(() => {
+    if (!selected) return {};
+    return scanHistory.reduce<Record<string, number | null>>((positions, scan) => {
+      if (scan.lead_id !== selected.id) return positions;
+      const key = keywordKey(scan.keyword);
+      if (!Object.prototype.hasOwnProperty.call(positions, key)) {
+        positions[key] = scan.average_position ?? 21;
+      }
+      return positions;
+    }, {});
+  }, [scanHistory, selected]);
   const activeRegisteredKeyword = keywordTabs.find(keyword =>
     keywordKey(keyword) === keywordKey(activeKeyword));
   const competitors = useMemo(() => {
@@ -862,6 +873,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
         leads={leads}
         currentPosition={activeScan ? centerPosition ?? 21 : null}
         rankedKeyword={activeScan?.keyword || ''}
+        keywordPositions={keywordPositions}
         onUseKeyword={useKeywordFromResearch}
         onShowToast={onShowToast}
       />}
