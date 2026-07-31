@@ -92,10 +92,10 @@ export function Sidebar({
             <Sparkles className="w-4 h-4 text-white" />
           </div>
           <div>
-            <h1 className="text-[13px] font-bold text-white tracking-tight leading-tight">
+            <h1 className="text-[14px] font-bold text-white tracking-tight leading-tight">
               LocalWay OS
             </h1>
-            <p className="text-[9px] text-[#7f879d] font-medium tracking-wide">
+            <p className="text-[11px] text-[#8e98ad] font-medium tracking-wide">
               Marketing local
             </p>
           </div>
@@ -114,7 +114,7 @@ export function Sidebar({
           const groupItems = visibleItems.filter(item => item.group === group);
           if (!groupItems.length) return null;
           return <section key={group} className="mb-3 last:mb-0">
-            <p className="px-2 pb-1 text-[8px] font-bold tracking-[0.14em] text-[#657087] uppercase">
+            <p className="px-2 pb-1.5 text-[10px] font-bold tracking-[0.12em] text-[#788398] uppercase">
               {group}
             </p>
             <div className="space-y-0.5">
@@ -128,14 +128,14 @@ export function Sidebar({
                       setActiveTab(item.id);
                       onCloseMobile();
                     }}
-                    className={`w-full min-h-9 flex items-center justify-between px-2 py-1.5 rounded-md text-[11px] transition-all ${
+                    className={`w-full min-h-10 flex items-center justify-between px-2.5 py-2 rounded-md text-[13px] transition-all ${
                       isActive
                         ? 'bg-[#202b37] text-white font-semibold'
                         : 'text-[#aeb6c8] hover:bg-white/6 hover:text-white font-medium'
                     }`}
                   >
                     <div className="flex min-w-0 items-center gap-2">
-                      <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-[#12a4cf]' : 'text-[#737d93]'}`} />
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#12a4cf]' : 'text-[#818ba0]'}`} />
                       <span className="truncate">{item.label}</span>
                     </div>
                     {item.badge && (
@@ -162,8 +162,8 @@ export function Sidebar({
               : (profile.nome || profile.username).slice(0, 2).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[11px] font-semibold text-white">{profile.nome || profile.username}</p>
-            <p className="truncate text-[9px] text-[#778096]">{profile.role || 'Colaborador'}</p>
+            <p className="truncate text-[13px] font-semibold text-white">{profile.nome || profile.username}</p>
+            <p className="truncate text-[11px] text-[#8b95a9]">{profile.role || 'Colaborador'}</p>
           </div>
           <button
             type="button"

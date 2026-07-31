@@ -55,6 +55,22 @@ const allTabs: TabType[] = [
   'admin',
 ];
 
+const tabLabels: Record<TabType, string> = {
+  dashboard: 'Dashboard',
+  analises: 'Análises de Perfil',
+  volume: 'Volume de Busca',
+  mapa: 'Mapa de Calor',
+  raiox: 'Radar de Concorrentes',
+  prospeccao: 'Prospecção',
+  followup: 'Follow-up',
+  crm: 'CRM',
+  propostas: 'Propostas',
+  servicos: 'Meus Serviços',
+  equipe: 'Visão da Equipe',
+  avaliacoes: 'Avaliações',
+  admin: 'Administração',
+};
+
 export default function Home() {
   return <AuthGate><AuthenticatedHome /></AuthGate>;
 }
@@ -182,6 +198,7 @@ function AuthenticatedHome() {
       <div className="lg:ml-[216px] flex flex-col min-h-screen min-w-0 transition-all">
         {/* Sticky Header */}
         <Header
+          pageTitle={visibleTab ? tabLabels[visibleTab] : 'LocalWay OS'}
           darkMode={darkMode}
           setDarkMode={setDarkMode}
           onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
@@ -192,7 +209,9 @@ function AuthenticatedHome() {
         />
 
         {/* Content Body */}
-        <main className="flex-1 min-w-0 p-3 pb-24 sm:pb-24 lg:pb-4 max-w-[1600px] w-full mx-auto space-y-3">
+        <main className={visibleTab === 'mapa'
+          ? 'flex min-h-0 flex-1 w-full flex-col overflow-hidden pb-16 lg:pb-0'
+          : 'flex-1 min-w-0 p-3 pb-24 sm:pb-24 lg:pb-4 max-w-[1600px] w-full mx-auto space-y-3'}>
           {!allowedTabs.length && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
               Seu perfil ainda não possui módulos liberados. Fale com o administrador.

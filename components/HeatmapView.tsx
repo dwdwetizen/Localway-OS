@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
-import { ChevronDown, Clock3, ExternalLink, Grid3X3, History, Info, Layers, Link2, Loader2, MapPin, Pencil, Plus, Sparkles, Star, Trash2, X } from 'lucide-react';
+import { ChevronDown, ExternalLink, Grid3X3, History, Info, Layers, Link2, Loader2, MapPin, Pencil, Plus, Sparkles, Star, Trash2, X } from 'lucide-react';
 import { useLeads } from '@/hooks/use-leads';
 import { Lead } from '@/lib/leads';
 import { supabase } from '@/lib/supabase';
@@ -298,8 +298,7 @@ function GridMapCanvas({ scan, mapsKey, targetPlaceId, focusedPlaceId, focusedPl
         onError(message);
       }, 12_000);
       const bounds = new maps.LatLngBounds();
-      const gridStep = scan.radius_m / Math.max((scanGridSize(scan) - 1) / 2, 1);
-      const pointRadius = Math.max(190, gridStep * 0.48);
+      const pointRadius = 135;
       scan.points.forEach(point => {
         const position = { lat: point.latitude, lng: point.longitude };
         const focusedPosition = !focusedPlaceId || focusedPlaceId === targetPlaceId
@@ -412,7 +411,7 @@ function GridMapCanvas({ scan, mapsKey, targetPlaceId, focusedPlaceId, focusedPl
     };
   }, [focusedPlaceId, focusedPlaceName, mapsKey, onError, scan, targetPlaceId]);
 
-  return <div className="relative w-full h-[520px] sm:h-[680px] bg-[#e9e8e2] overflow-hidden">
+  return <div className="relative h-full min-h-[600px] w-full overflow-hidden bg-[#e9e8e2] lg:min-h-0">
     <div ref={node} className={`absolute inset-0 w-full h-full transition-opacity duration-700 ease-out ${mapReady ? 'opacity-100' : 'opacity-0'}`} />
     {!mapReady && !mapError && <div className="absolute inset-0 z-10 grid place-items-center bg-[#e9e8e2] transition-opacity duration-300">
       <div className="text-center"><Loader2 className="w-7 h-7 animate-spin text-[#0066ff] mx-auto" /><p className="text-xs font-semibold mt-2">Carregando mapa…</p></div>
@@ -486,7 +485,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
           setActiveKeyword(current => current || latestScan.keyword);
           setGridSize(scanGridSize(latestScan));
           setSetupOpen(false);
-          setHistoryOpen(true);
+          setHistoryOpen(false);
         }
       }
       if (active && scansRequest.error) {
@@ -504,7 +503,6 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
   const selected = located.find(lead => lead.id === selectedId) || null;
   const activeScanLead = activeScan ? allLeads.find(lead => lead.id === activeScan.lead_id) || null : null;
   const centerPoint = activeScan ? centerPointForScan(activeScan) : null;
-  const centerPosition = centerPoint?.position ?? null;
   const targetPlace = (() => {
     if (!activeScan || !activeScanLead?.google_place_id) return null;
     for (const point of activeScan.points) {
@@ -561,15 +559,6 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
   }, [activeScan, activeScanLead?.google_place_id, centerPoint]);
   const focusedCompetitor = competitors.find(place => place.id === focusedPlaceId) || null;
   const displayedPlaceName = focusedCompetitor?.name || activeScanLead?.company_name || 'Empresa analisada';
-  const areaDifficulty = !activeScan
-    ? null
-    : competitors.length >= 12 || activeScan.visibility_percentage < 25
-      ? 'Alta'
-      : competitors.length >= 6 || activeScan.visibility_percentage < 60
-        ? 'Média'
-        : 'Baixa';
-  const areaDifficultyPercentage = areaDifficulty === 'Alta' ? 88 : areaDifficulty === 'Média' ? 58 : 30;
-
   const handleMapError = useCallback((message: string) => onShowToast(message, 'error'), [onShowToast]);
   const selectKeyword = (keyword: string) => {
     if (!selected) return;
@@ -814,97 +803,90 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
   };
 
   return (
-    <div className="lw-page space-y-3" style={{ fontFamily: "'Inter', sans-serif" }}>
-      <header>
-        <h2 className="lw-title">Mapa de Calor</h2>
-        <p className="mt-1 text-xs text-[var(--text-secondary)]">Ranking local por palavra-chave e ponto da região.</p>
-      </header>
-
-      <section className="lw-panel flex items-center gap-2 overflow-hidden p-2">
-        <button type="button" onClick={() => setSetupOpen(current => !current)} className="lw-secondary-button shrink-0 px-3"><Sparkles className="h-3.5 w-3.5"/>{setupOpen ? 'Fechar análise' : 'Nova análise'}</button>
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-y-auto bg-[var(--bg-main)] lg:overflow-hidden">
+      <section className="flex shrink-0 items-center gap-2 overflow-hidden border-b border-[var(--border-color)] bg-white px-3 py-2 dark:bg-[var(--surface-main)]">
+        <button type="button" onClick={() => setSetupOpen(current => !current)} className="lw-secondary-button h-9 shrink-0 px-3.5 text-[13px]"><Sparkles className="h-4 w-4"/>{setupOpen ? 'Fechar análise' : 'Nova análise'}</button>
         <div className="no-scrollbar min-w-0 flex-1 overflow-x-auto">
           <div className="flex gap-1.5">
-            {keywordTabs.map(keyword => <button key={keyword} type="button" onClick={() => selectKeyword(keyword)} className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium ${keywordKey(activeKeyword) === keywordKey(keyword) ? 'border-[#1268ff] bg-blue-50 text-[#1268ff]' : 'border-[var(--border-color)] bg-[var(--surface-main)] text-[var(--text-secondary)]'}`}>{keyword}</button>)}
-            {!keywordTabs.length && <span className="px-2 py-1 text-[11px] text-[var(--text-secondary)]">Selecione uma empresa para começar</span>}
+            {keywordTabs.map(keyword => <button key={keyword} type="button" onClick={() => selectKeyword(keyword)} className={`shrink-0 rounded-full border px-3 py-1.5 text-[13px] font-medium transition-colors ${keywordKey(activeKeyword) === keywordKey(keyword) ? 'border-[#1268ff] bg-blue-50 text-[#1268ff]' : 'border-[var(--border-color)] bg-[var(--surface-main)] text-[var(--text-secondary)] hover:bg-[var(--surface-container-low)]'}`}>{keyword}</button>)}
+            {!keywordTabs.length && <span className="px-2 py-1.5 text-[13px] text-[var(--text-secondary)]">Selecione uma empresa para começar</span>}
           </div>
         </div>
-        {selected && <button type="button" onClick={openKeywordManager} className="lw-secondary-button shrink-0 px-3" title="Gerenciar palavras-chave"><Pencil className="h-3.5 w-3.5"/><span className="hidden sm:inline">Palavras-chave</span></button>}
-        <button type="button" onClick={() => setHistoryOpen(current => !current)} className="lw-secondary-button shrink-0 px-3"><History className="h-3.5 w-3.5"/><span className="hidden sm:inline">Histórico</span></button>
+        {selected && <button type="button" onClick={openKeywordManager} className="lw-secondary-button h-9 shrink-0 px-3 text-[13px]" title="Gerenciar palavras-chave"><Pencil className="h-4 w-4"/><span className="hidden sm:inline">Palavras-chave</span></button>}
+        <button type="button" onClick={() => setHistoryOpen(current => !current)} className="lw-secondary-button h-9 shrink-0 px-3 text-[13px]"><History className="h-4 w-4"/><span className="hidden sm:inline">Histórico</span></button>
       </section>
 
-      {setupOpen && <section className="lw-panel p-3 sm:p-4 space-y-3">
+      {setupOpen && <section className="fixed inset-x-0 bottom-0 z-50 max-h-[88dvh] space-y-3 overflow-y-auto rounded-t-2xl border border-[var(--border-color)] bg-white p-4 shadow-2xl sm:inset-auto sm:right-4 sm:top-16 sm:w-[560px] sm:rounded-xl dark:bg-[var(--surface-main)]">
         <GooglePlaceSearch module="mapa" disabled={resolvingProfile} onSelect={chooseSuggestion}/>
-        <div className="flex items-center gap-3"><span className="h-px flex-1 bg-[var(--border-subtle)]"/><span className="text-[9px] font-semibold uppercase text-[var(--text-secondary)]">ou cole o link</span><span className="h-px flex-1 bg-[var(--border-subtle)]"/></div>
+        <div className="flex items-center gap-3"><span className="h-px flex-1 bg-[var(--border-subtle)]"/><span className="text-[11px] font-semibold uppercase text-[var(--text-secondary)]">ou cole o link</span><span className="h-px flex-1 bg-[var(--border-subtle)]"/></div>
         <div className="flex flex-col sm:flex-row gap-2">
           <div className="relative flex-1"><Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-secondary)]" /><input type="url" value={googleMapsUrl} onChange={event => setGoogleMapsUrl(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void resolveGoogleProfile(); }} placeholder="Cole o link curto ou completo do perfil no Google Maps" className="lw-input w-full pl-9 pr-3 py-2 text-sm"/></div>
           <button disabled={resolvingProfile || !googleMapsUrl.trim()} onClick={() => void resolveGoogleProfile()} className="lw-secondary-button px-5 disabled:opacity-50">{resolvingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <MapPin className="w-4 h-4" />}{resolvingProfile ? 'Identificando...' : 'Carregar perfil'}</button>
         </div>
         {selected && <div className="grid gap-2 rounded-lg border border-[var(--border-color)] bg-[var(--surface-container-low)] p-3 sm:grid-cols-[1fr_auto_auto_auto] sm:items-center">
-          <div className="min-w-0"><p className="truncate text-[12px] font-semibold">{selected.company_name}</p><p className="truncate text-[10px] text-[var(--text-secondary)]">{selected.category || 'Categoria identificada pelo Google'}</p></div>
-          <span className="rounded-md border bg-[var(--surface-main)] px-3 py-2 text-center text-[11px]">Raio 2 km</span>
-          <select aria-label="Tamanho da grade" value={gridSize} onChange={event => setGridSize(Number(event.target.value))} className="h-9 rounded-md border border-[var(--border-color)] bg-[var(--surface-main)] px-2 text-[11px]">{[3, 4, 5, 6, 7].map(size => <option key={size} value={size}>{size}×{size} ({size * size} pontos)</option>)}</select>
+          <div className="min-w-0"><p className="truncate text-[14px] font-semibold">{selected.company_name}</p><p className="truncate text-[12px] text-[var(--text-secondary)]">{selected.category || 'Categoria identificada pelo Google'}</p></div>
+          <span className="rounded-md border bg-[var(--surface-main)] px-3 py-2 text-center text-[13px]">Raio 2 km</span>
+          <select aria-label="Tamanho da grade" value={gridSize} onChange={event => setGridSize(Number(event.target.value))} className="h-9 rounded-md border border-[var(--border-color)] bg-[var(--surface-main)] px-2 text-[13px]">{[3, 4, 5, 6, 7].map(size => <option key={size} value={size}>{size}×{size} ({size * size} pontos)</option>)}</select>
           <button disabled={generatingGrid || !activeRegisteredKeyword} onClick={() => void runVisibilityGrid()} className="lw-primary-button px-4 disabled:opacity-50">{generatingGrid ? <Loader2 className="w-4 h-4 animate-spin"/> : <Grid3X3 className="w-4 h-4"/>}{generatingGrid ? `Consultando ${gridSize * gridSize} pontos…` : 'Iniciar análise'}</button>
         </div>}
       </section>}
 
-      <div className={`heatmap-shell grid grid-cols-1 overflow-hidden rounded-[12px] border border-[var(--border-subtle)] bg-white shadow-[var(--shadow-panel)] ${activeScan ? 'lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px]' : ''}`}>
-        {activeScan && <aside className="order-2 flex flex-col min-h-0 max-h-[520px] lg:min-h-[680px] lg:max-h-[760px] border-t lg:border-t-0 lg:border-l border-[#e2e3e8] bg-[#fcfcfd] text-[#34363e]">
-          <div className="px-5 pt-5 pb-4 border-b border-[#e5e6ea]">
-            <p className="text-[12px] font-medium text-[#565963]">Palavra-chave</p>
-            <span className="inline-flex mt-2 max-w-full truncate px-3 py-1.5 rounded-full bg-[#3978d4] text-white text-[12px] font-medium shadow-[0_1px_2px_rgba(25,75,145,0.25)]">{activeScan.keyword}</span>
-
-            <div className="mt-5">
-              <div className="flex items-center gap-1.5">
-                <p className="text-[11px] font-semibold text-[#579663]">Rank {centerPosition || '20+'} no centro</p>
-                <InfoTip text={`Posição no ponto central da grade. Média nos ${activeScan.points.length} pontos: ${activeScan.average_position ? activeScan.average_position.toFixed(1).replace('.', ',') : '20+'}.`} />
+      <div className={`heatmap-shell grid min-h-[600px] flex-1 grid-cols-1 overflow-hidden bg-white ${activeScan ? 'lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_380px]' : ''}`}>
+        {activeScan && <aside className="order-2 flex min-h-0 flex-col border-t border-[#e2e3e8] bg-[#f8f9fc] p-3 text-[#222631] lg:order-2 lg:border-l lg:border-t-0">
+          <div className="rounded-xl border border-[#dde2ea] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.05)]">
+            <div className="flex items-start gap-3">
+              <CompetitorPhoto photoName={targetPlace?.photo_name || activeScanLead?.analysis_data?.photo_name || null} companyName={activeScanLead?.company_name || 'Empresa analisada'} size="large" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[16px] font-semibold leading-5">{activeScanLead?.company_name || 'Empresa analisada'}</p>
+                <p className="mt-0.5 truncate text-[13px] text-[#667085]">Palavra-chave: {activeScan.keyword}</p>
               </div>
-              <div className="mt-1.5 flex items-start gap-3">
-                <CompetitorPhoto photoName={targetPlace?.photo_name || activeScanLead?.analysis_data?.photo_name || null} companyName={activeScanLead?.company_name || 'Empresa analisada'} size="large" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-[14px] font-medium leading-[1.25] text-[#34363e]">{activeScanLead?.company_name || 'Empresa analisada'}</p>
-                  <p className="text-[11px] leading-4 text-[#777a83] mt-0.5 line-clamp-2">{activeScanLead?.category || activeScanLead?.address}</p>
-                  <div className="mt-2">
-                    <div className="flex items-center gap-1 text-[11px] text-[#6e7179]"><span>Visibilidade do negócio</span><InfoTip text="Percentual de pontos da grade em que a empresa apareceu entre os 20 primeiros resultados do Google." /><strong className="ml-auto text-[#579663]">{Math.round(activeScan.visibility_percentage)}%</strong></div>
-                    <div className="h-1.5 mt-1 rounded-full bg-[#d8dadd] overflow-hidden"><div className="h-full rounded-full bg-[#579663] transition-[width] duration-700 ease-out" style={{ width: `${Math.max(activeScan.visibility_percentage, 2)}%` }} /></div>
-                  </div>
-                  <div className="mt-2">
-                    <div className="flex items-center gap-1 text-[11px] text-[#6e7179]"><span>Dificuldade da área</span><InfoTip text="Estimativa baseada na quantidade de concorrentes encontrados e na visibilidade da empresa em toda a grade." /><strong className={`ml-auto uppercase text-[10px] ${areaDifficulty === 'Alta' ? 'text-[#c96050]' : areaDifficulty === 'Média' ? 'text-[#b8813e]' : 'text-[#579663]'}`}>{areaDifficulty}</strong></div>
-                    <div className="h-1.5 mt-1 rounded-full bg-[#d8dadd] overflow-hidden"><div className="h-full rounded-full bg-[#a8aaad] transition-[width] duration-700 ease-out" style={{ width: `${areaDifficultyPercentage}%` }} /></div>
-                  </div>
-                  <button type="button" onClick={() => setFocusedPlaceId('')} className={`mt-2.5 text-[11px] font-medium transition-colors ${!focusedPlaceId ? 'text-[#579663]' : 'text-[#3978d4] hover:text-[#245fae]'}`}>{!focusedPlaceId ? 'Exibindo no mapa' : 'Ver meu ranking no mapa'}</button>
-                  {activeScanLead?.google_maps_url && <a href={activeScanLead.google_maps_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 mt-2.5 ml-3 text-[11px] font-medium text-[#3978d4] hover:text-[#245fae] transition-colors">Abrir no Google <ExternalLink className="w-3 h-3" /></a>}
-                </div>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="rounded-lg bg-[#f1f3f7] px-3 py-2.5">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-[#667085]">Posição média</p>
+                <p className="mt-0.5 text-[22px] font-bold tabular-nums">{activeScan.average_position ? activeScan.average_position.toFixed(1) : '20+'}</p>
               </div>
+              <div className="rounded-lg bg-[#f1f3f7] px-3 py-2.5">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-[#667085]">Visibilidade</p>
+                <p className="mt-0.5 text-[22px] font-bold tabular-nums text-[#1268ff]">{Math.round(activeScan.visibility_percentage)}%</p>
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              {activeScanLead?.google_maps_url && <a href={activeScanLead.google_maps_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#1268ff] hover:underline">Abrir no Google <ExternalLink className="h-3.5 w-3.5" /></a>}
+              <p className="text-[11px] text-[#667085]">Análise de {new Date(activeScan.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</p>
             </div>
           </div>
 
-          <div className="px-5 py-3 flex items-center gap-1.5 border-b border-[#e5e6ea]">
-            <p className="text-[12px] font-medium">Concorrentes ({competitors.length})</p>
-            <InfoTip text="Empresas encontradas pelo Google nesta grade. Clique em um concorrente para ver a posição dele em cada ponto do mapa." />
-          </div>
-          <div className="flex-1 overflow-y-auto divide-y divide-[#e8e9ec]">
-            {!competitors.length && <div className="p-6 text-center text-xs text-[#727687]">Gere uma nova grade para carregar os concorrentes encontrados pelo Google.</div>}
+          <div className="mt-3 flex min-h-0 flex-1 flex-col">
+            <div className="mb-2 flex items-center gap-1.5 px-0.5">
+              <p className="text-[14px] font-semibold">Concorrentes ({competitors.length})</p>
+              <InfoTip text="Empresas encontradas pelo Google nesta grade. Clique em um concorrente para ver a posição dele em cada ponto do mapa." />
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto divide-y divide-[#e3e7ee] rounded-xl border border-[#dde2ea] bg-white">
+            {!competitors.length && <div className="p-6 text-center text-[13px] text-[#667085]">Gere uma nova grade para carregar os concorrentes encontrados pelo Google.</div>}
             {competitors.map(competitor => {
               const displayPosition = competitor.center_position || Math.max(1, Math.round(competitor.average_position));
               const isFocused = competitor.id === focusedPlaceId;
-              return <button type="button" key={competitor.id} onClick={() => setFocusedPlaceId(competitor.id)} className={`group w-full px-5 py-3.5 text-left transition-colors duration-200 hover:bg-[#f3f6f8] ${isFocused ? 'bg-[#3978d4]/8 ring-1 ring-inset ring-[#3978d4]/20' : ''}`}>
-                <p className={`text-[10px] font-semibold ${displayPosition <= 3 ? 'text-[#579663]' : displayPosition <= 10 ? 'text-[#c47735]' : 'text-[#c75a58]'}`}>Rank {displayPosition}{competitor.center_position ? ' no centro' : ' em média'}</p>
-                <div className="mt-1.5 flex gap-3">
+              return <button type="button" key={competitor.id} onClick={() => setFocusedPlaceId(competitor.id)} className={`group flex w-full items-start gap-3 px-3 py-3 text-left transition-colors hover:bg-[#f6f8fb] ${isFocused ? 'bg-blue-50 ring-1 ring-inset ring-[#1268ff]/20' : ''}`}>
                   <CompetitorPhoto photoName={competitor.photo_name} companyName={competitor.name} />
                   <div className="min-w-0 flex-1">
-                    <p className="text-[13px] font-medium leading-[1.25] line-clamp-2 text-[#34363e]">{competitor.name}</p>
-                    <p className="text-[10px] text-[#777a83] mt-0.5 line-clamp-1">{competitor.category || activeScan.keyword}</p>
-                    {competitor.rating !== null && <p className="flex items-center gap-1 text-[10px] mt-1 text-[#d29138]"><Star className="w-3 h-3 fill-current" /><strong>{competitor.rating.toFixed(1)}</strong><span className="text-[#777a83]">({competitor.review_count})</span></p>}
-                    {isFocused && <p className="mt-1 text-[10px] font-semibold text-[#3978d4]">Exibindo posições no mapa</p>}
+                    <p className="truncate text-[14px] font-semibold leading-5 text-[#222631]">{competitor.name}</p>
+                    <p className="truncate text-[12px] leading-4 text-[#667085]">{competitor.address || 'Endereço não informado'}</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-[#667085]">
+                      <span className="max-w-[160px] truncate rounded bg-[#f1f3f7] px-1.5 py-0.5">{competitor.category || activeScan.keyword}</span>
+                      {competitor.rating !== null && <span className="inline-flex items-center gap-1"><Star className="h-3.5 w-3.5 fill-[#f2a11a] text-[#f2a11a]" /><strong>{competitor.rating.toFixed(1)}</strong> ({competitor.review_count})</span>}
+                    </div>
+                    {isFocused && <p className="mt-1 text-[11px] font-semibold text-[#1268ff]">Exibindo posições no mapa</p>}
                   </div>
-                </div>
+                  <span className={`shrink-0 rounded-md px-2 py-1 text-[12px] font-bold tabular-nums ${displayPosition <= 3 ? 'bg-emerald-100 text-emerald-700' : displayPosition <= 10 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>#{displayPosition > 20 ? '20+' : displayPosition}</span>
               </button>;
             })}
+            </div>
           </div>
         </aside>}
 
-        <section className="order-1 relative overflow-hidden bg-[#e9e8e2] min-h-[520px] sm:min-h-[680px]">
-          {activeScan && <div className="absolute z-10 top-3 sm:top-4 left-1/2 -translate-x-1/2 max-w-[calc(100%-1.5rem)] px-3.5 py-2 rounded-full bg-[#f8f8f6]/95 shadow-[0_3px_12px_rgba(36,39,43,0.2)] border border-white/80 flex items-center gap-2 text-[10px] sm:text-[11px] text-[#5c5f65] font-medium whitespace-nowrap backdrop-blur-sm"><Clock3 className="w-3.5 h-3.5 text-[#6e7179]" />{new Date(activeScan.created_at).toLocaleString('pt-BR', { dateStyle: 'medium', timeStyle: 'medium' })}</div>}
+        <section className="order-1 relative min-h-[600px] overflow-hidden bg-[#e9e8e2] lg:min-h-0">
+          {activeScan && <div className="absolute left-3 top-3 z-10 max-w-[70%] rounded-lg border border-[#dde2ea] bg-white/95 px-3 py-2 shadow-[0_1px_3px_rgba(16,24,40,0.12)] backdrop-blur"><p className="truncate text-[13px] font-semibold">{activeScan.keyword}</p><p className="truncate text-[11px] text-[#667085]">{new Date(activeScan.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} · grade {scanGridSize(activeScan)}×{scanGridSize(activeScan)} · raio 2 km</p></div>}
           {(loading || generatingGrid) && <div className="absolute inset-0 z-20 grid place-items-center bg-white/85 backdrop-blur-[2px]"><div className="text-center"><Loader2 className="w-7 h-7 animate-spin text-[#0066ff] mx-auto" /><p className="text-xs font-semibold mt-2">{generatingGrid ? `Consultando ${gridSize * gridSize} pontos…` : 'Carregando mapa…'}</p></div></div>}
           {!mapsKey
             ? <EmptyMap title="Chave do mapa ainda não configurada" detail="O administrador pode cadastrar a chave em Administração → Integrações." />
@@ -921,12 +903,12 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
         </section>
       </div>
 
-      {historyOpen && <section className="lw-panel overflow-hidden">
+      {historyOpen && <section className="fixed inset-y-0 right-0 z-50 w-[min(92vw,430px)] overflow-y-auto border-l border-[var(--border-color)] bg-white shadow-2xl dark:bg-[var(--surface-main)]">
         <button type="button" onClick={() => setHistoryOpen(current => !current)} className="w-full p-4 flex items-center gap-2 text-left hover:bg-[#f8f9fc] dark:hover:bg-[#10142e] transition-colors" aria-expanded={historyOpen}>
           <History className="w-4 h-4 text-[#0066ff]"/>
           <div className="flex-1">
-            <h3 className="font-semibold text-sm tracking-tight" style={{ fontFamily: "'Inter', sans-serif" }}>Histórico de mapas</h3>
-            <p className="text-[10px] text-[#727687]">{scanHistory.length ? `${scanHistory.length} análise${scanHistory.length === 1 ? '' : 's'} anterior${scanHistory.length === 1 ? '' : 'es'}.` : 'Nenhuma análise anterior.'}</p>
+            <h3 className="text-[16px] font-semibold tracking-tight">Histórico de mapas</h3>
+            <p className="text-[12px] text-[#727687]">{scanHistory.length ? `${scanHistory.length} análise${scanHistory.length === 1 ? '' : 's'} anterior${scanHistory.length === 1 ? '' : 'es'}.` : 'Nenhuma análise anterior.'}</p>
           </div>
           <ChevronDown className={`w-4 h-4 text-[#727687] transition-transform duration-200 ${historyOpen ? 'rotate-180' : ''}`} />
         </button>
@@ -938,9 +920,9 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
               <button type="button" onClick={() => { setActiveScan(scan); setSelectedId(scan.lead_id); setActiveKeyword(scan.keyword); setFocusedPlaceId(''); setGridSize(historyGridSize); }} className="min-w-0 flex-1 p-4 text-left flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
                   <p className="text-xs font-semibold">{lead?.company_name || 'Empresa'} <span className="font-normal text-[#727687]">• {scan.keyword}</span></p>
-                  <p className="text-[10px] text-[#727687] mt-0.5">{new Date(scan.created_at).toLocaleString('pt-BR')} • Grade {historyGridSize}×{historyGridSize} • Raio de 2 km</p>
+                  <p className="mt-0.5 text-[12px] text-[#727687]">{new Date(scan.created_at).toLocaleString('pt-BR')} • Grade {historyGridSize}×{historyGridSize} • Raio de 2 km</p>
                 </div>
-                <div className="flex gap-2 text-[10px] font-semibold"><span className="px-2 py-1 rounded-lg bg-blue-50 text-blue-700">Presença {Math.round(scan.visibility_percentage)}%</span><span className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700">Melhor {scan.best_position || '20+'}</span></div>
+                <div className="flex gap-2 text-[12px] font-semibold"><span className="px-2 py-1 rounded-lg bg-blue-50 text-blue-700">Presença {Math.round(scan.visibility_percentage)}%</span><span className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700">Melhor {scan.best_position || '20+'}</span></div>
               </button>
               <button type="button" disabled={Boolean(deletingScanId)} onClick={() => void deleteHistoryScan(scan)} className="shrink-0 w-12 grid place-items-center text-[#9a9daa] hover:text-rose-600 hover:bg-rose-50 disabled:opacity-40 transition-colors" aria-label={`Apagar análise de ${scan.keyword}`} title="Apagar análise">
                 {deletingScanId === scan.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
@@ -952,7 +934,7 @@ export function HeatmapView({ onShowToast }: HeatmapViewProps) {
       {keywordManagerOpen && selected && <div className="fixed inset-0 z-50 flex items-end sm:grid sm:place-items-center p-0 sm:p-4 bg-[#10142e]/55 backdrop-blur-sm">
         <div className="w-full max-w-lg max-h-[92dvh] rounded-t-3xl sm:rounded-2xl bg-white dark:bg-[#141936] border border-[#c2c6d8]/35 shadow-2xl overflow-hidden mobile-safe-bottom">
           <div className="p-5 flex items-start justify-between border-b border-[#c2c6d8]/30">
-            <div><h3 className="text-base font-semibold" style={{ fontFamily: "'Inter', sans-serif" }}>Gerenciar palavras-chave</h3><p className="text-xs text-[#727687] mt-1">Cada palavra-chave terá sua própria grade e histórico.</p></div>
+            <div><h3 className="text-base font-semibold">Gerenciar palavras-chave</h3><p className="text-xs text-[#727687] mt-1">Cada palavra-chave terá sua própria grade e histórico.</p></div>
             <button type="button" onClick={() => setKeywordManagerOpen(false)} className="p-2 rounded-lg hover:bg-[#f4f2fd] dark:hover:bg-[#10142e]" aria-label="Fechar"><X className="w-4 h-4" /></button>
           </div>
           <div className="p-5 space-y-3 max-h-[55vh] overflow-y-auto">

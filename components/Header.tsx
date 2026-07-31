@@ -8,6 +8,7 @@ import { Search, Bell, Moon, Sun, Menu, Check, Repeat2 } from 'lucide-react';
 import { useAuthProfile } from '@/components/AuthGate';
 
 interface HeaderProps {
+  pageTitle: string;
   darkMode: boolean;
   setDarkMode: (val: boolean | ((prev: boolean) => boolean)) => void;
   onOpenMobileSidebar: () => void;
@@ -18,6 +19,7 @@ interface HeaderProps {
 }
 
 export function Header({
+  pageTitle,
   darkMode,
   setDarkMode,
   onOpenMobileSidebar,
@@ -41,16 +43,20 @@ export function Header({
   const unreadCount = notifications.filter(n => n.unread).length;
 
   return (
-    <header className="sticky top-0 z-40 min-h-12 bg-white/95 dark:bg-[#151a28]/95 backdrop-blur-xl border-b border-[var(--border-subtle)] px-3 py-1.5 flex flex-wrap lg:flex-nowrap items-center gap-2 transition-colors">
+    <header className="sticky top-0 z-40 h-14 shrink-0 bg-white/95 dark:bg-[#151a28]/95 backdrop-blur-xl border-b border-[var(--border-subtle)] px-3 sm:px-4 flex items-center gap-2 transition-colors">
       <button
         onClick={onOpenMobileSidebar}
-        className="order-1 lg:hidden w-8 h-8 grid place-items-center text-[var(--text-secondary)] hover:bg-[var(--surface-container-low)] rounded-md"
+        className="lg:hidden w-9 h-9 grid place-items-center text-[var(--text-secondary)] hover:bg-[var(--surface-container-low)] rounded-lg"
         aria-label="Abrir Menu"
       >
         <Menu className="w-5 h-5" />
       </button>
 
-      <div className="order-3 lg:order-1 relative w-full lg:max-w-xs lg:flex-1">
+      <h1 className="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-tight text-[var(--text-primary)]">
+        {pageTitle}
+      </h1>
+
+      <div className="relative hidden w-64 xl:block">
         <div className="relative w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#727687]" />
           <input
@@ -58,12 +64,12 @@ export function Header({
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Buscar empresa, lead ou negócio"
-            className="w-full h-8 pl-9 pr-3 text-[11px] bg-[var(--surface-container-low)] text-[var(--text-primary)] border border-transparent rounded-md focus:outline-none focus:border-[var(--primary-main)] focus:ring-2 focus:ring-[#1268ff]/10 placeholder-[var(--text-secondary)] transition-all"
+            className="w-full h-9 pl-9 pr-3 text-[13px] bg-[var(--surface-container-low)] text-[var(--text-primary)] border border-[var(--border-color)] rounded-lg focus:outline-none focus:border-[var(--primary-main)] focus:ring-2 focus:ring-[#1268ff]/10 placeholder-[var(--text-secondary)] transition-all"
           />
         </div>
       </div>
 
-      <div className="order-2 ml-auto lg:order-2 flex items-center gap-1 sm:gap-2 md:gap-4 shrink-0">
+      <div className="ml-auto flex items-center gap-1 sm:gap-2 shrink-0">
         {/* Notifications */}
         <div className="relative">
           <button
